@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { createEventAction } from "@/app/events/new/actions";
+import { createEventAction } from "@/app/(ledger)/events/new/actions";
 import { EventEntryHistory } from "@/components/ledger/event-entry-history";
 import { EventConfirmForm } from "@/components/ledger/event-confirm-form";
 import { CdkPasteBox } from "@/components/ledger/cdk-paste-box";

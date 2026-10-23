@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { updateEventAction } from "@/app/events/[id]/actions";
+import { updateEventAction } from "@/app/(ledger)/events/[id]/actions";
 import { EventConfirmForm } from "@/components/ledger/event-confirm-form";
 import { EventEditFields } from "@/components/ledger/event-edit-fields";
 import { RefundForm } from "@/components/ledger/refund-form";

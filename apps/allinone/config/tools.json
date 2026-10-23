@@ -11,7 +11,7 @@
     ],
     "icon": "key",
     "kind": "service",
-    "entry": "/events",
+    "entry": "/ledger",
     "openMode": "same-tab",
     "order": 10,
     "visible": true,

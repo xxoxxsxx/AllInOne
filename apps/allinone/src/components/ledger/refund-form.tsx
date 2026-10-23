@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { saveRefundAction } from "@/app/events/[id]/actions";
+import { saveRefundAction } from "@/app/(ledger)/events/[id]/actions";
 import { showToast } from "@/components/ledger/toast";
 
 export function RefundForm(props: {

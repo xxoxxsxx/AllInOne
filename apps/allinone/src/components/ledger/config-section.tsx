@@ -4,7 +4,7 @@ import {
   setConfigDefaultAction,
   toggleConfigAction,
   updateConfigPricingAction,
-} from "@/app/config/actions";
+} from "@/app/(ledger)/config/actions";
 import type { ConfigKind, ConfigListItem } from "@/lib/ledger/config";
 
 type ConfigSectionProps = {

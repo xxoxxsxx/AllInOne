@@ -1,7 +1,7 @@
 import {
   deleteResellerPackagePriceAction,
   upsertResellerPackagePriceAction,
-} from "@/app/config/actions";
+} from "@/app/(ledger)/config/actions";
 import type { ConfigListItem } from "@/lib/ledger/config";
 import type { ResellerPackagePrice } from "@/lib/ledger/pricing";
 

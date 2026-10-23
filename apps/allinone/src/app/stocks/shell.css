@@ -92,3 +92,9 @@ body:has(.ts-shell) {
   padding: revert;
   font: revert;
 }
+
+/* —— AllInOne 修正：查询结果表数字/代码不换行（原版 5 位数价格会折行）—— */
+#results th,
+#results td {
+  white-space: nowrap;
+}
