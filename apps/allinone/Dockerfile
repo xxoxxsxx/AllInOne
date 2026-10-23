@@ -12,7 +12,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV DISABLE_SCHEDULER=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm run build
+RUN corepack enable && pnpm run build
 # Next 追踪原生 .node 二进制不稳定：构建后把它固定输出到 /out，
 # 供 runner 层精确放置到运行时实际解析的 better-sqlite3 包目录内。
 RUN SRC=$(find node_modules/.pnpm -path "*better-sqlite3/build/Release/better_sqlite3.node" | head -1) \
