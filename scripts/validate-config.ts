@@ -76,7 +76,7 @@ for (const cat of categories) {
 
 const seenIds = new Set<string>();
 const seenPathEntries = new Set<string>();
-const reserved = RESERVED_PREFIXES as readonly string[];
+const reserved = ["/tools", "/status", "/preferences", "/api", "/_next"];
 
 for (const tool of tools) {
   const label = `tools.json [${typeof tool?.id === "string" ? tool.id : "<无 id>"}]`;
