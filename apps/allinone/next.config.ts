@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/framelab", destination: "/framelab/index.html" },
       { source: "/framelab/", destination: "/framelab/index.html" },
+      { source: "/qrlab", destination: "/qrlab/index.html" },
+      { source: "/qrlab/", destination: "/qrlab/index.html" },
     ];
   },
   async headers() {

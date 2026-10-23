@@ -62,5 +62,28 @@
     "visible": true,
     "lifecycle": "active",
     "integration": "path"
+  },
+  {
+    "id": "qrlab",
+    "name": "二维码工具",
+    "description": "文字转二维码；上传 / 拖入 / 粘贴二维码图片识别内容（纯本地）",
+    "category": "utility",
+    "tags": [
+      "二维码",
+      "QR",
+      "生成",
+      "识别"
+    ],
+    "aliases": [
+      "QR Lab"
+    ],
+    "icon": "qrcode",
+    "kind": "static",
+    "entry": "/qrlab/",
+    "openMode": "same-tab",
+    "order": 40,
+    "visible": true,
+    "lifecycle": "active",
+    "integration": "path"
   }
 ]

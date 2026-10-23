@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base href="/qrlab/">
+  <title>二维码工具 · 工具箱</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <a class="back" href="/">← 工具箱</a>
+      <p class="kicker">QR LAB</p>
+      <h1>二维码工具</h1>
+      <p class="sub">文字转二维码；上传 / 拖入 / 粘贴二维码图片识别内容。全部在浏览器本地完成，内容不会上传服务器。</p>
+    </header>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" id="tab-gen" role="tab" aria-selected="true">生成二维码</button>
+      <button class="tab" id="tab-read" role="tab" aria-selected="false">识别二维码</button>
+    </div>
+
+    <!-- 生成 -->
+    <section class="card" id="panel-gen">
+      <label class="lbl" for="gen-input">文本内容</label>
+      <textarea id="gen-input" rows="5" placeholder="输入任意文字、链接、WiFi 信息等（支持中文，UTF-8）"></textarea>
+      <div class="row">
+        <div class="field">
+          <label class="lbl" for="gen-ecc">纠错级别</label>
+          <select id="gen-ecc">
+            <option value="L">L · 容错 7%</option>
+            <option value="M" selected>M · 容错 15%</option>
+            <option value="Q">Q · 容错 25%</option>
+            <option value="H">H · 容错 30%</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="lbl" for="gen-size">输出尺寸</label>
+          <select id="gen-size">
+            <option value="256">256 px</option>
+            <option value="384" selected>384 px</option>
+            <option value="512">512 px</option>
+            <option value="768">768 px</option>
+          </select>
+        </div>
+        <div class="field grow"></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="gen-btn">生成二维码</button>
+        <button class="btn" id="gen-download" disabled>下载 PNG</button>
+      </div>
+      <p class="hint" id="gen-hint">最多支持到 40 版（约 2953 字节，纠错级别越低容量越大）。</p>
+      <div class="preview" id="gen-preview" hidden>
+        <canvas id="qr-canvas"></canvas>
+      </div>
+    </section>
+
+    <!-- 识别 -->
+    <section class="card" id="panel-read" hidden>
+      <div class="drop" id="read-drop" tabindex="0">
+        <p class="drop-main">点击选择图片，或将图片拖到这里</p>
+        <p class="drop-sub">也可以直接 Ctrl/Cmd + V 粘贴截图 · 支持 PNG / JPEG / WebP</p>
+        <input type="file" id="read-file" accept="image/*" hidden>
+      </div>
+      <p class="hint" id="read-hint"></p>
+      <div class="read-grid">
+        <div class="preview" id="read-preview" hidden><canvas id="read-canvas"></canvas></div>
+        <div class="read-out" id="read-out" hidden>
+          <label class="lbl">识别结果</label>
+          <textarea id="read-text" rows="6" readonly></textarea>
+          <div class="actions">
+            <button class="btn primary" id="read-copy">复制内容</button>
+            <a class="btn" id="read-open" target="_blank" rel="noopener noreferrer" hidden>打开链接</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="foot">AllInOne · 二维码工具 · 纯本地运行</footer>
+  </main>
+
+  <script src="vendor/qrcode.min.js"></script>
+  <script src="vendor/jsQR.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -48,6 +48,10 @@ function checkTool(id: string): ToolStatus {
     const p = path.join(process.cwd(), "public", "framelab", "index.html");
     state = fs.existsSync(p) ? "ok" : "unknown";
     reason = state === "ok" ? undefined : "status";
+  } else if (id === "qrlab") {
+    const p = path.join(process.cwd(), "public", "qrlab", "index.html");
+    state = fs.existsSync(p) ? "ok" : "unknown";
+    reason = state === "ok" ? undefined : "status";
   } else {
     state = "unmonitored";
     reason = "no-entry";
