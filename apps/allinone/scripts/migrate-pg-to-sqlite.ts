@@ -96,11 +96,13 @@ async function main() {
 }
 
 // PG 驱动对 NUMERIC/TIMESTAMPTZ 返回字符串或 Date；统一落为字符串（金额精度保留）。
+// BOOLEAN 转为 SQLite INTEGER 0/1（better-sqlite3 不接受布尔绑定，is_active 等 CHECK 依赖它）。
 function normalizeValue(v: unknown): string | number | null {
   if (v === null || v === undefined) return null;
   if (v instanceof Date) return v.toISOString();
   if (typeof v === "object") return JSON.stringify(v);
-  if (typeof v === "number" || typeof v === "boolean") return v;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  if (typeof v === "number") return v;
   return String(v);
 }
 
