@@ -14,7 +14,8 @@ export const RESERVED_PREFIXES = [
 ] as const;
 
 export function configDir(): string {
-  return process.env.PORTAL_CONFIG_DIR ?? path.resolve(process.cwd(), "../../config");
+  // 工具目录随镜像发布（PRD §5.1：所有工具随镜像一体发布）；本地开发即 apps/allinone/config。
+  return process.env.PORTAL_CONFIG_DIR ?? path.resolve(process.cwd(), "config");
 }
 
 function readJsonFile<T>(file: string): { ok: true; data: T } | { ok: false; error: string } {

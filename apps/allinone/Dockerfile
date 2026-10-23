@@ -23,6 +23,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 # Frame Lab 是 public/framelab 静态资源；standalone 不含 public，必须单独复制。
 COPY --from=builder /app/public ./public
+# 工具目录配置随镜像发布（更新工具清单 = 发布新镜像）。
+COPY --from=builder /app/config ./config
+ENV PORTAL_CONFIG_DIR=/app/config
 RUN mkdir -p /data && chown 1000:1000 /data
 USER 1000:1000
 VOLUME /data

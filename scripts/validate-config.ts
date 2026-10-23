@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { ICON_IDS } from "../apps/allinone/src/lib/icons.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const configDir = process.env.PORTAL_CONFIG_DIR ?? path.join(repoRoot, "config");
+const configDir = process.env.PORTAL_CONFIG_DIR ?? path.join(repoRoot, "apps", "allinone", "config");
 
 interface Category {
   id: string;
