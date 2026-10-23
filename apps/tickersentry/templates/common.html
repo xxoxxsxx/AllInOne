@@ -1,0 +1,33 @@
+{{define "head"}}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#142d33">
+  <title>{{.Title}} · TickerSentry</title>
+  <link rel="icon" type="image/svg+xml" sizes="any" href="{{$.H "/static/favicon.svg"}}">
+  <script src="{{$.H "/static/app.js"}}" defer></script>
+  <link rel="stylesheet" href="{{$.H "/static/app.css"}}">
+</head>
+<body data-base="{{.Base}}">
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="{{$.H "/"}}" aria-label="TickerSentry 首页"><span class="brand-mark" aria-hidden="true">T</span><span>Ticker<span class="brand-accent">Sentry</span><small>美股价哨</small></span></a>
+      <nav aria-label="主导航">
+        {{if .PortalURL}}<a href="{{.PortalURL}}">工具箱</a>{{end}}
+        <a href="{{$.H "/"}}">监控概览</a>
+        <a href="{{$.H "/schedule"}}">自动查询</a>
+        <a href="{{$.H "/settings"}}">设置</a>
+      </nav>
+    </div>
+  </header>
+  <main class="site-main">
+{{end}}
+
+{{define "foot"}}
+  </main>
+  <footer class="site-footer"><span>TickerSentry · 带 Key 预览版</span><span>报价为离散快照，仅供提醒，不构成交易建议</span></footer>
+</body>
+</html>
+{{end}}

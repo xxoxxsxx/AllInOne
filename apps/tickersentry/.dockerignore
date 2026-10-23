@@ -1,0 +1,10 @@
+/data/
+.git/
+.github/
+.env
+*.md
+compose*.yaml
+*.db
+*.db-shm
+*.db-wal
+TickerSentry

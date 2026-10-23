@@ -1,0 +1,80 @@
+{{define "schedule"}}{{template "head" .}}
+{{if .Notice}}<p class="info-strip" role="status" data-flash>{{.Notice}}</p>{{end}}
+<div class="page-head"><div><span class="eyebrow">SCHEDULE</span><h1>自动查询</h1><p>设置时间段按间隔查询，也可以保留固定时间点。离线错过的查询不会补跑。</p></div></div>
+<div class="info-strip page-notice">仅在 NYSE 常规交易时段查询；休市、日历超出核验窗口、任务繁忙或未配置 Key 时会记录跳过。有效报价命中提醒价格后发送到所有启用渠道；一只股票的所有启用档位额度都用尽后，停止该股票本时段的自动查询。</div>
+<div class="settings-grid schedule-controls">
+  <section class="card">
+    <span class="eyebrow">TIMEZONE</span><h2>显示与执行时区</h2>
+    <p class="muted">所有时间点共用同一时区，夏令时由系统自动处理。</p>
+    <form method="post" action="{{$.H "/schedule/zone"}}"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>时区<select name="timezone"><option value="Asia/Shanghai" {{if eq .Timezone "Asia/Shanghai"}}selected{{end}}>Asia/Shanghai · 北京时间</option><option value="America/New_York" {{if eq .Timezone "America/New_York"}}selected{{end}}>America/New_York · 美东时间</option></select></label><button class="primary" type="submit">保存时区</button></form>
+  </section>
+  <section class="card">
+    <span class="eyebrow">NEW TIME</span><h2>添加查询时间</h2>
+    <p class="muted">使用 {{.Timezone}} 的 24 小时制时间。</p>
+    <form method="post" action="{{$.H "/schedule"}}"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>每天执行时间<input type="time" name="time" required></label><button class="primary" type="submit">添加时间</button></form>
+  </section>
+</div>
+
+<section class="card">
+  <span class="eyebrow">QUERY WINDOWS</span><h2>时间段查询</h2>
+  <p>按 {{.Timezone}} 执行。结束时间早于开始时间表示跨到次日；结束时刻不再查询。下一时段自动恢复查询。</p>
+  <form method="post" action="{{$.H "/windows/default"}}" class="default-limit-form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>所有时段的每档默认提醒上限（次）<input type="number" name="max_alerts" min="1" max="1000" value="{{.DefaultAlerts}}" required></label>
+    <button type="submit">统一调整默认上限</button>
+  </form>
+  <p class="muted small">保存后同步更新所有已有时段，新建时段也使用此值；单个档位自行设置的上限不受影响，已提醒次数不会清零。</p>
+  <form method="post" action="{{$.H "/windows"}}" class="window-form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>开始时间<input type="time" name="start" required></label>
+    <label>结束时间<input type="time" name="end" required></label>
+    <label>查询间隔（分钟）<input type="number" name="interval" min="1" max="1439" value="5" required></label>
+    <label>该时段每档默认上限（次）<input type="number" name="max_alerts" min="1" max="1000" value="{{.DefaultAlerts}}" required></label>
+    <button class="primary" type="submit">添加查询时段</button>
+  </form>
+  <p class="muted small">可在股票详情为各档单独设置上限。每个方向每次只选一个最近命中档位；买入与卖出同时命中时每档只计一次。任一渠道成功或发送结果不确定占用次数，全部明确失败不占用。手动查询也遵守当前时段的档位上限。</p>
+</section>
+<section class="card">
+ <h2>已配置的查询时段</h2>
+ {{range .Windows}}
+ <article class="schedule-item">
+  <div class="schedule-item-head"><strong>{{.StartText}} ～ {{if .Overnight}}次日 {{end}}{{.EndText}}</strong><span class="status-pill{{if not .Enabled}} is-off{{end}}">{{if .Enabled}}已启用{{else}}已暂停{{end}}</span></div>
+  <p><strong>每 {{.Interval}} 分钟查询 · 每档默认最多提醒 {{.MaxAlerts}} 次</strong></p>
+  <details><summary>修改查询时段</summary>
+   <form method="post" action="{{$.H (printf "/windows/%d/save" .ID)}}" class="window-form">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+    <label>开始时间<input type="time" name="start" value="{{.StartText}}" required></label>
+    <label>结束时间<input type="time" name="end" value="{{.EndText}}" required></label>
+    <label>间隔（分钟）<input type="number" name="interval" min="1" max="1439" value="{{.Interval}}" required></label>
+    <label>该时段每档默认上限<input type="number" name="max_alerts" min="1" max="1000" value="{{.MaxAlerts}}" required></label>
+    <button class="primary" type="submit">保存修改</button>
+   </form>
+  </details>
+  <div class="schedule-actions">
+   <form method="post" action="{{$.H (printf "/windows/%d/" .ID)}}{{if .Enabled}}disable{{else}}enable{{end}}"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button type="submit">{{if .Enabled}}暂停时段查询{{else}}恢复时段查询{{end}}</button></form>
+   <form method="post" action="{{$.H (printf "/windows/%d/delete" .ID)}}" data-confirm="删除此查询时段？"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="delete-button" type="submit">删除</button></form>
+  </div>
+ </article>
+ {{else}}<p class="empty-state">还没有查询时段。在上方设置起止时间、间隔和各档默认上限即可开始。</p>{{end}}
+ <p class="muted small">时段不能重叠。时段内可调整间隔、提醒上限或暂停/恢复，次数不会清零；修改起止时间、删除和切换时区请在时段结束后操作。暂停不会清零次数。高频查询仍受行情接口额度限制，可在设置页查看预计用量。</p>
+</section>
+
+<section class="card schedule-list">
+  <div class="panel-head"><div><span class="eyebrow">DAILY RUNS</span><h2>已配置的时间</h2><p>你可以修改、暂停或删除任一时间点。</p></div></div>
+  {{if .Schedules}}
+  <div class="schedule-items">
+    {{range .Schedules}}
+    <article class="schedule-item">
+      <div class="schedule-item-head"><strong>{{printf "%02d:%02d" .Hour .Minute}}</strong><span class="status-pill{{if not .Enabled}} is-off{{end}}">{{if .Enabled}}已启用{{else}}已暂停{{end}}</span></div>
+      <p class="muted small">{{if .Next}}下次执行：{{$.Clock .Next}}{{else}}已暂停自动查询{{end}}</p>
+      <div class="schedule-actions">
+        <form method="post" action="{{$.H (printf "/schedule/%d/time" .ID)}}" class="schedule-edit"><input type="hidden" name="csrf" value="{{$.CSRF}}"><label>修改时间<input type="time" name="time" value="{{printf "%02d:%02d" .Hour .Minute}}" required></label><button type="submit">保存时间</button></form>
+        <form method="post" action="{{$.H (printf "/schedule/%d/" .ID)}}{{if .Enabled}}disable{{else}}enable{{end}}"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button type="submit">{{if .Enabled}}暂停查询{{else}}启用查询{{end}}</button></form>
+        <form method="post" action="{{$.H (printf "/schedule/%d/delete" .ID)}}" data-confirm="删除此查询时间？"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="delete-button" type="submit">删除时间</button></form>
+      </div>
+    </article>
+    {{end}}
+  </div>
+  {{else}}<p class="empty-state">尚未设置自动查询时间。你仍可以在首页手动查询。</p>{{end}}
+</section>
+{{template "foot" .}}{{end}}

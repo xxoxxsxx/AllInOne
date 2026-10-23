@@ -1,0 +1,11 @@
+/data/
+/TickerSentry
+/tickersentry
+*.db
+*.db-shm
+*.db-wal
+.env
+
+/tickersentry
+
+.smoke-edit/

@@ -1,0 +1,4 @@
+# 本地校验用截图，不随仓库部署
+assets/browser-review.png
+assets/blur-preview.png
+.DS_Store

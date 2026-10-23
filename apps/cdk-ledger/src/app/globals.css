@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f2f3ef;
+  --surface: #fbfcf8;
+  --foreground: #18252c;
+  --muted: #66747b;
+  --border: #d5dcda;
+  --accent: #0f766e;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+
+@keyframes toast-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-pop-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+}
+
+@keyframes toast-progress {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0;
+  }
+}
+
+.animate-toast-in {
+  animation: toast-pop-in 0.22s cubic-bezier(0.21, 1.02, 0.73, 1) both;
+}
+
+.animate-toast-out {
+  animation: toast-pop-out 0.2s ease-in both;
+}

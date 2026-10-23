@@ -1,7 +1,7 @@
 {
   "checks": {
     "cdk-ledger": {
-      "url": "http://cdk-ledger-app:3000/api/health"
+      "url": "http://ledger:3000/api/health"
     },
     "tickersentry": {
       "url": "http://tickersentry:8080/healthz"

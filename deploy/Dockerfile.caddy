@@ -1,0 +1,4 @@
+# 网关镜像：caddy + framelab 静态产物。静态文件在运行时以只读挂载（compose 已挂 /srv/framelab），
+# 镜像本身只需 Caddy 二进制；保持镜像可重建、无状态。
+FROM caddy:2-alpine
+COPY Caddyfile /etc/caddy/Caddyfile

@@ -1,4 +1,7 @@
-# AllInOne 网关（M1）。M2 加入 /ledger、/stocks、/framelab 路由。
+# AllInOne 网关。工具挂载：
+#   /ledger    → cdk-ledger（Next.js basePath=/ledger，应用接收完整前缀）
+#   /stocks    → TickerSentry（BASE_PATH=/stocks，网关剥离前缀，应用内部按根路由）
+#   /framelab/ → 静态文件（相对资源路径，需保留尾斜杠）
 # 站点地址通过 ALLINONE_SITE 覆盖，例如 https://tools.nas.example.com
 {
 	admin off
@@ -7,20 +10,25 @@
 {$ALLINONE_SITE::8080} {
 	encode zstd gzip
 
-	# ---- M2 预留路由示例 ----
-	# handle_path /framelab/* {
-	# 	root * /srv/framelab
-	# 	try_files {path} /index.html
-	# 	file_server
-	# }
-	#
-	# handle_path /ledger/* {
-	# 	reverse_proxy ledger:3000
-	# }
-	#
-	# handle_path /stocks/* {
-	# 	reverse_proxy tickersentry:8080
-	# }
+	# Frame Lab：静态托管。无尾斜杠入口 308 到 /framelab/ 以保证相对资源可用（PRD §8.3）。
+	handle_path /framelab/* {
+		root * /srv/framelab
+		try_files {path} /index.html
+		file_server
+	}
+	redir /framelab /framelab/ 308
+
+	# CDK 台账：应用接收完整前缀（basePath=/ledger），不能剥离。
+	handle /ledger/* {
+		reverse_proxy ledger:3000
+	}
+	redir /ledger /ledger/ 308
+
+	# TickerSentry：网关剥离公开前缀，应用以根路径路由。
+	handle_path /stocks/* {
+		reverse_proxy tickersentry:8080
+	}
+	redir /stocks /stocks/ 308
 
 	# 其余全部交给门户。
 	handle {
