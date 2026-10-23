@@ -47,9 +47,16 @@ function prepareCameraOverlay() {
   const overlay = cameraOverlay.getContext('2d');
   overlay.clearRect(0,0,cameraOverlay.width,cameraOverlay.height);
   overlay.save(); overlay.scale(2,2);
+  overlay.imageSmoothingEnabled = true;
+  overlay.imageSmoothingQuality = 'high';
   cameraPath(overlay); overlay.clip();
   overlay.drawImage(template,0,0,1080,720);
+  // Remove the tabletop-contaminated outer pixels without blurring body detail.
+  // The stroke straddles the silhouette: only its inner half erodes the image.
   overlay.globalCompositeOperation = 'destination-out';
+  overlay.lineWidth = 4;
+  overlay.lineJoin = 'round';
+  cameraPath(overlay); overlay.stroke();
   roundedScreenPath(overlay); overlay.fill(); overlay.restore();
 }
 const presets = {'3:4':[1080,1440], '9:16':[1080,1920], '1:1':[1080,1080], '4:3':[1440,1080], '16:9':[1920,1080]};
