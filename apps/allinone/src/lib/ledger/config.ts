@@ -122,20 +122,20 @@ function normalizeOptionalMoney(input: string, label: string) {
 function getPricingColumns(kind: ConfigKind) {
   if (kind === "package") {
     return {
-      select: "config.cost_price, config.sale_price, null::numeric as fee_rate_percent, null::numeric as fee_fixed_amount,",
+      select: "config.cost_price, config.sale_price, null as fee_rate_percent, null as fee_fixed_amount,",
       group: "config.cost_price, config.sale_price,",
     };
   }
 
   if (kind === "platform") {
     return {
-      select: "null::numeric as cost_price, null::numeric as sale_price, config.fee_rate_percent, config.fee_fixed_amount,",
+      select: "null as cost_price, null as sale_price, config.fee_rate_percent, config.fee_fixed_amount,",
       group: "config.fee_rate_percent, config.fee_fixed_amount,",
     };
   }
 
   return {
-    select: "null::numeric as cost_price, null::numeric as sale_price, null::numeric as fee_rate_percent, null::numeric as fee_fixed_amount,",
+    select: "null as cost_price, null as sale_price, null as fee_rate_percent, null as fee_fixed_amount,",
     group: "",
   };
 }
@@ -187,7 +187,7 @@ export async function listConfigItems(kind: ConfigKind) {
         config.sort_order,
         config.created_at,
         config.updated_at,
-        count(events.id)::int as reference_count
+        count(events.id) as reference_count
       from ${target.table} as config
       left join events
         on events.${target.referenceColumn} = config.code
@@ -218,7 +218,7 @@ export async function listActiveConfigOptions(kind: ConfigKind) {
     `
       select
         code,
-        ${pricingColumns.select.replaceAll("config.", "").replaceAll("null::numeric as ", "null::numeric as ")}
+        ${pricingColumns.select.replaceAll("config.", "").replaceAll("null as ", "null as ")}
         name,
         is_default
       from ${target.table}
@@ -368,10 +368,6 @@ export async function setConfigItemDefault(kind: ConfigKind, input: {
   const code = assertValidCode(input.code);
 
   await withTransaction(async (query) => {
-    await query(`
-      lock table ${target.table} in share row exclusive mode
-    `);
-
     const result = await query<{ code: string }>(
       `
         select code
@@ -442,7 +438,7 @@ export async function deleteConfigItem(kind: ConfigKind, input: {
 
   const referenceCheck = await dbQuery<{ count: string }>(
     `
-      select count(*)::text as count
+      select cast(count(*) as text) as count
       from events
       where ${target.referenceColumn} = $1
     `,
@@ -457,7 +453,7 @@ export async function deleteConfigItem(kind: ConfigKind, input: {
     const priceColumn = kind === "package" ? "package_code" : "reseller_code";
     const priceReference = await dbQuery<{ count: string }>(
       `
-        select count(*)::text as count
+        select cast(count(*) as text) as count
         from reseller_package_prices
         where ${priceColumn} = $1
       `,

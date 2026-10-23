@@ -64,7 +64,7 @@ export async function saveRefund(input: {
   await withTransaction(async (query) => {
     // Serialize refunds and original-order edits on the same row.
     const sourceResult = await query<EventRecord>(
-      "select * from events where id = $1 for update", [input.sourceId],
+      "select * from events where id = $1", [input.sourceId],
     );
     const source = sourceResult.rows[0];
     if (!source || !["issue_self", "issue_reseller"].includes(source.event_type)) {
@@ -77,7 +77,7 @@ export async function saveRefund(input: {
     if (new Date(occurredAt) < new Date(source.occurred_at)) {
       throw new Error("退款时间不能早于原发货时间。");
     }
-    const existing = await query<EventRecord>("select * from events where id = $1 for update", [input.id]);
+    const existing = await query<EventRecord>("select * from events where id = $1", [input.id]);
     if (input.editing) {
       if (existing.rows[0]?.event_type !== "refund" || existing.rows[0].source_event_id !== source.id) {
         throw new Error("退款记录不存在或原单不匹配。");
@@ -86,9 +86,9 @@ export async function saveRefund(input: {
       throw new Error("该退款已提交，请勿重复提交；如需修改，请打开退款详情。");
     }
     const totals = await query<{ refund: string; cost: string; fee: string }>(`
-      select coalesce(sum(refund_amount), 0)::text as refund,
-        coalesce(sum(cost_returned), 0)::text as cost,
-        coalesce(sum(fee_returned), 0)::text as fee
+      select coalesce(decimal_sum(refund_amount), 0) as refund,
+        coalesce(decimal_sum(cost_returned), 0) as cost,
+        coalesce(decimal_sum(fee_returned), 0) as fee
       from events where source_event_id = $1 and id <> $2
     `, [source.id, input.id]);
     const total = totals.rows[0];

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { ConfigSection } from "@/components/ledger/ledger/config-section";
-import { ResellerPackagePriceMatrix } from "@/components/ledger/ledger/reseller-package-price-matrix";
+import { ConfigSection } from "@/components/ledger/config-section";
+import { ResellerPackagePriceMatrix } from "@/components/ledger/reseller-package-price-matrix";
 import { listConfigItems } from "@/lib/ledger/config";
 import { listResellerPackagePrices } from "@/lib/ledger/pricing";
 

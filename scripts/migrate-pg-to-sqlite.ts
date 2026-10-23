@@ -37,6 +37,9 @@ db.pragma("foreign_keys = ON");
 // schema 以 ledger 模块的共享 DDL 为唯一事实源（与运行时建表完全一致）。
 const { LEDGER_SCHEMA_SQL } = await import("../apps/allinone/src/lib/ledger/schema-sql.ts");
 db.exec(LEDGER_SCHEMA_SQL);
+// 旧 PG 数据可能不符合 0004/0007 后的严格形状 CHECK（PG 侧为 NOT VALID 豁免）。
+// 导入期间关闭 CHECK 以免历史行被拒；导入完成后恢复并保留数据供人工核对。
+db.pragma("ignore_check_constraints = ON");
 
 function tableExists(client: { query: (s: string) => Promise<{ rows: unknown[] }> }, name: string): boolean {
   return client.query(`SELECT 1 FROM information_schema.tables WHERE table_name = '${name}'`).then((r) => r.rows.length > 0) as unknown as boolean;
@@ -81,6 +84,9 @@ async function main() {
     if (src >= 0 && src !== dst) ok = false;
     console.log(`  ${table}: ${src === -1 ? "表不存在" : src} → ${dst}${src >= 0 && src !== dst ? "  ❌ 不一致" : ""}`);
   }
+  db.pragma("ignore_check_constraints = OFF");
+  const violated = db.prepare("PRAGMA integrity_check").get();
+  console.log("integrity_check:", JSON.stringify(violated));
   if (!ok) {
     console.error("存在不一致，请勿使用迁移结果。");
     process.exit(2);

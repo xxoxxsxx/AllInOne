@@ -1,6 +1,10 @@
-import type { QueryResult, QueryResultRow } from "pg";
+import { randomUUID } from "node:crypto";
 
-import { dbQuery, withTransaction } from "@/lib/ledger/db";
+import {
+  dbQuery,
+  type LedgerQueryFn,
+  withTransaction,
+} from "@/lib/ledger/db";
 import type { ConfigOption } from "@/lib/ledger/config";
 import { getDefaultConfigCode, listActiveConfigOptions } from "@/lib/ledger/config";
 import {
@@ -41,10 +45,7 @@ type EventListRow = EventRecord & {
   platform_name: string | null;
 };
 
-type QueryFn = <T extends QueryResultRow>(
-  text: string,
-  values?: unknown[],
-) => Promise<QueryResult<T>>;
+type QueryFn = LedgerQueryFn;
 
 type BaseEventInput = {
   occurredAt: string;
@@ -625,7 +626,7 @@ async function getEventState(
         select
           occurred_at,
           created_at,
-          'replace'::text as event_type,
+          'replace' as event_type,
           related_cdk as code
         from events
         where event_type = 'replace'
@@ -664,16 +665,16 @@ async function getEventState(
             ${excludeClause}
         ) as exists_in_history,
         case
-          when latest_activation.occurred_at is null then false
-          when latest_deactivation.occurred_at is null then true
+          when latest_activation.occurred_at is null then 0
+          when latest_deactivation.occurred_at is null then 1
           when (
             latest_activation.occurred_at,
             latest_activation.created_at
           ) > (
             latest_deactivation.occurred_at,
             latest_deactivation.created_at
-          ) then true
-          else false
+          ) then 1
+          else 0
         end as is_active
       from (select 1) as base
       left join latest_activation on true
@@ -682,14 +683,14 @@ async function getEventState(
     values,
   );
 
-  return (
-    result.rows[0] ?? {
-      activated_at: null,
-      event_type: null,
-      exists_in_history: false,
-      is_active: false,
-    }
-  );
+  const row = result.rows[0];
+
+  return {
+    activated_at: row?.activated_at ?? null,
+    event_type: row?.event_type ?? null,
+    exists_in_history: Boolean(row?.exists_in_history),
+    is_active: Boolean(row?.is_active),
+  };
 }
 
 function normalizeOptionalCode(input: string) {
@@ -760,15 +761,16 @@ async function assertNoLaterRelatedEvents(
       select id
       from events
       where id <> $1
-        and (cdk = any($2::text[]) or related_cdk = any($2::text[]))
+        and (cdk in (select json_each.value from json_each($2))
+          or related_cdk in (select json_each.value from json_each($2)))
         and (
           occurred_at > $3
           or (occurred_at = $3 and created_at > $4)
-          or (occurred_at = $3 and created_at = $4 and id > $1::uuid)
+          or (occurred_at = $3 and created_at = $4 and id > $1)
         )
       limit 1
     `,
-    [current.id, codes, current.occurred_at, current.created_at],
+    [current.id, JSON.stringify(codes), current.occurred_at, current.created_at],
   );
 
   if (result.rows.length > 0) {
@@ -1019,7 +1021,7 @@ function buildEventFilterWhere(filters: EventFilters) {
 
   if (filters.note) {
     values.push(`%${filters.note}%`);
-    conditions.push(`coalesce(e.note, '') ilike $${values.length}`);
+    conditions.push(`coalesce(e.note, '') like $${values.length}`);
   }
 
   if (filters.packageCode) {
@@ -1078,6 +1080,7 @@ export async function createIssueSelf(input: IssueSelfInput) {
       await query(
         `
           insert into events (
+            id,
             event_type,
             occurred_at,
             redeemed_at,
@@ -1091,9 +1094,10 @@ export async function createIssueSelf(input: IssueSelfInput) {
             platform_fee_amount,
             note
           )
-          values ('issue_self', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          values (?, 'issue_self', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
+          randomUUID(),
           payload.occurredAt,
           payload.redeemedAt ?? payload.occurredAt,
           packageCode,
@@ -1148,6 +1152,7 @@ export async function createIssueReseller(input: IssueResellerInput) {
       await query(
         `
           insert into events (
+            id,
             event_type,
             occurred_at,
             redeemed_at,
@@ -1162,9 +1167,10 @@ export async function createIssueReseller(input: IssueResellerInput) {
             platform_fee_amount,
             note
           )
-          values ('issue_reseller', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          values (?, 'issue_reseller', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
+          randomUUID(),
           payload.occurredAt,
           payload.redeemedAt ?? payload.occurredAt,
           packageCode,
@@ -1200,14 +1206,15 @@ export async function createVoid(input: VoidInput) {
       await query(
         `
           insert into events (
+            id,
             event_type,
             occurred_at,
             cdk,
             note
           )
-          values ('void', $1, $2, $3)
+          values (?, 'void', ?, ?, ?)
         `,
-        [payload.occurredAt, cdk, payload.note],
+        [randomUUID(), payload.occurredAt, cdk, payload.note],
       );
     });
   } catch (error) {
@@ -1253,6 +1260,7 @@ export async function createReplace(input: ReplaceInput) {
       await query(
         `
           insert into events (
+            id,
             event_type,
             occurred_at,
             package_code,
@@ -1261,9 +1269,9 @@ export async function createReplace(input: ReplaceInput) {
             related_cdk,
             note
           )
-          values ('replace', $1, $2, $3, $4, $5, $6)
+          values (?, 'replace', ?, ?, ?, ?, ?, ?)
         `,
-        [payload.occurredAt, packageCode, platformCode, oldCdk, newCdk, payload.note],
+        [randomUUID(), payload.occurredAt, packageCode, platformCode, oldCdk, newCdk, payload.note],
       );
     });
   } catch (error) {
@@ -1370,16 +1378,16 @@ export async function listEventDetailsPage(
   pageSize: number,
 ): Promise<EventListPage> {
   const { whereClause, values } = buildEventFilterWhere(filters);
-  const countResult = await dbQuery<{ total: string }>(
+  const countResult = await dbQuery<{ total: number | string }>(
     `
-      select count(*)::text as total
+      select count(*) as total
       from events e
       ${whereClause}
     `,
     values,
   );
 
-  const total = Number.parseInt(countResult.rows[0]?.total ?? "0", 10);
+  const total = Number(countResult.rows[0]?.total ?? 0);
   const totalPages = total > 0 ? Math.ceil(total / pageSize) : 1;
   const safePage = Math.min(Math.max(page, 1), totalPages);
   const offset = (safePage - 1) * pageSize;
@@ -1438,16 +1446,22 @@ export async function getEventProfitSummary(filters: EventFilters) {
   const profitWhereClause = whereClause
     ? `${whereClause} and e.event_type in ('issue_self', 'issue_reseller', 'refund', 'void')`
     : "where e.event_type in ('issue_self', 'issue_reseller', 'refund', 'void')";
-  const result = await dbQuery<EventProfitSummary>(
+  const result = await dbQuery<Omit<EventProfitSummary, "issue_count" | "refund_count" | "void_count" | "missing_price_count" | "priced_count"> & {
+    issue_count: number | string;
+    refund_count: number | string;
+    void_count: number | string;
+    missing_price_count: number | string;
+    priced_count: number | string;
+  }>(
     `
       with filtered_events as (
         select
           e.event_type,
-          case when e.event_type = 'refund' then -e.cost_returned else e.cost_price end as cost_price,
-          case when e.event_type = 'refund' then -e.fee_returned
+          case when e.event_type = 'refund' then decimal_neg(e.cost_returned) else e.cost_price end as cost_price,
+          case when e.event_type = 'refund' then decimal_neg(e.fee_returned)
             else coalesce(e.platform_fee_amount, 0) end as platform_fee_amount,
           case
-            when e.event_type = 'refund' then -e.refund_amount
+            when e.event_type = 'refund' then decimal_neg(e.refund_amount)
             when e.event_type = 'issue_self' then e.sale_price
             else e.supply_price
           end as revenue
@@ -1461,42 +1475,53 @@ export async function getEventProfitSummary(filters: EventFilters) {
           and revenue is not null
       )
       select
-        (select count(*)::int from filtered_events where event_type in ('issue_self', 'issue_reseller')) as issue_count,
-        (select count(*)::int from filtered_events where event_type = 'refund') as refund_count,
-        (select count(*)::int from filtered_events where event_type = 'void') as void_count,
-        (select count(*)::int from priced_events) as priced_count,
+        (select count(*) from filtered_events where event_type in ('issue_self', 'issue_reseller')) as issue_count,
+        (select count(*) from filtered_events where event_type = 'refund') as refund_count,
+        (select count(*) from filtered_events where event_type = 'void') as void_count,
+        (select count(*) from priced_events) as priced_count,
         (
-          (select count(*)::int from filtered_events where event_type <> 'void')
-          - (select count(*)::int from priced_events)
+          (select count(*) from filtered_events where event_type <> 'void')
+          - (select count(*) from priced_events)
         ) as missing_price_count,
-        coalesce(sum(revenue), 0)::text as revenue,
-        coalesce(sum(cost_price), 0)::text as product_cost,
-        coalesce(sum(platform_fee_amount), 0)::text as platform_fee,
-        (
-          coalesce(sum(cost_price), 0)
-          + coalesce(sum(platform_fee_amount), 0)
-        )::text as total_cost,
-        (
-          coalesce(sum(revenue), 0)
-          - coalesce(sum(cost_price), 0)
-          - coalesce(sum(platform_fee_amount), 0)
-        )::text as gross_profit
+        coalesce(decimal_sum(revenue), 0) as revenue,
+        coalesce(decimal_sum(cost_price), 0) as product_cost,
+        coalesce(decimal_sum(platform_fee_amount), 0) as platform_fee,
+        decimal_add(coalesce(decimal_sum(cost_price), '0'), coalesce(decimal_sum(platform_fee_amount), '0')) as total_cost,
+        decimal_sub(decimal_sub(coalesce(decimal_sum(revenue), '0'), coalesce(decimal_sum(cost_price), '0')), coalesce(decimal_sum(platform_fee_amount), '0')) as gross_profit
       from priced_events
     `,
     values,
   );
 
-  return result.rows[0] ?? {
-    gross_profit: "0",
-    issue_count: 0,
-    refund_count: 0,
-    void_count: 0,
-    missing_price_count: 0,
-    platform_fee: "0",
-    priced_count: 0,
-    product_cost: "0",
-    revenue: "0",
-    total_cost: "0",
+  const row = result.rows[0];
+
+  if (!row) {
+    return {
+      gross_profit: "0",
+      issue_count: 0,
+      refund_count: 0,
+      void_count: 0,
+      missing_price_count: 0,
+      platform_fee: "0",
+      priced_count: 0,
+      product_cost: "0",
+      revenue: "0",
+      total_cost: "0",
+    };
+  }
+
+  // Decimal SQL functions return exact decimal strings, matching PG numeric aggregation.
+  return {
+    gross_profit: String(row.gross_profit ?? "0"),
+    issue_count: Number(row.issue_count ?? 0),
+    refund_count: Number(row.refund_count ?? 0),
+    void_count: Number(row.void_count ?? 0),
+    missing_price_count: Number(row.missing_price_count ?? 0),
+    platform_fee: String(row.platform_fee ?? "0"),
+    priced_count: Number(row.priced_count ?? 0),
+    product_cost: String(row.product_cost ?? "0"),
+    revenue: String(row.revenue ?? "0"),
+    total_cost: String(row.total_cost ?? "0"),
   };
 }
 
@@ -1551,7 +1576,7 @@ export async function updateEvent(input: EventUpdateInput) {
 
   try {
     return await withTransaction(async (query) => {
-      await query("select id from events where id = $1 for update", [id]);
+      await query("select id from events where id = $1", [id]);
       const current = await getMutableEvent(id, query);
 
       if (!current) {
@@ -1634,7 +1659,6 @@ export async function updateEvent(input: EventUpdateInput) {
             counterparty_code = $8,
             note = $9${priceAssignments}
           where id = $1
-          returning id
         `,
         [
           current.id,

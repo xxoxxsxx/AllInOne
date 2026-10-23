@@ -1,9 +1,0 @@
-{{define "error"}}{{template "head" .}}
-<section class="card error-card" aria-labelledby="error-title">
-  <span class="error-code">{{.StatusCode}}</span>
-  <h1 id="error-title">{{.Title}}</h1>
-  <p class="error-message" role="alert">{{.Error}}</p>
-  <p class="muted">返回上一页检查后再试，或回到监控概览继续操作。</p>
-  <div class="error-actions">{{if .PortalURL}}<a class="error-primary" id="error-back" href="{{.PortalURL}}">返回工具箱</a>{{else}}<a class="error-primary" id="error-back" href="{{$.H "/"}}">返回上一页</a>{{end}}<a href="{{$.H "/"}}">回到监控概览</a></div>
-</section>
-{{template "foot" .}}{{end}}

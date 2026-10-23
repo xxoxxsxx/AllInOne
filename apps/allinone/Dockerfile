@@ -21,6 +21,8 @@ ENV DATA_DIR=/data
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+# Frame Lab 是 public/framelab 静态资源；standalone 不含 public，必须单独复制。
+COPY --from=builder /app/public ./public
 RUN mkdir -p /data && chown 1000:1000 /data
 USER 1000:1000
 VOLUME /data

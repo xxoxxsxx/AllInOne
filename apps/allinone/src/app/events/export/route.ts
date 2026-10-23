@@ -7,6 +7,7 @@ import {
 } from "@/lib/ledger/events";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

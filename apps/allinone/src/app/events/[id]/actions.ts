@@ -70,7 +70,7 @@ export async function updateEventAction(formData: FormData) {
 }
 
 export async function saveRefundAction(formData: FormData) {
-  const { saveRefund } = await import("@/lib/refunds");
+  const { saveRefund } = await import("@/lib/ledger/refunds");
   const id = getString(formData, "id");
   const sourceId = getString(formData, "sourceId");
   const editing = getString(formData, "editing") === "1";
