@@ -24,8 +24,9 @@
 	}
 	redir /ledger /ledger/ 308
 
-	# TickerSentry：网关剥离公开前缀，应用以根路径路由。
-	handle_path /stocks/* {
+	# TickerSentry：网关不剥离前缀，应用按 BASE_PATH=/stocks 自行剥离（wrapBase）。
+	# 注意：不能改成 handle_path，否则应用的缺前缀 301 会形成重定向循环。
+	handle /stocks/* {
 		reverse_proxy tickersentry:8080
 	}
 	redir /stocks /stocks/ 308

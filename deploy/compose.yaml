@@ -13,8 +13,6 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       PORTAL_CONFIG_DIR: /config
       PORTAL_HEALTH_CONFIG: ${PORTAL_HEALTH_CONFIG:-/config/health.json}
-      # 门户地址，供 TickerSentry 等工具的“返回工具箱”链接使用。
-      PORTAL_URL: ${PORTAL_URL:-}
     volumes:
       - ../config:/config:ro
     networks:
@@ -65,6 +63,8 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       BASE_PATH: /stocks
       PUBLIC_ORIGIN: ${TICKER_PUBLIC_ORIGIN:-}
+      # 返回工具箱链接（PRD §5.5 公共导航）
+      PORTAL_URL: ${PORTAL_URL:-}
     volumes:
       # 迁移时按 PRD §11.1 复制一份旧数据目录（停机后 cp -a，保持 65532 属主）。
       - ${TICKER_DATA_DIR:?请在 deploy/.env 中设置 TICKER_DATA_DIR}/data:/data
