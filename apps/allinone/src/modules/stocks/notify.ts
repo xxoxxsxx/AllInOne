@@ -216,7 +216,13 @@ export async function sendBark(b: BarkConfig, title: string, body: string, proxy
   const host = endpoint.hostname;
   let ips: string[];
   try {
-    ips = (await dnsLookup(host)).map((r) => r.address);
+    // 容器内 DNS 转发链路偶发抖动：失败后短暂等待重试一次（语义不变）。
+    try {
+      ips = (await dnsLookup(host)).map((r) => r.address);
+    } catch {
+      await new Promise((r) => setTimeout(r, 300));
+      ips = (await dnsLookup(host)).map((r) => r.address);
+    }
   } catch {
     return { status: "失败", error: "Bark 域名解析失败" };
   }
