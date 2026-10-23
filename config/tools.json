@@ -1,0 +1,66 @@
+[
+  {
+    "id": "cdk-ledger",
+    "name": "CDK 台账",
+    "description": "CDK 发货、代发、作废与换新的台账管理",
+    "category": "business",
+    "tags": [
+      "cdk",
+      "台账",
+      "业务"
+    ],
+    "icon": "key",
+    "kind": "service",
+    "entry": "/ledger/",
+    "openMode": "same-tab",
+    "order": 10,
+    "visible": true,
+    "lifecycle": "active",
+    "integration": "path"
+  },
+  {
+    "id": "tickersentry",
+    "name": "股票提醒",
+    "description": "股票档位触价监控与多渠道通知",
+    "category": "finance",
+    "tags": [
+      "股票",
+      "行情",
+      "提醒"
+    ],
+    "aliases": [
+      "TickerSentry"
+    ],
+    "icon": "chart",
+    "kind": "service",
+    "entry": "/stocks/",
+    "openMode": "same-tab",
+    "order": 20,
+    "visible": true,
+    "lifecycle": "active",
+    "integration": "path"
+  },
+  {
+    "id": "framelab",
+    "name": "Frame Lab 相机拼图",
+    "description": "在浏览器里给照片加上相机边框并导出",
+    "category": "media",
+    "tags": [
+      "照片",
+      "拼图",
+      "相机"
+    ],
+    "aliases": [
+      "GrBorder",
+      "Frame Lab"
+    ],
+    "icon": "image",
+    "kind": "static",
+    "entry": "/framelab/",
+    "openMode": "same-tab",
+    "order": 30,
+    "visible": true,
+    "lifecycle": "active",
+    "integration": "path"
+  }
+]

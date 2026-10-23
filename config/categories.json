@@ -1,0 +1,17 @@
+[
+  {
+    "id": "business",
+    "name": "业务管理",
+    "description": "台账与日常业务记录"
+  },
+  {
+    "id": "finance",
+    "name": "金融",
+    "description": "行情监控与提醒"
+  },
+  {
+    "id": "media",
+    "name": "图片与创作",
+    "description": "图片处理与创作工具"
+  }
+]

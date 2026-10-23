@@ -1,0 +1,29 @@
+# AllInOne 网关（M1）。M2 加入 /ledger、/stocks、/framelab 路由。
+# 站点地址通过 ALLINONE_SITE 覆盖，例如 https://tools.nas.example.com
+{
+	admin off
+}
+
+{$ALLINONE_SITE::8080} {
+	encode zstd gzip
+
+	# ---- M2 预留路由示例 ----
+	# handle_path /framelab/* {
+	# 	root * /srv/framelab
+	# 	try_files {path} /index.html
+	# 	file_server
+	# }
+	#
+	# handle_path /ledger/* {
+	# 	reverse_proxy ledger:3000
+	# }
+	#
+	# handle_path /stocks/* {
+	# 	reverse_proxy tickersentry:8080
+	# }
+
+	# 其余全部交给门户。
+	handle {
+		reverse_proxy portal:3000
+	}
+}

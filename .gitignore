@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# next build output
+.next/
+out/
+
+# env & secrets (compose 密钥、数据库连接串等不入 Git)
+.env
+.env.local
+deploy/.env
+
+# 部署专用健康检查配置（含内部地址，仅提交 example）
+config/health.json
+
+# misc
+.DS_Store
+*.log
+tsconfig.tsbuildinfo

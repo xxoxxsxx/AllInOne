@@ -1,0 +1,14 @@
+{
+  "checks": {
+    "cdk-ledger": {
+      "url": "http://cdk-ledger-app:3000/api/health"
+    },
+    "tickersentry": {
+      "url": "http://tickersentry:8080/healthz"
+    },
+    "framelab": {
+      "url": "http://gateway:8080/framelab/",
+      "expectedStatus": 200
+    }
+  }
+}
