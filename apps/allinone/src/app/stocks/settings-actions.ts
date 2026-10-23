@@ -213,7 +213,7 @@ export async function windowSaveAction(fd: FormData): Promise<void> {
       }
     }
   }
-  if (!found) redirect("/error/404");
+  if (!found) redirect("/stocks/error/404");
   let flash: string;
   if (action === "delete") {
     flash = "window_deleted";
@@ -251,7 +251,7 @@ export async function windowSaveAction(fd: FormData): Promise<void> {
       db.prepare(`UPDATE query_windows SET start=?,end=?,interval=?,max_alerts=? WHERE id=?`).run(item.start, item.end, item.interval, item.max_alerts, id);
     }
   } else {
-    redirect("/error/404");
+    redirect("/stocks/error/404");
   }
   revalidatePath("/stocks/schedule");
   goSchedule({ flash });
@@ -324,7 +324,7 @@ export async function scheduleUpdateAction(fd: FormData): Promise<void> {
     flash = "schedule_deleted";
     db.prepare(`DELETE FROM schedules WHERE id=?`).run(id);
   } else {
-    redirect("/error/404");
+    redirect("/stocks/error/404");
   }
   revalidatePath("/stocks/schedule");
   goSchedule({ flash });

@@ -1,0 +1,94 @@
+/* /stocks 段外壳适配层（stocks.css 之前加载）。
+ *
+ * 任务约束：根布局 src/app/layout.tsx 与门户 globals.css 均不可修改，而它们会给
+ * /stocks 段带上门户的 header/footer/site-main DOM 与 Tailwind preflight 复位。
+ * 本文件只做两件事，全部以 .ts-shell（stocks/layout.tsx 渲染的标记元素）存在为条件，
+ * 离开 /stocks 段后门户样式自动恢复，不影响其他页面：
+ *
+ * 1. 停用门户 chrome：隐藏门户 header/footer、把门户 .site-main 包裹层变为
+ *    display: contents，让 TickerSentry 版 common.html 骨架（header/60px 深色导航、
+ *    1200px main、footer）成为页面唯一外壳；并抵消 globals.css 在同名 class 上
+ *    多出来的 sticky / border / max-width / text-align。
+ * 2. 恢复原版依赖的 UA 默认值（globals.css 的 @import "tailwindcss" preflight 会
+ *    清掉 p 的下边距、标题加粗、ul 项目符号/边距）：全部用 :where(body:has(...)) p
+ *    这类 (0,0,1) 低特异性写法，保证 stocks.css 里的类选择器照常覆盖它们。
+ */
+
+.ts-shell {
+  display: contents;
+}
+
+/* —— 门户 chrome 停用 —— */
+
+body:has(.ts-shell) > .site-main {
+  display: contents;
+}
+
+body:has(.ts-shell) .site-header:has(> .site-header-inner) {
+  display: none;
+}
+
+body:has(.ts-shell) .site-footer:has(> span:only-child) {
+  display: none;
+}
+
+/* globals.css 给同名 class 附加的门户样式，原版 app.css 未覆盖，逐项还原 */
+:where(body:has(.ts-shell)) .site-header {
+  position: static;
+  backdrop-filter: none;
+  border-bottom: 0;
+}
+
+:where(body:has(.ts-shell)) .site-main {
+  max-width: none;
+  min-height: 0;
+}
+
+:where(body:has(.ts-shell)) .site-footer {
+  text-align: start;
+}
+
+/* globals.css 的 .back-link（门户详情页用）与原版同名：限定其多出的 min-height */
+:where(body:has(.ts-shell)) .back-link {
+  min-height: 0;
+}
+
+/* globals.css 的 :root color-scheme 会影响表单控件，原版恒为浅色 */
+:root:has(.ts-shell) {
+  color-scheme: light;
+}
+
+/* globals.css 对 body 的全局设定恢复为原版默认（app.css 只设定 :root 与 body 盒模型） */
+body:has(.ts-shell) {
+  background: #f4f6f4;
+  color: #193038;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: normal;
+  padding: 0;
+}
+
+/* —— 恢复被 Tailwind preflight 清掉的 UA 默认（低特异性，app.css 可正常覆盖） —— */
+
+:where(body:has(.ts-shell)) p {
+  margin-bottom: 1em;
+}
+
+:where(body:has(.ts-shell)) :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: bolder;
+}
+
+:where(body:has(.ts-shell)) :is(ul, ol) {
+  list-style: revert;
+  margin: 1em 0;
+}
+
+/* preflight 会把文件选择按钮改成透明无边框样式，恢复 UA 原生外观（设置页恢复备份用） */
+:where(body:has(.ts-shell)) ::file-selector-button {
+  appearance: revert;
+  border: revert;
+  background-color: revert;
+  background-image: revert;
+  padding: revert;
+  font: revert;
+}
