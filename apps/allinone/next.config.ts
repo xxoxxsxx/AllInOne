@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // public/framelab 是静态目录，Next 不解析目录 index：把入口重写到 index.html。
+  async rewrites() {
+    return [
+      { source: "/framelab", destination: "/framelab/index.html" },
+      { source: "/framelab/", destination: "/framelab/index.html" },
+    ];
+  },
   async headers() {
     return [
       {
