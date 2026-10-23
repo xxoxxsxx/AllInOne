@@ -5,13 +5,12 @@
 // Telegram：Bot Token + 数字 Chat ID；按状态码给出可读错误。
 
 import crypto from "node:crypto";
-import { lookup as dnsLookupCB } from "node:dns";
-import { promisify } from "node:util";
+import { lookup } from "node:dns/promises";
 import net from "node:net";
 import { ProxyAgent, request as undiciRequest } from "undici";
 import { SocksProxyAgent } from "socks-proxy-agent";
 
-const dnsLookup = promisify(dnsLookupCB) as unknown as (host: string) => Promise<Array<{ address: string; family: number }>>;
+const dnsLookup = (host: string) => lookup(host, { all: true });
 
 export type ChannelStatus = "成功" | "失败" | "不确定";
 

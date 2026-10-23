@@ -1,5 +1,5 @@
 # AllInOne v2：单镜像单容器部署（PRD v2 §9）。
-# NAS：cd deploy && cp .env.example .env && docker compose pull && docker compose up -d
+# NAS：cd deploy && docker compose pull && docker compose up -d
 name: allinone
 
 services:
@@ -10,18 +10,16 @@ services:
     init: true
     user: "1000:1000"
     ports:
-      - "${ALLINONE_PORT:-8080}:3000"
+      - "36889:3000"
     environment:
-      TZ: ${TZ:-Asia/Shanghai}
+      TZ: Asia/Shanghai
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
-      PORT: 3000
+      PORT: "3000"
       DATA_DIR: /data
-      # HTTPS 反代或非默认端口访问时，设置为对外来源（scheme://host[:port]）。
-      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
     volumes:
       # 数据卷：/data/cdk/cdk.db 与 /data/tickersentry/ticker.db
-      - ${ALLINONE_DATA_DIR:?请在 deploy/.env 中设置 ALLINONE_DATA_DIR}:/data
+      - /volume3/docker/allinone/data:/data
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
