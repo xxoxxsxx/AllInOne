@@ -32,7 +32,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </nav>
           </div>
         </header>
-        <main className="site-main">{children}</main>
+        <div className="site-main">{children}</div>
         <footer className="site-footer">
           <span>AllInOne · 个人工具聚合</span>
         </footer>

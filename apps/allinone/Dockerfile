@@ -8,6 +8,8 @@ RUN corepack enable && pnpm install --frozen-lockfile
 FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+# 构建期禁用调度器：register() 在 build 阶段也会执行，不应建库/起任务。
+ENV DISABLE_SCHEDULER=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN corepack enable && pnpm run build
