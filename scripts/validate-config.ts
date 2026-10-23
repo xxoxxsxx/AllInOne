@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ICON_IDS } from "../apps/portal/src/lib/icons.ts";
+import { ICON_IDS } from "../apps/allinone/src/lib/icons.ts";
 import { RESERVED_PREFIXES } from "../apps/portal/src/lib/tools.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

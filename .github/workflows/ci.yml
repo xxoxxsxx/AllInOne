@@ -16,21 +16,21 @@ jobs:
       - name: 校验工具目录配置
         run: node --experimental-strip-types scripts/validate-config.ts
 
-  portal-test:
+  app-test:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/portal
+        working-directory: apps/allinone
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          package_json_file: apps/portal/package.json
+          package_json_file: apps/allinone/package.json
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: apps/portal/pnpm-lock.yaml
+          cache-dependency-path: apps/allinone/pnpm-lock.yaml
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
       - name: 单元测试
