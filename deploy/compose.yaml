@@ -87,10 +87,7 @@ services:
         max-file: "3"
 
   gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile.caddy
-    image: ghcr.io/xxoxxsxx/allinone-gateway:local
+    image: caddy:2-alpine
     restart: unless-stopped
     init: true
     ports:
