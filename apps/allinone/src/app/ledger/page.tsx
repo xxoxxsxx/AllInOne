@@ -56,7 +56,7 @@ export default async function LedgerDashboard() {
           {quickLinks.map((item) => (
             <article
               key={item.title}
-              className="rounded-2xl border border-border bg-white/80 p-5"
+              className="flex h-full flex-col items-start rounded-2xl border border-border bg-white/80 p-5"
             >
               <p className="text-xs uppercase tracking-[0.22em] text-accent">
                 {item.kicker}
@@ -64,12 +64,12 @@ export default async function LedgerDashboard() {
               <h2 className="mt-3 text-2xl font-semibold tracking-tight">
                 {item.title}
               </h2>
-              <p className="mt-3 text-sm leading-7 text-muted">
+              <p className="mt-3 mb-6 text-sm leading-7 text-muted">
                 {item.description}
               </p>
               <Link
                 href={item.href}
-                className="mt-6 inline-flex h-11 items-center justify-center rounded-2xl bg-accent px-5 text-sm font-medium text-white transition hover:opacity-90"
+                className="mt-auto inline-flex h-11 shrink-0 items-center justify-center rounded-2xl bg-accent px-5 text-sm font-medium text-white transition hover:opacity-90"
               >
                 {item.href === "/config"
                   ? "进入配置页"

@@ -89,10 +89,10 @@ export default async function EventNewPage({
                 基础配置
               </Link>
               <Link
-                href="/"
+                href="/ledger"
                 className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
               >
-                返回首页
+                返回台账首页
               </Link>
             </div>
           </div>

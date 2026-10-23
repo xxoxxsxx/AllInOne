@@ -33,10 +33,10 @@ export default async function ConfigPage() {
             </div>
 
             <Link
-              href="/"
+              href="/ledger"
               className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-foreground transition hover:border-accent hover:text-accent"
             >
-              返回首页
+              返回台账首页
             </Link>
           </div>
 
