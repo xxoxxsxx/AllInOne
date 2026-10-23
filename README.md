@@ -10,7 +10,7 @@ cd deploy && cp .env.example .env   # 填 ALLINONE_DATA_DIR 等
 docker compose pull && docker compose up -d
 ```
 
-数据卷 `/data`：`cdk/cdk.db`（自 PostgreSQL 一次性迁移，脚本见 scripts/migrate-pg-to-sqlite.ts）
+数据卷 `/data`：`cdk/cdk.db`（自 PostgreSQL 一次性迁移，脚本见 apps/allinone/scripts/migrate-pg-to-sqlite.ts）
 与 `tickersentry/ticker.db`（直接沿用原文件）。
 
 ## 开发

@@ -1,12 +1,12 @@
-# CDK 台账一次性迁移：PostgreSQL → SQLite（PRD v2 §6.1）。
-#
-# 用法（在能同时访问旧 PG 和目标数据目录的机器上执行）：
-#   cd deploy && cp .env.example .env   # 仅需要 DATABASE_URL 与 ALLINONE_DATA_DIR
-#   node --experimental-strip-types ../scripts/migrate-pg-to-sqlite.ts
-#
-# 行为：只读连接旧 PG；在 $ALLINONE_DATA_DIR/cdk/cdk.db 建库（已存在则中止，
-# 用 --force 覆盖）；逐表导入并输出行数核对报告。金额按 TEXT 十进制原样保存。
-# 旧 PG 不做任何写操作。
+// CDK 台账一次性迁移：PostgreSQL → SQLite（PRD v2 §6.1）。
+//
+// 用法（在能同时访问旧 PG 和目标数据目录的机器上执行）：
+//   cd deploy && cp .env.example .env   # 仅需要 DATABASE_URL 与 ALLINONE_DATA_DIR
+//   node --experimental-strip-types scripts/migrate-pg-to-sqlite.ts   （在 apps/allinone 目录下执行）
+//
+// 行为：只读连接旧 PG；在 $ALLINONE_DATA_DIR/cdk/cdk.db 建库（已存在则中止，
+// 用 --force 覆盖）；逐表导入并输出行数核对报告。金额按 TEXT 十进制原样保存。
+// 旧 PG 不做任何写操作。
 import path from "node:path";
 import process from "node:process";
 import fs from "node:fs";
@@ -35,7 +35,7 @@ db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
 // schema 以 ledger 模块的共享 DDL 为唯一事实源（与运行时建表完全一致）。
-const { LEDGER_SCHEMA_SQL } = await import("../apps/allinone/src/lib/ledger/schema-sql.ts");
+const { LEDGER_SCHEMA_SQL } = await import("../src/lib/ledger/schema-sql.ts");
 db.exec(LEDGER_SCHEMA_SQL);
 // 旧 PG 数据可能不符合 0004/0007 后的严格形状 CHECK（PG 侧为 NOT VALID 豁免）。
 // 导入期间关闭 CHECK 以免历史行被拒；导入完成后恢复并保留数据供人工核对。
