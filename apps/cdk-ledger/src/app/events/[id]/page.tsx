@@ -15,7 +15,6 @@ import {
 } from "@/lib/events";
 import { eventTypeLabels } from "@/lib/schema";
 import { formatShanghaiDateTime, getCurrentShanghaiDateTimeLocal, toDateTimeLocalValue } from "@/lib/time";
-import { withBase } from "@/lib/base-path";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +98,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
             </div>
 
             <Link
-              href={withBase("/events")}
+              href="/events"
               className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
             >
               返回明细页
@@ -159,7 +158,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
           {refundSource ? (
             <>
               <p className="mt-3 text-sm leading-7">
-                原发货：<Link className="text-accent underline" href={withBase(`/events/${refundSource.id}`)}>
+                原发货：<Link className="text-accent underline" href={`/events/${refundSource.id}`}>
                   {refundSource.cdk} · {formatShanghaiDateTime(refundSource.occurred_at)}
                 </Link>
                 <br />原收入 {refundSource.sale_price ?? refundSource.supply_price ?? "未记录"} 元，
@@ -168,7 +167,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
               <ul className="mt-4 space-y-2 text-sm">
                 {refunds.map((refund) => (
                   <li key={refund.id} className="rounded-xl border border-border p-3">
-                    <Link className="text-accent underline" href={withBase(`/events/${refund.id}`)}>
+                    <Link className="text-accent underline" href={`/events/${refund.id}`}>
                       {formatShanghaiDateTime(refund.occurred_at)} · 查看/修改
                     </Link>
                     <p className="mt-1">退款 {refund.refund_amount} 元 · 成本退回 {refund.cost_returned} 元 · 手续费退回 {refund.fee_returned} 元</p>

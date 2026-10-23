@@ -19,16 +19,19 @@ func (a *App) base() string {
 }
 
 // href 返回带公开前缀的站内地址。
+// 所有调用点传入的都是“网关剥离前缀后的内部路由”（如 /stocks/1、/settings），
+// 因此无条件加前缀；不能做“已带前缀则跳过”的判断——内部路由 /stocks/*
+// 与公开前缀 /stocks 重名，误判会导致详情页和表单 404。
 func (a *App) href(path string) string {
 	b := a.base()
-	if b == "" || path == b || strings.HasPrefix(path, b+"/") {
+	if b == "" {
 		return path
-	}
-	if !strings.HasPrefix(path, "/") {
-		return b + "/" + path
 	}
 	if path == "/" {
 		return b + "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		return b + "/" + path
 	}
 	return b + path
 }

@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import type { ConfigOption } from "@/lib/config";
 import type { EventFilters } from "@/lib/events";
 import { getEventKindOptions } from "@/lib/events";
-import { withBase } from "@/lib/base-path";
 
 type EventFiltersProps = {
   filters: EventFilters;
@@ -162,7 +161,7 @@ export function EventFiltersForm({
           计算基础毛利
         </button>
         <Link
-          href={withBase("/events")}
+          href="/events"
           className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-5 text-sm text-foreground transition hover:border-accent hover:text-accent"
         >
           清空筛选

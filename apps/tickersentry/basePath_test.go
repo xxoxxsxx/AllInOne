@@ -13,8 +13,11 @@ func TestHrefPrefixing(t *testing.T) {
 		"/":                      "/stocks/",
 		"/settings":              "/stocks/settings",
 		"/settings?result=saved": "/stocks/settings?result=saved",
-		"/stocks/1":              "/stocks/1", // 内部路由路径（网关剥离后的形态）统一加公开前缀
-		"settings":               "/stocks/settings",
+		// 内部路由 /stocks/1 与公开前缀重名：必须加成 /stocks/stocks/1，
+		// 否则详情页/表单在网关剥离后落到 /1 导致 404。
+		"/stocks/1": "/stocks/stocks/1",
+		"/stocks":   "/stocks/stocks",
+		"settings":  "/stocks/settings",
 	}
 	for in, want := range cases {
 		if got := a.href(in); got != want {

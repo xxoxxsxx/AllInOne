@@ -16,7 +16,6 @@ import {
 } from "@/lib/events";
 import { eventTypeLabels, type EventType } from "@/lib/schema";
 import { formatShanghaiDateTime } from "@/lib/time";
-import { withBase } from "@/lib/base-path";
 
 export const dynamic = "force-dynamic";
 
@@ -84,13 +83,13 @@ export default async function EventNewPage({
 
             <div className="flex flex-wrap gap-2">
               <Link
-                href={withBase("/config")}
+                href="/config"
                 className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
               >
                 基础配置
               </Link>
               <Link
-                href={withBase("/")}
+                href="/"
                 className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
               >
                 返回首页
@@ -105,7 +104,7 @@ export default async function EventNewPage({
             {getEventKindOptions().filter((item) => item.value !== "refund").map((item) => (
               <Link
                 key={item.value}
-                href={withBase(`/events/new?type=${item.value}`)}
+                href={`/events/new?type=${item.value}`}
                 className={
                   item.value === kind
                     ? "inline-flex h-11 items-center justify-center rounded-2xl bg-accent px-4 text-sm font-medium text-white"

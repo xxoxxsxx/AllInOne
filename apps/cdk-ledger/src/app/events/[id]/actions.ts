@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { updateEvent } from "@/lib/events";
-import { withBase } from "@/lib/base-path";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -26,7 +25,7 @@ function redirectToEvent(id: string, input: {
   }
 
   const query = search.toString();
-  redirect(query ? withBase(`/events/${id}?${query}`) : withBase(`/events/${id}`));
+  redirect(query ? `/events/${id}?${query}` : `/events/${id}`);
 }
 
 export async function updateEventAction(formData: FormData) {

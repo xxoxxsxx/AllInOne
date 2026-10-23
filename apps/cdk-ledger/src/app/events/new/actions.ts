@@ -13,7 +13,6 @@ import {
 } from "@/lib/events";
 import type { EventType } from "@/lib/schema";
 import { getCurrentShanghaiDateTimeLocal } from "@/lib/time";
-import { withBase } from "@/lib/base-path";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -45,7 +44,7 @@ function redirectToForm(
     message: status.message,
   });
 
-  redirect(withBase(`/events/new?${query}`));
+  redirect(`/events/new?${query}`);
 }
 
 function getKind(formData: FormData) {

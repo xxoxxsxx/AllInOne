@@ -15,7 +15,6 @@ import {
   deleteResellerPackagePrice,
   upsertResellerPackagePrice,
 } from "@/lib/pricing";
-import { withBase } from "@/lib/base-path";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -37,7 +36,7 @@ function redirectToConfig(input: {
   }
 
   const query = search.toString();
-  redirect(query ? withBase(`/config?${query}`) : withBase("/config"));
+  redirect(query ? `/config?${query}` : "/config");
 }
 
 export async function createConfigAction(formData: FormData) {

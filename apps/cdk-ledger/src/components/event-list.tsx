@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 
 import { eventTypeLabels, type EventType } from "@/lib/schema";
 import { formatShanghaiDateTime } from "@/lib/time";
-import { withBase } from "@/lib/base-path";
 
 type EventListItem = {
   cdk: string | null;
@@ -146,7 +145,7 @@ export function EventList({
                 </div>
 
                 <Link
-                  href={withBase(`/events/${item.id}`)}
+                  href={`/events/${item.id}`}
                   className={
                     isVoid
                       ? "inline-flex h-10 items-center justify-center rounded-2xl border border-rose-300 px-4 text-sm text-rose-700 transition hover:border-rose-500 hover:text-rose-800"

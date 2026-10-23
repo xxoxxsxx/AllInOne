@@ -19,6 +19,8 @@ ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=builder /app/.next/standalone ./
+# standalone 不自带静态资源，必须单独复制，否则页面无样式、交互脚本 404。
+COPY --from=builder /app/.next/static ./.next/static
 USER 1000:1000
 EXPOSE 3000
 CMD ["node", "server.js"]

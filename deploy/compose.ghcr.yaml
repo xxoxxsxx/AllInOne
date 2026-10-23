@@ -6,9 +6,11 @@
 #   docker compose -f compose.ghcr.yaml pull
 #   docker compose -f compose.ghcr.yaml up -d
 #
-# TickerSentry 数据迁移（PRD §11.1，一次性）：
-#   停旧容器后：cp -a /volume3/docker/tickersentry/ticker_data /volume3/docker/allinone/tickersentry
+# TickerSentry 数据迁移（PRD §11.1，一次性；旧容器停止后执行）：
+#   mkdir -p /volume3/docker/allinone/tickersentry
+#   cp -a /volume3/docker/tickersentry/ticker_data /volume3/docker/allinone/tickersentry/data
 #   chown -R 65532:65532 /volume3/docker/allinone/tickersentry
+# 完成后 data 目录内应直接是 ticker.db（及 WAL 文件）。
 name: allinone
 
 services:
@@ -46,7 +48,7 @@ services:
     networks:
       - gateway
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/ledger/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -70,7 +72,8 @@ services:
       PUBLIC_ORIGIN: ${TICKER_PUBLIC_ORIGIN:-}
       PORTAL_URL: ${PORTAL_URL:-}
     volumes:
-      - ${TICKER_DATA_DIR:?请在 deploy/.env 中设置 TICKER_DATA_DIR}/data:/data
+      # TICKER_DATA_DIR 指向“包含 ticker.db 的目录”（见下方迁移说明）。
+      - ${TICKER_DATA_DIR:?请在 deploy/.env 中设置 TICKER_DATA_DIR}:/data
     networks:
       - gateway
     healthcheck:

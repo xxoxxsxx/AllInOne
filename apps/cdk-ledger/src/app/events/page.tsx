@@ -15,7 +15,6 @@ import {
   parseEventPageSize,
   shouldCalculateEventProfit,
 } from "@/lib/events";
-import { withBase } from "@/lib/base-path";
 
 export const dynamic = "force-dynamic";
 
@@ -97,13 +96,13 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
 
             <div className="flex flex-wrap gap-2">
               <Link
-                href={withBase("/events/new")}
+                href="/events/new"
                 className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
               >
                 新增事件
               </Link>
               <Link
-                href={withBase("/")}
+                href="/"
                 className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
               >
                 返回首页
@@ -136,7 +135,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
             </span>
             {canExport ? (
               <a
-                href={withBase(`/events/export${exportQuery ? `?${exportQuery}` : ""}`)}
+                href={`/events/export${exportQuery ? `?${exportQuery}` : ""}`}
                 className="inline-flex h-10 items-center justify-center rounded-2xl bg-accent px-4 text-sm font-medium text-white transition hover:opacity-90"
               >
                 导出 CSV

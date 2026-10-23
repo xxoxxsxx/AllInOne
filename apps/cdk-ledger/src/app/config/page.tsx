@@ -4,7 +4,6 @@ import { ConfigSection } from "@/components/config-section";
 import { ResellerPackagePriceMatrix } from "@/components/reseller-package-price-matrix";
 import { listConfigItems } from "@/lib/config";
 import { listResellerPackagePrices } from "@/lib/pricing";
-import { withBase } from "@/lib/base-path";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +33,7 @@ export default async function ConfigPage() {
             </div>
 
             <Link
-              href={withBase("/")}
+              href="/"
               className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-foreground transition hover:border-accent hover:text-accent"
             >
               返回首页
