@@ -1,44 +1,27 @@
-# AllInOne 部署编排。上游业务端口不再直接发布到宿主机，统一经网关访问（PRD §10.2）。
-# 镜像由 GitHub Actions 发布到 GHCR（PRD §11.2）；本地构建用于开发调试。
+# AllInOne v2：单镜像单容器部署（PRD v2 §9）。
+# NAS：cd deploy && cp .env.example .env && docker compose pull && docker compose up -d
 name: allinone
 
 services:
-  portal:
-    build:
-      context: ../apps/portal
-    image: ghcr.io/xxoxxsxx/allinone-portal:local
+  allinone:
+    image: ghcr.io/xxoxxsxx/allinone:main
+    pull_policy: always
     restart: unless-stopped
     init: true
-    environment:
-      TZ: ${TZ:-Asia/Shanghai}
-      PORTAL_CONFIG_DIR: /config
-      PORTAL_HEALTH_CONFIG: ${PORTAL_HEALTH_CONFIG:-/config/health.json}
-    volumes:
-      - ../config:/config:ro
-    networks:
-      - gateway
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  ledger:
-    build:
-      context: ../apps/cdk-ledger
-    image: ghcr.io/xxoxxsxx/allinone-ledger:local
-    restart: unless-stopped
-    init: true
+    user: "1000:1000"
+    ports:
+      - "${ALLINONE_PORT:-8080}:3000"
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: 3000
-      NEXT_TELEMETRY_DISABLED: "1"
-      # 构建期注入 basePath=/ledger（见 apps/cdk-ledger Dockerfile）。
-      DATABASE_URL: ${CDK_DATABASE_URL:?请在 deploy/.env 中设置 CDK_DATABASE_URL}
-    networks:
-      - gateway
+      DATA_DIR: /data
+      # HTTPS 反代或非默认端口访问时，设置为对外来源（scheme://host[:port]）。
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
+    volumes:
+      # 数据卷：/data/cdk/cdk.db 与 /data/tickersentry/ticker.db
+      - ${ALLINONE_DATA_DIR:?请在 deploy/.env 中设置 ALLINONE_DATA_DIR}:/data
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -50,71 +33,3 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-  tickersentry:
-    build:
-      context: ../apps/tickersentry
-    image: ghcr.io/xxoxxsxx/allinone-tickersentry:local
-    restart: unless-stopped
-    init: true
-    user: "65532:65532"
-    read_only: true
-    environment:
-      TZ: ${TZ:-Asia/Shanghai}
-      BASE_PATH: /stocks
-      PUBLIC_ORIGIN: ${TICKER_PUBLIC_ORIGIN:-}
-      # 返回工具箱链接（PRD §5.5 公共导航）
-      PORTAL_URL: ${PORTAL_URL:-}
-    volumes:
-      # 迁移时按 PRD §11.1 复制一份旧数据目录（停机后 cp -a，保持 65532 属主）。
-      - ${TICKER_DATA_DIR:?请在 deploy/.env 中设置 TICKER_DATA_DIR}/data:/data
-    networks:
-      - gateway
-    healthcheck:
-      test: ["CMD", "/app", "-check", "http://127.0.0.1:8080/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  gateway:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    init: true
-    ports:
-      - "${ALLINONE_PORT:-8080}:8080"
-    environment:
-      TZ: ${TZ:-Asia/Shanghai}
-      ALLINONE_SITE: ${ALLINONE_SITE:-:8080}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ../apps/framelab:/srv/framelab:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - portal
-      - ledger
-      - tickersentry
-    networks:
-      - gateway
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-networks:
-  gateway:
-
-volumes:
-  caddy_data:
-  caddy_config:
