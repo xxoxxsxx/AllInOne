@@ -1,4 +1,4 @@
-import { apiKeyOf, getDB, notificationSettings, queryWindows, windowDuration } from "@/modules/stocks/store";
+import { apiKeyOf, getDB, getQuotaStatus, notificationSettings, queryWindows, windowDuration } from "@/modules/stocks/store";
 import { displayClock } from "@/modules/stocks/tz";
 import { timezoneValue } from "@/modules/stocks/windows";
 import {
@@ -8,6 +8,7 @@ import {
   clearTGAction,
   restoreConfigAction,
   saveAPIKeyAction,
+  saveQuotaAction,
   saveBarkAction,
   saveFeishuAction,
   saveProxyAction,
@@ -32,6 +33,7 @@ export default async function SettingsPage({
   const sp = await searchParams;
   const db = getDB();
   const key = apiKeyOf(db);
+  const quota = getQuotaStatus(db);
   const c = notificationSettings(db);
   const tz = timezoneValue(db);
   const proxyRow = db.prepare(`SELECT proxy_latency_ms,proxy_tested_at FROM settings WHERE id=1`).get() as {
@@ -51,6 +53,7 @@ export default async function SettingsPage({
     cleared: "配置已清除",
     unchanged: "未填写新 Key，已保留当前配置",
     proxy_tested: "代理测试成功，响应耗时已更新",
+    quota_saved: "行情额度已保存，已消耗额度不会清零",
   };
   const testedMap: Record<string, string> = { bark: "Bark", feishu: "飞书", telegram: "Telegram" };
   const quotaDaily = counts.stocks * slots;
@@ -125,12 +128,33 @@ export default async function SettingsPage({
             ) : null}
           </div>
         </div>
+        <div className="settings-panel">
+          <div className="settings-intro">
+            <div className="settings-name"><h3>查询额度与分批</h3></div>
+            <p>自动和手动查询共享额度。达到分钟上限后等待恢复，再继续本轮，不会直接跳过后面的股票。</p>
+          </div>
+          <div className="settings-content">
+            <div className="quota-summary" aria-label="行情额度用量">
+              <span>过去 24 小时已用 <strong>{quota.dayUsed} / {quota.dayLimit}</strong></span>
+              <span>当前分钟剩余 <strong>{Math.max(0, quota.minuteLimit - quota.minuteUsed)} / {quota.minuteLimit}</strong></span>
+            </div>
+            {quota.retryAfterMs > 0 ? <p className="info-strip">额度或服务端限流等待中，约 {Math.ceil(quota.retryAfterMs / 1000)} 秒后重新检查。</p> : null}
+            <form action={saveQuotaAction}>
+              <div className="quota-fields">
+                <label>每分钟额度<input name="quota_per_minute" type="number" min="1" max="100000" step="1" required defaultValue={quota.minuteLimit} /></label>
+                <label>24 小时额度<input name="quota_per_day" type="number" min="1" max="100000000" step="1" required defaultValue={quota.dayLimit} /></label>
+              </div>
+              <div className="settings-actions"><button className="primary" type="submit">保存额度</button></div>
+            </form>
+            <p className="settings-footnote">免费套餐通常为 8 次/分钟、800 次/天，请按账号实际额度设置。本应用保守使用滚动 61 秒与滚动 24 小时计数，重启保留；统计不含其他程序对同一 Key 的请求。此处用量为页面打开时的快照。</p>
+          </div>
+        </div>
         <p className="settings-footnote">
           每轮约 {counts.stocks} 次请求；按已启用的固定时间点和查询时段估算每天最多约 {quotaDaily}{" "}
           次。休市、重复时间点及达到上限后停止的查询未计入；手动查询、429 重试和其他客户端用量另计。
         </p>
-        {quotaDaily >= 800 ? (
-          <p className="info-strip">预计用量已达到本程序 800 次 / 24 小时的查询预算，建议延长查询间隔或减少启用的股票。</p>
+        {quotaDaily >= quota.dayLimit ? (
+          <p className="info-strip">预计用量已达到所设的 {quota.dayLimit} 次 / 24 小时查询预算，建议延长查询间隔或减少启用的股票。</p>
         ) : null}
       </section>
 

@@ -4,6 +4,9 @@
 // - 校验：匹配代码、USD、可识别交易所（AssetOK）、时间字段、年龄 -2～30 分钟（触价判定在 alertValidity）。
 // - HTTP 代理用 undici ProxyAgent；SOCKS5 用 socks-proxy-agent。
 
+import { getDB } from "./store";
+import { withQuoteQuota, type QueueOptions } from "./quota";
+import type { Database } from "better-sqlite3";
 import { ProxyAgent, request as undiciRequest, type Dispatcher } from "undici";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import { Agent as HttpsAgent } from "node:https";
@@ -28,6 +31,7 @@ export class RateLimitError extends Error {
   afterMs: number;
   constructor(afterMs: number) {
     super("行情服务限流 (429)");
+    this.name = "RateLimitError";
     this.afterMs = afterMs;
   }
 }
@@ -136,7 +140,11 @@ export function parseOptionalPrice(raw: string | undefined): string {
   return decString(d);
 }
 
-export async function fetchQuote(symbol: string, key: string, proxy: string, now: () => Date = () => new Date()): Promise<Quote> {
+export async function fetchQuote(symbol: string, key: string, proxy: string, now: () => Date = () => new Date(), options: QueueOptions & { db?: Database } = {}): Promise<Quote> {
+  return withQuoteQuota(options.db ?? getDB(), () => fetchQuoteRaw(symbol,key,proxy,now), {...options,now});
+}
+
+async function fetchQuoteRaw(symbol: string, key: string, proxy: string, now: () => Date): Promise<Quote> {
   const endpoint = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(symbol)}`;
   const response = await httpGetJSON(endpoint, { Authorization: `apikey ${key}` }, proxy, 12000);
   if (response.status === 429) {

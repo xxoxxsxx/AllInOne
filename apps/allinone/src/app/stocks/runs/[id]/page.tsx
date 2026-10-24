@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getDB, getRun } from "@/modules/stocks/store";
+import { getDB, getRun, getRunProgress, getQuotaStatus } from "@/modules/stocks/store";
 import { displayClock } from "@/modules/stocks/tz";
 import { timezoneValue } from "@/modules/stocks/windows";
 import { money, statusText } from "../../display";
+import { RunProgress } from "../../run-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +16,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `查询 #${id} · TickerSentry` };
 }
 
-// DOM 结构对应 templates/run.html。
-//
-// 进行中轮询说明：本页选择 meta refresh 方案（二选一中更简单者）——run 处于 running
-// 状态时输出 <meta http-equiv="refresh" content="2">，整页每 2 秒刷新，结束后停止；
-// 与原版 app.js 的 fetch 轮询展示同一份数据（状态、reason、done/total、逐股结果），
-// 只是实现更简单，无客户端依赖。
-export default async function RunPage({ params }: { params: Promise<{ id: string }> }) {
+// Preserve the original results table while refreshing batched progress in place.
+export default async function RunPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ reused?: string }>;
+}) {
+  const sp = await searchParams;
   const { id } = await params;
   const numericID = Number(id);
   if (!Number.isInteger(numericID) || numericID <= 0) notFound();
@@ -29,10 +29,14 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   const run = getRun(db, numericID);
   if (!run) notFound();
   const tz = timezoneValue(db);
+  const progress = getRunProgress(db, numericID);
+  const quota = getQuotaStatus(db);
+  const active = run.status === "running";
+  const waiting = active && progress.waitUntil > 0;
 
   return (
     <div>
-      {run.status === "running" ? <meta httpEquiv="refresh" content="2" /> : null}
+      {sp.reused === "1" ? <p className="info-strip" role="status">已有查询任务正在执行，已打开当前任务；没有重复查询或额外消耗额度。</p> : null}
       <div className="page-head">
         <div>
           <Link className="back-link" href="/stocks">
@@ -45,7 +49,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           <p>查看每只股票的报价时间、来源、结果和提醒状态。</p>
         </div>
         <span className="status-pill" id="status">
-          {statusText(run.status)}
+          {waiting ? "等待额度" : statusText(run.status)}
         </span>
       </div>
       <section className="card run-summary">
@@ -64,14 +68,15 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           <strong>{tz}</strong>
         </div>
       </section>
-      {run.reason ? (
+      {run.reason || waiting ? (
         <p className="info-strip" id="reason">
-          {run.reason}
+          {run.reason || "正在等待行情额度，恢复后将继续本轮剩余查询。"}
         </p>
       ) : (
         <p id="reason" aria-live="polite" />
       )}
-      <p id="poll-message" className="muted small" role="status"></p>
+      <RunProgress active={active} nextRequestAt={waiting ? new Date(progress.waitUntil).toISOString() : null} />
+      <p className="muted small">过去 24 小时额度：{quota.dayUsed} / {quota.dayLimit}（本应用统计）；当前分钟剩余 {Math.max(0, quota.minuteLimit - quota.minuteUsed)} 次。</p>
 
       <section className="card">
         <div className="panel-head">
@@ -80,10 +85,16 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
             <h2>
               逐股结果{" "}
               <span id="run-progress" className="status-pill">
-                {run.done} / {run.total}
+                {progress.completed} / {progress.total}
               </span>
             </h2>
             <p>时间按 {tz} 显示。延迟未知不代表实时。</p>
+            <p className="run-counts small">
+              <span>成功 {run.results.filter(r => r.Status === "ok").length}</span>
+              <span>失败 {run.results.filter(r => r.Status === "error" || r.Status === "failed").length}</span>
+              <span>跳过 {run.results.filter(r => r.Status === "skipped").length}</span>
+              <span>待处理 {run.results.filter(r => ["pending", "waiting", "querying"].includes(r.Status)).length}</span>
+            </p>
           </div>
         </div>
         {run.results.length > 0 ? (
@@ -119,7 +130,8 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
                     <td data-label="时间字段">{r.TimeField}</td>
                     <td data-label="延迟">{r.Delay}</td>
                     <td data-label="状态">
-                      {statusText(r.Status)} {r.Error}
+                      <span className="result-status" data-state={r.Status}>{statusText(r.Status)}</span>
+                      {r.Error ? <div className="small">{r.Error}</div> : null}
                     </td>
                     <td data-label="提醒">{r.AlertStatus}</td>
                   </tr>

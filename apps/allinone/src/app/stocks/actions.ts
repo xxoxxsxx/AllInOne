@@ -204,7 +204,11 @@ export async function startRunAction(): Promise<void> {
     goHome({ error: result.error });
   }
   revalidatePath("/");
-  redirect(`/stocks/runs/${result.id}`);
+  // startManualRun 复用进行中的任务时会返回同一个 id；reused 参数让详情页
+  // 明确提示「已打开当前任务」，避免用户以为重复创建了查询。
+  // 兼容说明：后端正在补充 reused 字段，此处用宽化类型读取，字段就绪前后均可编译。
+  const started = result as { ok: true; id: number; reused?: boolean };
+  redirect(`/stocks/runs/${started.id}?reused=${started.reused ? 1 : 0}`);
 }
 
 // —— 添加股票弹窗（新增 Action，原有 Action 均未改动）——

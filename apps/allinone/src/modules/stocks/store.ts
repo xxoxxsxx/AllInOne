@@ -27,7 +27,7 @@ import {
 
 // 目标 schema 版本：Go 版部署链实际到 v19（v14-17 代理字段、v19 results.open）。
 // DDL 已按 v19 拍平；打开 13..19 的真实 Go 库时用幂等 ALTER 补齐缺列后升到 19。
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 export type Stock = {
   ID: number;
@@ -218,9 +218,14 @@ CREATE TABLE IF NOT EXISTS query_windows (id INTEGER PRIMARY KEY AUTOINCREMENT,
   enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)));
 CREATE TABLE IF NOT EXISTS quote_calls (at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS quote_calls_at ON quote_calls(at);
+CREATE TABLE IF NOT EXISTS quota_state (id INTEGER PRIMARY KEY CHECK(id=1), cooldown_until INTEGER NOT NULL DEFAULT 0);
+INSERT OR IGNORE INTO quota_state(id) VALUES(1);
 `;
 
 const UPGRADE_COLUMNS: Array<[string, string, string]> = [
+  ["settings", "quota_per_minute", "INTEGER NOT NULL DEFAULT 8"],
+  ["settings", "quota_per_day", "INTEGER NOT NULL DEFAULT 800"],
+  ["runs", "wait_until", "INTEGER NOT NULL DEFAULT 0"],
   // [表, 列, 定义]：v14-17 代理字段、v19 results.open。幂等：存在即跳过。
   ["settings", "proxy_url", "TEXT NOT NULL DEFAULT ''"],
   ["settings", "proxy_ip", "TEXT NOT NULL DEFAULT ''"],
@@ -233,7 +238,7 @@ const UPGRADE_COLUMNS: Array<[string, string, string]> = [
 ];
 
 function upgradeToCurrent(db: Database.Database, from: number): void {
-  if (from >= SCHEMA_VERSION) return;
+  db.exec(`CREATE TABLE IF NOT EXISTS quota_state (id INTEGER PRIMARY KEY CHECK(id=1), cooldown_until INTEGER NOT NULL DEFAULT 0); INSERT OR IGNORE INTO quota_state(id) VALUES(1);`);
   for (const [table, col, def] of UPGRADE_COLUMNS) {
     const cols = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
     if (!cols.some((c) => c.name === col)) {
@@ -249,7 +254,7 @@ export function openDB(dir?: string, file = "ticker.db"): Database.Database {
     const mem = new Database(":memory:");
     mem.pragma("foreign_keys = ON");
     mem.exec(SCHEMA_DDL);
-    mem.pragma(`user_version = ${SCHEMA_VERSION}`);
+    upgradeToCurrent(mem, 0);
     return mem;
   }
   const base = dir ?? path.join(dataDir(), "tickersentry");
@@ -266,7 +271,7 @@ export function openDB(dir?: string, file = "ticker.db"): Database.Database {
   if (version === 0) {
     // 全新库：建表并直接落目标版本。
     db.exec(SCHEMA_DDL);
-    db.pragma(`user_version = ${SCHEMA_VERSION}`);
+    upgradeToCurrent(db, 0);
   } else {
     // 13..19 的真实 Go 库：幂等补齐 v14-19 的列（全部带默认值）。
     upgradeToCurrent(db, version);
@@ -274,7 +279,7 @@ export function openDB(dir?: string, file = "ticker.db"): Database.Database {
   // 启动自愈：与 Go 版 openDB 相同的中断收尾。
   const nowText = now();
   db.prepare(`UPDATE runs SET status='interrupted', reason='进程中断，旧报价不会补查', finished_at=? WHERE status='running'`).run(nowText);
-  db.prepare(`UPDATE results SET status='interrupted', error='进程中断' WHERE status='pending'`).run();
+  db.prepare(`UPDATE results SET status='interrupted', error='进程中断' WHERE status IN ('pending','querying')`).run();
   db.prepare(`UPDATE notification_channels SET status='不确定',error='进程中断，发送结果未知' WHERE status='发送中'`).run();
   db.prepare(`UPDATE notification_channels SET status='未发送' WHERE status='待发送'`).run();
   db.prepare(`UPDATE notifications SET status=CASE
@@ -318,26 +323,33 @@ export function value(db: Database.Database, query: string, ...args: unknown[]):
   return first == null ? "" : String(first);
 }
 
-// —— 行情调用额度记账（Go reserve() 的存储层）——
-export function reserveQuoteCall(db: Database.Database): { ok: true } | { ok: false; error: string; retryAfterMs: number } {
-  for (;;) {
-    const t = new Date();
-    const dayCutoff = quotaAt(new Date(t.getTime() - 24 * 3600 * 1000));
-    db.prepare(`DELETE FROM quote_calls WHERE at<?`).run(dayCutoff);
-    const minuteCutoff = quotaAt(new Date(t.getTime() - 60 * 1000));
-    const minuteRow = db.prepare(`SELECT count(*) AS c,COALESCE(MIN(at),'') AS oldest FROM quote_calls WHERE at>?`).get(minuteCutoff) as { c: number; oldest: string };
-    const dayRow = db.prepare(`SELECT count(*) AS c FROM quote_calls`).get() as { c: number };
-    if (dayRow.c >= 800) {
-      return { ok: false, error: "行情接口 24 小时额度已用尽", retryAfterMs: 0 };
-    }
-    if (minuteRow.c < 8) {
-      db.prepare(`INSERT INTO quote_calls(at) VALUES(?)`).run(quotaAt(t));
-      return { ok: true };
-    }
-    const oldest = minuteRow.oldest ? parseRFC3339(minuteRow.oldest) : null;
-    const delay = oldest ? oldest.getTime() + 60 * 1000 + 1000 - t.getTime() : 1000;
-    return { ok: false, error: "__wait__", retryAfterMs: Math.max(1000, delay) };
-  }
+// Conservative rolling 24h budget: never overspend around an unverified provider reset.
+export function getQuotaStatus(db: Database.Database, at = new Date()) {
+  const minute = db.prepare(`SELECT count(*) AS c,MIN(at) AS oldest FROM quote_calls WHERE at>?`).get(quotaAt(new Date(at.getTime()-61000))) as {c:number;oldest:string|null};
+  const day = db.prepare(`SELECT count(*) AS c FROM quote_calls WHERE at>?`).get(quotaAt(new Date(at.getTime()-86400000))) as {c:number};
+  const limits = db.prepare(`SELECT quota_per_minute AS m,quota_per_day AS d FROM settings WHERE id=1`).get() as {m:number;d:number};
+  const minuteLimit = Math.max(1, Number(limits.m) || 8), dayLimit = Math.max(1, Number(limits.d) || 800);
+  const cooldown = Number(value(db, `SELECT cooldown_until FROM quota_state WHERE id=1`));
+  const minuteWait = minute.c >= minuteLimit && minute.oldest ? new Date(minute.oldest).getTime()+61000-at.getTime() : 0;
+  return { minuteUsed:minute.c, dayUsed:day.c, minuteLimit, dayLimit, retryAfterMs:Math.max(0, minuteWait, cooldown-at.getTime()) };
+}
+
+export function reserveQuoteCall(db: Database.Database, at = new Date()): {ok:true} | {ok:false;error:string;retryAfterMs:number} {
+  return db.transaction(() => {
+    db.prepare(`DELETE FROM quote_calls WHERE at<=?`).run(quotaAt(new Date(at.getTime()-86400000)));
+    const q=getQuotaStatus(db,at);
+    if(q.dayUsed>=q.dayLimit) return {ok:false as const,error:"行情接口过去24小时额度已用尽",retryAfterMs:0};
+    if(q.retryAfterMs>0) return {ok:false as const,error:"__wait__",retryAfterMs:q.retryAfterMs};
+    db.prepare(`INSERT INTO quote_calls(at) VALUES(?)`).run(quotaAt(at));
+    return {ok:true as const};
+  }).immediate();
+}
+
+export function getRunProgress(db: Database.Database, id:number) {
+  const rows=db.prepare(`SELECT status,count(*) AS count FROM results WHERE run_id=? GROUP BY status`).all(id) as Array<{status:string;count:number}>;
+  const total=rows.reduce((n,r)=>n+r.count,0), pending=rows.filter(r=>r.status==='pending'||r.status==='querying').reduce((n,r)=>n+r.count,0);
+  const run=db.prepare(`SELECT wait_until,reason,status FROM runs WHERE id=?`).get(id) as {wait_until:number;reason:string;status:string}|undefined;
+  return {total,completed:total-pending,pending,waitUntil:run?.wait_until??0,reason:run?.reason??'',status:run?.status??''};
 }
 
 export function listStocks(db: Database.Database): Stock[] {
@@ -481,7 +493,7 @@ export function getRun(db: Database.Database, id: number): Run | null {
       AssetOK: false,
     };
     run.total++;
-    if (v.Status !== "pending") run.done++;
+    if (v.Status !== "pending" && v.Status !== "querying") run.done++;
     run.results.push(v);
   }
   return run;
@@ -506,7 +518,7 @@ export function saveResult(db: Database.Database, id: number, v: Result): void {
 }
 
 export function finishRun(db: Database.Database, id: number, reason: string): void {
-  db.prepare(`UPDATE results SET status='interrupted',error='查询未完成' WHERE run_id=? AND status='pending'`).run(id);
+  db.prepare(`UPDATE results SET status='interrupted',error='查询未完成' WHERE run_id=? AND status IN ('pending','querying')`).run(id);
   const counts = db.prepare(`SELECT count(*) FILTER (WHERE status='ok') AS ok,
     count(*) FILTER (WHERE status NOT IN ('ok','skipped')) AS bad,
     count(*) FILTER (WHERE status='skipped') AS skipped,
@@ -515,7 +527,7 @@ export function finishRun(db: Database.Database, id: number, reason: string): vo
   let status = "completed";
   if (counts.ok === 0 && counts.bad === 0 && counts.skipped > 0) status = "skipped";
   else if (counts.ok === 0) status = "failed";
-  else if (counts.bad > 0 || counts.missed > 0) status = "partial";
+  else if (counts.bad > 0 || counts.missed > 0 || counts.skipped > 0) status = "partial";
   let finalReason = reason;
   if (reason !== "") status = "partial";
   if (reason.includes("中断")) status = "interrupted";

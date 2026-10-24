@@ -114,7 +114,8 @@ export function scheduled(db: Database, scheduleID: number, at: Date, slot: stri
   } else if (!isOpen(at)) {
     reason = "市场休市或不在常规交易时段";
   } else if (currentRunningID() !== 0) {
-    reason = "上一轮查询仍在运行";
+    // Coalesce this tick into the active query rather than enqueueing another run.
+    return;
   }
   const key = apiKeyOf(db);
   if (reason === "" && key.trim() === "") {

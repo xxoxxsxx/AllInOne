@@ -4,6 +4,7 @@
 // - 档位选择：每方向一个最近命中档位（dueLevels），时段内受每档上限约束。
 // - 通知：向所有启用渠道发送同一内容；任一渠道成功/发送中/不确定即占用一次档位额度。
 
+import { withQuoteQuota, QueryCancelled, QuotaError, type QueueOptions } from "./quota";
 import type { Database } from "better-sqlite3";
 
 import { calendarReviewed, isOpen, regularHours } from "./calendar";
@@ -39,7 +40,8 @@ export function currentRunningID(): number {
   return runningID;
 }
 
-export type FetchFn = (symbol: string) => Promise<Quote>;
+export type FetchFn = (symbol: string, options?: QueueOptions) => Promise<Quote>;
+const managedProviders = new WeakSet<FetchFn>();
 
 // runOnce：执行一轮查询。stocks 为本轮要查的股票（已启用）。
 export async function runOnce(
@@ -48,6 +50,7 @@ export async function runOnce(
   stocks: Stock[],
   provider: FetchFn,
   tz: StockTimezone,
+  queueOptions: QueueOptions = {},
 ): Promise<void> {
   let reason = "";
   try {
@@ -68,6 +71,8 @@ export async function runOnce(
       initial = active ? { id: active.window.id, day: active.day } : null;
     }
     const canQuery = (s: Stock): string | null => {
+      const currentStock=getStock(db,s.ID);
+      if(!currentStock || !currentStock.Enabled || currentStock.Symbol!==s.Symbol) return "股票已停用、删除或改码";
       if (kind !== "scheduled") return null;
       if (initial) {
         const current = activeWindow(db, new Date(), tz);
@@ -88,39 +93,20 @@ export async function runOnce(
         saveResult(db, id, { Symbol: s.Symbol, Status: "skipped", Error: skip, Price: "", Open: "", PrevClose: "", QuoteAt: "", FetchedAt: "", Source: "", TimeField: "", Delay: "", AlertStatus: "", AssetOK: false });
         continue;
       }
-      // 额度记账（同步预留；等待逻辑在调度层循环处理，这里仅预留一次）。
       let err: Error | null = null;
       let q: Quote | null = null;
-      const reserve = reserveQuoteCall(db);
-      if (!reserve.ok && reserve.error === "__wait__") {
-        err = new Error("行情接口每分钟额度已满，本轮跳过");
-      } else if (!reserve.ok) {
-        err = new Error(reserve.error);
-      }
-      if (!err) {
-        for (let attempt = 0; attempt < 2; attempt++) {
-          skip = canQuery(s);
-          if (skip) break;
-          try {
-            q = await provider(s.Symbol);
-            err = null;
-          } catch (e) {
-            err = e instanceof Error ? e : new Error(String(e));
-          }
-          if (!(err instanceof RateLimitError) || attempt === 1) break;
-          // waitRetry：等待时间不合法或超过 2 分钟则放弃。
-          const after = (err as RateLimitError).afterMs;
-          if (after <= 0 || after > 2 * 60 * 1000) {
-            err = new Error("行情服务限流 (429)，未给出可用的短期重试时间");
-            break;
-          }
-          await sleep(after);
-          const reserveAgain = reserveQuoteCall(db);
-          if (!reserveAgain.ok) {
-            err = reserveAgain.error === "__wait__" ? new Error("行情接口每分钟额度已满") : new Error(reserveAgain.error);
-            break;
-          }
-        }
+      const options: QueueOptions = {...queueOptions, eligible:()=>canQuery(s), onWait:(until,reason)=>{
+        db.prepare(`UPDATE runs SET wait_until=?,reason=? WHERE id=?`).run(until,reason,id);
+        db.prepare(`UPDATE results SET status=? WHERE run_id=? AND symbol=?`).run(until ? 'pending' : 'querying',id,s.Symbol);
+        queueOptions.onWait?.(until,reason);
+      }};
+      try {
+        q = managedProviders.has(provider)
+          ? await provider(s.Symbol, options)
+          : await withQuoteQuota(db, () => provider(s.Symbol), options);
+      } catch(e) {
+        if(e instanceof QueryCancelled || e instanceof QuotaError) skip=e.message;
+        else err=e instanceof Error?e:new Error(String(e));
       }
       if (skip) {
         saveResult(db, id, { Symbol: s.Symbol, Status: "skipped", Error: skip, Price: "", Open: "", PrevClose: "", QuoteAt: "", FetchedAt: "", Source: "", TimeField: "", Delay: "", AlertStatus: "", AssetOK: false });
@@ -157,6 +143,7 @@ export async function runOnce(
       }
     }
   } finally {
+    db.prepare(`UPDATE runs SET wait_until=0 WHERE id=?`).run(id);
     finishRun(db, id, reason);
     runningID = 0;
   }
@@ -286,9 +273,10 @@ function channelStatusOf(results: Array<{ Name: string; Status: string; Error: s
 }
 
 // 手动查询入口（run.go runPost 语义，不含 HTTP 层）。
-export function startManualRun(db: Database, tz: StockTimezone, provider?: FetchFn): { ok: true; id: number } | { ok: false; error: string } {
+// reused=true 表示已有任务在执行，本次点击复用该任务（不新建、不重复排队）。
+export function startManualRun(db: Database, tz: StockTimezone, provider?: FetchFn): { ok: true; id: number; reused: boolean } | { ok: false; error: string } {
   if (runningID !== 0) {
-    return { ok: true, id: runningID };
+    return { ok: true, id: runningID, reused: true };
   }
   const key = value(db, `SELECT api_key FROM settings WHERE id=1`).trim();
   if (key === "") return { ok: false, error: "先在设置页配置 Twelve Data Key" };
@@ -298,17 +286,20 @@ export function startManualRun(db: Database, tz: StockTimezone, provider?: Fetch
   const id = createRun(db, stocks, "manual", 0, "", "");
   runningID = id;
   void runOnce(db, id, stocks, provider ?? defaultProvider(db), tz).catch(() => undefined);
-  return { ok: true, id };
+  return { ok: true, id, reused: false };
 }
 
 export function defaultProvider(db: Database): FetchFn {
   const key = value(db, `SELECT api_key FROM settings WHERE id=1`);
   const proxy = value(db, `SELECT proxy_url FROM settings WHERE id=1`);
-  return (symbol: string) => fetchQuote(symbol, key, proxy);
+  const provider:FetchFn = (symbol,options) => fetchQuote(symbol,key,proxy,options?.now ?? (()=>new Date()),{...options,db});
+  managedProviders.add(provider);
+  return provider;
 }
 
 // 定时查询入口（scheduler.go scheduled 的执行部分）。
 export function startScheduledRun(db: Database, stocks: Stock[], scheduleID: number, due: string, slotAt: string, tz: StockTimezone): number {
+  if(runningID !== 0) return runningID;
   const key = value(db, `SELECT api_key FROM settings WHERE id=1`);
   const id = createRun(db, stocks, "scheduled", scheduleID, due, slotAt);
   runningID = id;

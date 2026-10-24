@@ -38,7 +38,9 @@ export function statusText(s: string): string {
     case "error": return "失败";
     case "skipped": return "已跳过";
     case "interrupted": return "已中断";
-    case "pending": return "等待中";
+    case "pending": return "等待查询";
+    case "waiting": return "等待额度";
+    case "querying": return "正在查询";
     case "ok": return "成功";
     default: return s;
   }

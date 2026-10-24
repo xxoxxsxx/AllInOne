@@ -41,6 +41,19 @@ export async function saveAPIKeyAction(fd: FormData): Promise<void> {
   goSettings({ result: str(fd, "clear") === "1" ? "cleared" : "saved" });
 }
 
+// —— 共享行情额度 ——
+export async function saveQuotaAction(fd: FormData): Promise<void> {
+  const minute = Number(str(fd, "quota_per_minute"));
+  const day = Number(str(fd, "quota_per_day"));
+  if (!Number.isSafeInteger(minute) || minute < 1 || minute > 100000 ||
+      !Number.isSafeInteger(day) || day < 1 || day > 100000000) {
+    goSettings({ error: "分钟额度须为 1～100000 的整数，24 小时额度须为 1～100000000 的整数。" });
+  }
+  getDB().prepare(`UPDATE settings SET quota_per_minute=?,quota_per_day=? WHERE id=1`).run(minute, day);
+  revalidatePath("/stocks/settings");
+  goSettings({ result: "quota_saved" });
+}
+
 // —— 代理 ——
 export async function clearProxyAction(): Promise<void> {
   const db = getDB();

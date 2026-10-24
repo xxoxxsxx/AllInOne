@@ -98,3 +98,24 @@ body:has(.ts-shell) {
 #results td {
   white-space: nowrap;
 }
+
+.ts-shell .quota-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin: 16px 0;
+}
+.ts-shell .quota-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+.ts-shell .quota-summary strong { font-variant-numeric: tabular-nums; }
+.ts-shell .run-counts { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.ts-shell #results td[data-label="状态"] { white-space: normal; min-width: 180px; }
+.ts-shell .result-status { display: inline-block; font-weight: 600; }
+.ts-shell .result-status[data-state="querying"],
+.ts-shell .result-status[data-state="waiting"] { color: #087e80; }
+.ts-shell .result-status[data-state="skipped"] { color: #6f7679; }
+.ts-shell .result-status[data-state="error"],
+.ts-shell .result-status[data-state="failed"] { color: #a23832; }
