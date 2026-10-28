@@ -10,7 +10,8 @@
     "test": "node --experimental-strip-types --import ./tests/stocks/alias-loader.ts --test tests/*.test.ts tests/**/*.test.ts"
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^12.11.1",
+    "leaflet": "^1.9.4",
     "next": "16.4.2",
     "pg": "^8.22.0",
     "react": "19.2.4",
@@ -22,6 +23,7 @@
     "@next/swc-wasm-nodejs": "16.4.2",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^24",
     "@types/pg": "^8",
     "@types/react": "^19",

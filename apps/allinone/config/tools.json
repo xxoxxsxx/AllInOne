@@ -108,5 +108,25 @@
     "visible": true,
     "lifecycle": "active",
     "integration": "path"
+  },
+  {
+    "id": "travel",
+    "name": "旅行攻略",
+    "description": "行程规划：按天排序地点、地图示意标注、收集照片与各平台攻略链接",
+    "category": "life",
+    "tags": [
+      "旅行",
+      "攻略",
+      "地图",
+      "行程"
+    ],
+    "icon": "map",
+    "kind": "service",
+    "entry": "/travel",
+    "openMode": "same-tab",
+    "order": 50,
+    "visible": true,
+    "lifecycle": "active",
+    "integration": "path"
   }
 ]

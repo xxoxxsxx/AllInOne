@@ -13,7 +13,7 @@ FROM node:22-bookworm-slim AS sqlite
 WORKDIR /sqlite
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 RUN npm init -y >/dev/null 2>&1 \
- && npm install --no-audit --no-fund better-sqlite3@11.10.0 \
+ && npm install --no-audit --no-fund better-sqlite3@12.11.1 \
  && node -e "const db=require('better-sqlite3')(':memory:'); db.exec('select 1'); console.log('sqlite stage ok')"
 
 # ---- 构建（构建平台）：next build 只产出与架构无关的 JS ----
