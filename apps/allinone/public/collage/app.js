@@ -104,6 +104,7 @@ for(const t of TEMPLATES){
 }
 for(const name of Object.keys(RATIOS)){const button=document.createElement('button');button.className='ratio-button';button.textContent=name;button.classList.toggle('active',name===ratio);button.setAttribute('aria-pressed',String(name===ratio));button.addEventListener('click',()=>{ratio=name;$('ratio').value=name;document.querySelectorAll('.ratio-button').forEach(b=>{b.classList.toggle('active',b.textContent===name);b.setAttribute('aria-pressed',String(b.textContent===name));});requestRender();});$('ratios').append(button);}
 for(const id of ['gap','margin'])$(id).addEventListener('input',()=>{$(`${id}-val`).textContent=`${Number($(id).value).toFixed(1)}%`;requestRender();});
+$('seamless').addEventListener('click',()=>{$('margin').value='0';$('gap').value='0';$('margin-val').textContent='0.0%';$('gap-val').textContent='0.0%';requestRender();status('已切换为无缝拼接：外边距与照片间距均为 0，照片完全贴边。');});
 function backgroundChanged(){document.querySelectorAll('[data-color]').forEach(b=>b.classList.toggle('selected',b.dataset.color===$('background').value));requestRender();}
 $('background').addEventListener('input',backgroundChanged);document.querySelectorAll('[data-color]').forEach(b=>b.addEventListener('click',()=>{$('background').value=b.dataset.color;backgroundChanged();}));
 $('cell-select').addEventListener('change',e=>selectCell(Number(e.target.value)));$('photo-select').addEventListener('change',e=>assignPhoto(e.target.value));

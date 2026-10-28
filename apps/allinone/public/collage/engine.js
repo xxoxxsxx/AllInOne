@@ -4,6 +4,7 @@ export const TEMPLATES = [
   {id:'double-h',name:'左右双拼',count:2},
   {id:'double-v',name:'上下双拼',count:2},
   {id:'strip',name:'三联画',count:3},
+  {id:'strip-v',name:'上下三拼',count:3},
   {id:'hero2',name:'一主两辅',count:3},
   {id:'hero3',name:'一主三辅',count:4},
   {id:'grid4',name:'四宫格',count:4},
@@ -23,6 +24,7 @@ export function layoutCells(templateId,width,height,gapRatio=.012,marginRatio=.0
   if(templateId==='double-h') return grid(2,1);
   if(templateId==='double-v') return grid(1,2);
   if(templateId==='strip') return grid(3,1);
+  if(templateId==='strip-v') return grid(1,3);
   if(templateId==='hero2'||templateId==='hero3') {
     const n=templateId==='hero2'?2:3,heroW=(w-gap)*.64,sideW=w-gap-heroW;
     return [{x,y,w:heroW,h},...Array.from({length:n},(_,i)=>({x:x+heroW+gap,y:y+i*(h+gap)/n,w:sideW,h:(h-gap*(n-1))/n}))];
