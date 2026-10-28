@@ -18,6 +18,7 @@ import {
   deletePlace,
   deleteTrip,
   getTrip,
+  listTripSummaries,
   moveDay,
   movePlace,
   normalizeUrl,
@@ -118,12 +119,13 @@ test("links detect platform and cascade with place; photos cascade and file life
     assert.equal(t.days[0].places[0].links[0].url, "https://www.xiaohongshu.com/explore/abc");
 
     // 照片：写文件 → 读回一致 → 删除行同时删文件
-    const file = savePhotoFile(Buffer.from("fake-jpeg-bytes"), "image/jpeg");
+    const image = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==", "base64");
+    const file = savePhotoFile(image, "image/png");
     const phId = addPhotoRow(db, p, file);
     assert.ok(isValidPhotoFilename(file));
-    assert.deepEqual(readPhotoFile(file), Buffer.from("fake-jpeg-bytes"));
+    assert.deepEqual(readPhotoFile(file), image);
     assert.equal(extFromMime("image/webp"), "webp");
-    assert.equal(contentTypeOf(file), "image/jpeg");
+    assert.equal(contentTypeOf(file), "image/png");
     assert.equal(deletePhoto(db, phId), file);
     removePhotoFile(file);
     assert.equal(readPhotoFile(file), null);
@@ -136,7 +138,8 @@ test("links detect platform and cascade with place; photos cascade and file life
     assert.equal(t.days[0].places.length, 0);
   } finally {
     db.close();
-    process.env.DATA_DIR = prevDataDir;
+    if (prevDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = prevDataDir;
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -198,4 +201,49 @@ test("normalizeUrl prepends https and rejects empties", () => {
   assert.equal(normalizeUrl(" https://a.b/c "), "https://a.b/c");
   assert.throws(() => normalizeUrl(""));
   assert.throws(() => normalizeUrl("   "));
+});
+
+
+test("place ownership, atomic create, empty reorder and loose covers", () => {
+  const db = openTravelDB();
+  try {
+    const trip1 = createTrip(db, { title: "行程一" });
+    const trip2 = createTrip(db, { title: "行程二" });
+    const day1 = getTrip(db, trip1)!.days[0].id;
+    const day2 = getTrip(db, trip2)!.days[0].id;
+    assert.throws(() => addPlace(db, trip1, day2, "跨行程地点"), /不属于/);
+    assert.throws(() => addPlace(db, trip1, day1, "非法坐标", { lat: 999, lng: 100 }));
+    assert.equal(getTrip(db, trip1)!.days[0].places.length, 0);
+    assert.doesNotThrow(() => reorderPlaces(db, day1, []));
+    const p = addPlace(db, trip1, day1, "地点", { note: "一起保存", cost: "120" });
+    assert.equal(getTrip(db, trip1)!.days[0].places[0].note, "一起保存");
+    addPhotoRow(db, p, "test.png");
+    movePlace(db, p, null);
+    assert.equal(listTripSummaries(db).find((t) => t.id === trip1)!.coverFile, "test.png");
+    assert.deepEqual(deletePlace(db, p), ["test.png"]);
+    const next = addPlace(db, trip1, day1, "另一地点");
+    addPhotoRow(db, next, "other.png");
+    assert.deepEqual(deleteTrip(db, trip1), ["other.png"]);
+    assert.equal(getTrip(db, trip2)!.days[0].id, day2);
+  } finally { db.close(); }
+});
+
+test("URL protocols, host boundaries and text limits are validated", () => {
+  for (const url of ["javascript://example.com", "file:///etc/passwd", "data:text/html,test", "https://", "some random text", "https://user:pass@example.com"]) {
+    assert.throws(() => normalizeUrl(url), url);
+  }
+  assert.equal(detectPlatform("https://xiaohongshu.com.evil.example/test").id, "link");
+  assert.equal(detectPlatform("https://example.com/?url=https://xhslink.com/test").id, "link");
+  assert.equal(detectPlatform("https://j.amap.com/test").id, "amap");
+  const db = openTravelDB();
+  try {
+    assert.throws(() => createTrip(db, { title: "x".repeat(81) }));
+    assert.throws(() => createTrip(db, { title: "日期", startDate: "2026-02-30" }));
+    const id = createTrip(db, { title: "合法" });
+    const dayId = getTrip(db, id)!.days[0].id;
+    const p = addPlace(db, id, dayId, "地点");
+    assert.throws(() => updatePlace(db, p, { lat: NaN, lng: 100 }));
+    assert.throws(() => updatePlace(db, p, { note: "x".repeat(2001) }));
+    assert.equal(getTrip(db, id)!.days[0].places[0].note, "");
+  } finally { db.close(); }
 });

@@ -1,5 +1,4 @@
-// 照片文件存储：/data/travel/photos 下，文件名 = 随机 token + 扩展名（不含用户输入）。
-// 上传内容由客户端压缩为 JPEG/WebP/PNG Blob，这里只做扩展名与文件名校验。
+// 照片文件存储：随机文件名，MIME 必须与 JPEG/PNG/WebP 文件头一致。
 
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -12,19 +11,19 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
 };
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const FILENAME_RE = /^[a-z0-9]+\.(jpg|png|webp)$/;
 
 export function photoDir(): string {
   return path.join(dataDir(), "travel", "photos");
 }
 
 export function extFromMime(mime: string): string | null {
-  return EXT_BY_MIME[mime] ?? null;
+  return Object.hasOwn(EXT_BY_MIME, mime) ? EXT_BY_MIME[mime] : null;
 }
 
-const FILENAME_RE = /^[a-z0-9]+\.(jpg|png|webp)$/;
-
 export function isValidPhotoFilename(file: string): boolean {
-  return FILENAME_RE.test(file);
+  return typeof file === "string" && file === file.trim() && FILENAME_RE.test(file);
 }
 
 export function contentTypeOf(file: string): string {
@@ -33,34 +32,91 @@ export function contentTypeOf(file: string): string {
   return "image/jpeg";
 }
 
-export function savePhotoFile(data: Buffer, mime: string): string {
-  const ext = extFromMime(mime);
-  if (!ext) throw new Error("不支持的图片格式（仅支持 JPEG/PNG/WebP）");
-  if (data.length === 0) throw new Error("图片内容为空");
+/** 校验文件头而非信任客户端 MIME；在批量写入前也可单独调用。 */
+export function validatePhoto(data: Buffer, mime: string): void {
+  if (!extFromMime(mime)) throw new Error("不支持的图片格式（仅支持 JPEG/PNG/WebP）");
+  if (!Buffer.isBuffer(data) || data.length === 0) throw new Error("图片内容为空");
   if (data.length > 8 * 1024 * 1024) throw new Error("图片过大（压缩后仍超过 8MB）");
+
+  let actualMime: string | null = null;
+  if (data.length >= 4 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) {
+    actualMime = "image/jpeg";
+  } else if (data.length >= 8 && data.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    actualMime = "image/png";
+  } else if (
+    data.length >= 20 &&
+    data.toString("latin1", 0, 4) === "RIFF" &&
+    data.toString("latin1", 8, 12) === "WEBP" &&
+    ["VP8 ", "VP8L", "VP8X"].includes(data.toString("latin1", 12, 16)) &&
+    data.readUInt32LE(4) === data.length - 8
+  ) {
+    actualMime = "image/webp";
+  }
+  if (actualMime !== mime) throw new Error("图片内容与格式不符（仅支持真实 JPEG/PNG/WebP 图片）");
+}
+
+function photoPath(file: string): string {
+  if (!isValidPhotoFilename(file)) throw new Error("无效的照片文件名");
+  const dir = photoDir();
+  if (!path.isAbsolute(dir)) throw new Error("照片目录必须是绝对路径");
+  const target = path.resolve(dir, file);
+  if (path.dirname(target) !== path.resolve(dir)) throw new Error("照片文件不在存储目录内");
+  return target;
+}
+
+export function savePhotoFile(data: Buffer, mime: string): string {
+  validatePhoto(data, mime);
+  const ext = extFromMime(mime)!;
   const dir = photoDir();
   fs.mkdirSync(dir, { recursive: true });
-  const file = `${Date.now().toString(36)}${crypto.randomBytes(6).toString("hex")}.${ext}`;
-  fs.writeFileSync(path.join(dir, file), data);
+  const file = `${Date.now().toString(36)}${crypto.randomBytes(12).toString("hex")}.${ext}`;
+  const target = photoPath(file);
+  // 排他创建：绝不覆盖已有文件；即使写入中途失败，也清理本次创建的文件。
+  const fd = fs.openSync(target, "wx");
+  try {
+    try {
+      fs.writeFileSync(fd, data);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (error) {
+    try {
+      removePhotoFile(file);
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], "保存照片失败，且文件清理失败");
+    }
+    throw error;
+  }
   return file;
 }
 
 export function readPhotoFile(file: string): Buffer | null {
   if (!isValidPhotoFilename(file)) return null;
-  const p = path.join(photoDir(), file);
-  if (!p.startsWith(photoDir() + path.sep)) return null;
   try {
-    return fs.readFileSync(p);
+    return fs.readFileSync(photoPath(file));
   } catch {
     return null;
   }
 }
 
 export function removePhotoFile(file: string): void {
-  if (!isValidPhotoFilename(file)) return;
+  const target = photoPath(file);
   try {
-    fs.unlinkSync(path.join(photoDir(), file));
-  } catch {
-    // 文件可能已不存在；忽略。
+    fs.unlinkSync(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
+}
+
+/** 尽量清理全部文件，并向调用方报告任何非 ENOENT 错误。 */
+export function removePhotoFiles(files: readonly string[]): void {
+  const errors: unknown[] = [];
+  for (const file of files) {
+    try {
+      removePhotoFile(file);
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw new AggregateError(errors, "部分照片文件清理失败");
 }

@@ -162,6 +162,14 @@
   background: var(--surface-2);
   color: var(--text);
 }
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.icon-btn:disabled:hover {
+  background: transparent;
+  color: var(--text-2);
+}
 .input {
   height: 40px;
   padding: 0 12px;
@@ -323,7 +331,13 @@ textarea.input {
   color: var(--text);
   font-size: 13px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  white-space: nowrap;
+  /* 长地点名换行，横幅不伸出视口 */
+  max-width: min(92%, 520px);
+  white-space: normal;
+}
+.travel-picking span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .travel-map-hint {
   margin-top: 8px;
@@ -369,6 +383,11 @@ textarea.input {
   outline: 3px solid color-mix(in srgb, var(--pin) 35%, transparent);
   outline-offset: 2px;
 }
+/* 待安排地点：灰色虚线 ? 针 */
+.t-pin-loose {
+  border-style: dashed;
+  opacity: 0.85;
+}
 @keyframes t-pulse {
   0%, 100% { transform: rotate(-45deg) scale(1); }
   50% { transform: rotate(-45deg) scale(1.15); }
@@ -395,6 +414,24 @@ textarea.input {
   margin-top: 6px;
   font-size: 14px;
   color: var(--text);
+}
+.trip-head-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.trip-delete {
+  display: inline-flex;
+}
+.trip-delete-btn {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+.trip-delete-btn:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
 }
 .trip-head-form {
   display: grid;
@@ -549,6 +586,18 @@ textarea.input {
   letter-spacing: -2px;
   user-select: none;
 }
+/* 行内上移/下移（移动端与无拖拽环境的排序入口） */
+.t-place-nav {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0;
+}
+.t-place-nav .icon-btn {
+  width: 22px;
+  height: 17px;
+  font-size: 9px;
+  line-height: 1;
+}
 .t-place-empty {
   padding: 8px 10px;
   color: var(--text-2);
@@ -610,6 +659,24 @@ textarea.input {
 .t-modal-head h2 {
   font-size: 18px;
   font-weight: 650;
+}
+/* 弹层内消息条：错误/成功不藏在遮罩后面 */
+.t-modal-note {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+}
+.t-modal-note-error {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+}
+.t-modal-note-ok {
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--border));
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 7%, var(--surface));
 }
 .t-modal-foot {
   margin-top: 16px;
@@ -744,6 +811,10 @@ textarea.input {
 .t-photo-add:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+.t-photo-add:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .t-hint {
   font-size: 12px;

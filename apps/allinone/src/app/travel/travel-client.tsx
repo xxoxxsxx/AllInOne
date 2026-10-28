@@ -1,7 +1,9 @@
 "use client";
 
-// 行程详情交互：Leaflet 示意地图（点击落点）、按天列表、拖拽排序、
-// 地点编辑（备注/时间/花费/坐标）、链接（自动识别平台）与照片（浏览器端压缩上传）。
+// 行程详情交互：Leaflet 示意地图（点击落点）、按天列表、拖拽排序（仅限同天，
+// 跨天用编辑器的「所属天」）、地点编辑（备注/时间/花费/坐标）、链接（自动识别
+// 平台）与照片（浏览器端顺序压缩上传，每地点上限 9 张）。
+// 坐标统一存储 GCJ-02（高德即原始值）；OSM 渲染前 gcj→wgs、点击后 wgs→gcj。
 // 所有变更走 Server Actions；RSC 重验证后 props 更新，本地 state 跟随 props。
 
 import Link from "next/link";
@@ -10,6 +12,7 @@ import type { Map as LeafletMap, LayerGroup, Polyline, TileLayer } from "leaflet
 import "leaflet/dist/leaflet.css";
 
 import type { Place, Trip } from "@/lib/travel/db";
+import { storageToTile, tileToStorage, type TileId } from "@/lib/travel/coordinates";
 import { platformById } from "@/lib/travel/platforms";
 
 import {
@@ -20,6 +23,7 @@ import {
   deleteLinkAction,
   deletePhotoAction,
   deletePlaceAction,
+  deleteTripAction,
   moveDayAction,
   movePlaceAction,
   renameDayAction,
@@ -36,6 +40,9 @@ type Editor =
 
 const DAY_COLORS = ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a813"];
 const LOOSE_COLOR = "#5b6673";
+const MAX_PHOTOS_PER_PLACE = 9;
+const MAX_PHOTO_BYTES = 30 * 1024 * 1024; // 30MB/张（压缩前）
+const MAX_PHOTO_PIXELS = 32 * 1024 * 1024; // 3200 万像素
 
 function dayColor(index: number): string {
   return DAY_COLORS[index % DAY_COLORS.length];
@@ -49,22 +56,39 @@ function hostOf(url: string): string {
   }
 }
 
+// 顺序压缩（避免并发解码大图爆内存）；白底填充避免透明区域在 JPEG 里变黑。
 async function compressToJpeg(file: File): Promise<Blob> {
+  if (file.size > MAX_PHOTO_BYTES) {
+    throw new Error(`「${file.name}」超过 30MB，请先缩小再上传`);
+  }
   const bitmap = await createImageBitmap(file);
-  const MAX_EDGE = 1600;
-  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-  const w = Math.max(1, Math.round(bitmap.width * scale));
-  const h = Math.max(1, Math.round(bitmap.height * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("无法处理图片");
-  ctx.drawImage(bitmap, 0, 0, w, h);
-  bitmap.close();
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("图片压缩失败"))), "image/jpeg", 0.82);
-  });
+  try {
+    if (bitmap.width * bitmap.height > MAX_PHOTO_PIXELS) {
+      throw new Error(`「${file.name}」像素超过 3200 万，请先缩小再上传`);
+    }
+    const MAX_EDGE = 1600;
+    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("无法处理图片");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("图片压缩失败"))), "image/jpeg", 0.82);
+    });
+  } finally {
+    bitmap.close();
+  }
+}
+
+function formatCost(n: number): string {
+  const rounded = Math.round(n * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
 }
 
 export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
@@ -81,25 +105,32 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
 
   const [editor, setEditor] = useState<Editor>(null);
   const [picking, setPicking] = useState<number | null>(null);
-  const [tile, setTile] = useState<"amap" | "osm">("amap");
+  const [tile, setTile] = useState<TileId>("amap");
   const [mapReady, setMapReady] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingHeader, setEditingHeader] = useState(false);
 
-  // 全序编号：天顺序 → 天内顺序；待安排不编号。
-  const { seqOf, orderedCoords } = (() => {
+  // 游览顺序编号：天顺序 → 天内顺序；待安排不编号（地图画灰色 ? 针）。
+  const { seqOf, routeCoords, looseCoords } = (() => {
     const seq = new Map<number, number>();
-    const coords: Array<{ lat: number; lng: number; color: string; seq: number }> = [];
+    const route: Array<{ placeId: number; lat: number; lng: number; color: string; seq: number }> = [];
+    const loose: Array<{ placeId: number; lat: number; lng: number }> = [];
     let n = 0;
     trip.days.forEach((day, di) => {
       day.places.forEach((p) => {
         n += 1;
         seq.set(p.id, n);
-        if (p.lat !== null && p.lng !== null) coords.push({ lat: p.lat, lng: p.lng, color: dayColor(di), seq: n });
+        if (p.lat !== null && p.lng !== null) {
+          route.push({ placeId: p.id, lat: p.lat, lng: p.lng, color: dayColor(di), seq: n });
+        }
       });
     });
-    return { seqOf: seq, orderedCoords: coords };
+    for (const p of trip.loose) {
+      if (p.lat !== null && p.lng !== null) loose.push({ placeId: p.id, lat: p.lat, lng: p.lng });
+    }
+    return { seqOf: seq, routeCoords: route, looseCoords: loose };
   })();
+
   const placeById = useMemo(() => {
     const m = new Map<number, Place>();
     for (const d of trip.days) for (const p of d.places) m.set(p.id, p);
@@ -107,10 +138,32 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
     return m;
   }, [trip]);
 
+  // 行程统计（含待安排）：地点数量与花费合计。
+  const allPlaces = useMemo(
+    () => [...trip.days.flatMap((d) => d.places), ...trip.loose],
+    [trip],
+  );
+  const totalCost = useMemo(() => {
+    let sum = 0;
+    let any = false;
+    for (const p of allPlaces) {
+      const n = Number.parseFloat(p.cost.replace(/[^\d.]/g, ""));
+      if (Number.isFinite(n) && n > 0) {
+        sum += n;
+        any = true;
+      }
+    }
+    return any ? formatCost(sum) : null;
+  }, [allPlaces]);
+
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     startTransition(async () => {
-      const r = await fn();
-      if (!r.ok) setMsg(r.error ?? "操作失败");
+      try {
+        const r = await fn();
+        if (!r.ok) setMsg(r.error ?? "操作失败");
+      } catch (e) {
+        setMsg(e instanceof Error ? e.message : "操作失败");
+      }
     });
   };
 
@@ -120,7 +173,10 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const markersRef = useRef<LayerGroup | null>(null);
   const lineRef = useRef<Polyline | null>(null);
-  const tileRef = useRef<TileLayer | null>(null);
+  const layerRef = useRef<TileLayer | null>(null);
+  const tileIdRef = useRef<TileId>("amap");
+  const prevTileRef = useRef<TileId>("amap");
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const pickingRef = useRef<number | null>(picking);
   useEffect(() => {
     pickingRef.current = picking;
@@ -139,34 +195,61 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
       });
       mapRef.current = map;
       markersRef.current = L.layerGroup().addTo(map);
+      // 容器尺寸变化（移动端旋转、sticky 布局）后重算瓦片布局。
+      const ro = new ResizeObserver(() => map.invalidateSize());
+      ro.observe(mapElRef.current);
+      resizeObserverRef.current = ro;
       map.on("click", (e) => {
         const pid = pickingRef.current;
         if (pid == null) return;
         setPicking(null);
-        setMsg(`已为地点设置坐标 ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`);
-        run(() => updatePlaceAction(pid, { lat: e.latlng.lat, lng: e.latlng.lng }));
+        // 存储统一 GCJ-02：OSM 点击（wgs）需转换后再入库。
+        const storage = tileToStorage(tileIdRef.current, { lat: e.latlng.lat, lng: e.latlng.lng });
+        setMsg(`已为地点设置坐标 ${storage.lat.toFixed(5)}, ${storage.lng.toFixed(5)}`);
+        startTransition(async () => {
+          try {
+            const r = await updatePlaceAction(pid, { lat: storage.lat, lng: storage.lng });
+            if (!r.ok) setMsg(r.error ?? "保存坐标失败");
+          } catch (err) {
+            setMsg(err instanceof Error ? err.message : "保存坐标失败");
+          }
+        });
       });
       setMapReady(true);
     })();
     return () => {
       cancelled = true;
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       markersRef.current = null;
       lineRef.current = null;
-      tileRef.current = null;
+      layerRef.current = null;
       setMapReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 底图切换（高德无 key 国内友好 / OSM 通用）。
+  useEffect(() => {
+    tileIdRef.current = tile;
+  }, [tile]);
+
+  // 底图切换：先把视口中心换算到新底图坐标系（避免视角跳到别处），再换瓦片层。
   useEffect(() => {
     const L = leafletRef.current;
     const map = mapRef.current;
-    if (!L || !map) return;
-    if (tileRef.current) map.removeLayer(tileRef.current);
-    tileRef.current =
+    if (!L || !map || !mapReady) return;
+    const prev = prevTileRef.current;
+    if (prev !== tile) {
+      const c = map.getCenter();
+      const centerStorage = tileToStorage(prev, { lat: c.lat, lng: c.lng });
+      const nextView = storageToTile(tile, centerStorage);
+      map.setView([nextView.lat, nextView.lng], map.getZoom());
+      prevTileRef.current = tile;
+    }
+    if (layerRef.current) map.removeLayer(layerRef.current);
+    layerRef.current =
       tile === "amap"
         ? L.tileLayer("https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}", {
             subdomains: "1234",
@@ -177,10 +260,10 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
             maxZoom: 19,
             attribution: "© OpenStreetMap",
           });
-    tileRef.current.addTo(map);
+    layerRef.current.addTo(map);
   }, [tile, mapReady]);
 
-  // 标注与路线重绘（数据或底图变化时）。
+  // 标注与路线重绘（数据或底图变化时）。存储坐标 → 当前底图视图坐标。
   useEffect(() => {
     const L = leafletRef.current;
     const map = mapRef.current;
@@ -192,38 +275,73 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
       lineRef.current = null;
     }
     const editorPlaceId = editor?.mode === "edit" ? editor.placeId : null;
-    for (const c of orderedCoords) {
-      const isActive = editorPlaceId !== null && seqOf.get(editorPlaceId) === c.seq;
-      const pickingHere = pickingRef.current !== null && seqOf.get(pickingRef.current) === c.seq;
+    const toView = (p: { lat: number; lng: number }) => storageToTile(tile, p);
+
+    for (const c of routeCoords) {
+      const isActive = editorPlaceId === c.placeId;
+      const pickingHere = pickingRef.current === c.placeId;
+      const v = toView(c);
       const icon = L.divIcon({
         className: "",
         html: `<div class="t-pin${isActive ? " t-pin-active" : ""}" style="--pin:${c.color}${pickingHere ? ";animation:t-pulse 1s infinite" : ""}"><span>${c.seq}</span></div>`,
         iconSize: [26, 26],
         iconAnchor: [13, 13],
       });
-      const marker = L.marker([c.lat, c.lng], { icon, title: `第 ${c.seq} 站` });
+      const marker = L.marker([v.lat, v.lng], { icon, title: `第 ${c.seq} 站` });
       marker.on("click", () => {
-        const pid = [...seqOf.entries()].find(([, s]) => s === c.seq)?.[0];
-        if (pid !== undefined) {
-          setEditor({ mode: "edit", placeId: pid });
-          document.getElementById(`place-${pid}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }
+        setEditor({ mode: "edit", placeId: c.placeId });
+        document.getElementById(`place-${c.placeId}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       });
       group.addLayer(marker);
     }
-    if (orderedCoords.length >= 2) {
+    // 待安排地点：灰色 ? 针（不进入路线，也不编号）。
+    for (const c of looseCoords) {
+      const isActive = editorPlaceId === c.placeId;
+      const pickingHere = pickingRef.current === c.placeId;
+      const v = toView(c);
+      const icon = L.divIcon({
+        className: "",
+        html: `<div class="t-pin t-pin-loose${isActive ? " t-pin-active" : ""}" style="--pin:${LOOSE_COLOR}${pickingHere ? ";animation:t-pulse 1s infinite" : ""}"><span>?</span></div>`,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+      const marker = L.marker([v.lat, v.lng], { icon, title: "待安排" });
+      marker.on("click", () => {
+        setEditor({ mode: "edit", placeId: c.placeId });
+        document.getElementById(`place-${c.placeId}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+      group.addLayer(marker);
+    }
+    if (routeCoords.length >= 2) {
       lineRef.current = L.polyline(
-        orderedCoords.map((c) => [c.lat, c.lng] as [number, number]),
+        routeCoords.map((c) => {
+          const v = toView(c);
+          return [v.lat, v.lng] as [number, number];
+        }),
         { color: "#2563eb", weight: 2, opacity: 0.65, dashArray: "6 8" },
       ).addTo(map);
     }
-  }, [trip, tile, mapReady, editor, picking, orderedCoords, seqOf, placeById]);
+  }, [trip, tile, mapReady, editor, picking, routeCoords, looseCoords]);
 
   const fitAll = () => {
     const L = leafletRef.current;
     const map = mapRef.current;
-    if (!L || !map || orderedCoords.length === 0) return;
-    map.fitBounds(L.latLngBounds(orderedCoords.map((c) => [c.lat, c.lng] as [number, number])).pad(0.2));
+    if (!L || !map) return;
+    const all = [...routeCoords, ...looseCoords];
+    if (all.length === 0) return;
+    if (all.length === 1) {
+      const v = storageToTile(tile, all[0]);
+      map.setView([v.lat, v.lng], 14);
+      return;
+    }
+    map.fitBounds(
+      L.latLngBounds(
+        all.map((c) => {
+          const v = storageToTile(tile, c);
+          return [v.lat, v.lng] as [number, number];
+        }),
+      ).pad(0.2),
+    );
   };
   useEffect(() => {
     if (mapReady) fitAll();
@@ -232,24 +350,54 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
   }, [trip.id, mapReady]);
 
   // —— 列表交互 ——
-  const dragFrom = useRef<number | null>(null);
+
+  // 拖拽：只允许同一天内排序；记录源 dayId/placeId/index。
+  const dragFrom = useRef<{ dayId: number; placeId: number; index: number } | null>(null);
 
   const onDropDay = (dayId: number, toIndex: number) => {
-    const from = dragFrom.current;
+    const src = dragFrom.current;
     dragFrom.current = null;
-    if (from === null || from === toIndex) return;
+    if (!src) return;
+    if (src.dayId !== dayId) {
+      setMsg("跨天调整请打开该地点，用「所属天」选择目标天");
+      return;
+    }
+    if (src.index === toIndex) return;
     const day = trip.days.find((d) => d.id === dayId);
-    if (!day) return;
+    if (!day || src.index < 0 || src.index >= day.places.length) return;
     const ids = day.places.map((p) => p.id);
-    const [moved] = ids.splice(from, 1);
+    const [moved] = ids.splice(src.index, 1);
     ids.splice(toIndex, 0, moved);
-    // 本地立即重排，随后 RSC 校对。
+    const snapshot = trip; // 乐观更新失败时回滚
     setTrip((t) => ({
       ...t,
       days: t.days.map((d) =>
         d.id === dayId ? { ...d, places: ids.map((id) => d.places.find((p) => p.id === id)!) } : d,
       ),
     }));
+    startTransition(async () => {
+      try {
+        const r = await reorderPlacesAction(dayId, ids);
+        if (!r.ok) {
+          setTrip(snapshot);
+          setMsg(r.error ?? "排序失败");
+        }
+      } catch (e) {
+        setTrip(snapshot);
+        setMsg(e instanceof Error ? e.message : "排序失败");
+      }
+    });
+  };
+
+  // 移动端/无拖拽环境：同天内上移、下移。
+  const movePlaceRow = (dayId: number, index: number, dir: -1 | 1) => {
+    const day = trip.days.find((d) => d.id === dayId);
+    if (!day) return;
+    const j = index + dir;
+    if (j < 0 || j >= day.places.length) return;
+    const ids = day.places.map((p) => p.id);
+    const [moved] = ids.splice(index, 1);
+    ids.splice(j, 0, moved);
     run(() => reorderPlacesAction(dayId, ids));
   };
 
@@ -301,12 +449,27 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
                 <div>
                   <h1 className="trip-head-title">{trip.title}</h1>
                   <p className="trip-head-meta">
-                    {trip.days.length} 天 · {seqOf.size} 个地点
+                    {trip.days.length} 天 · {allPlaces.length} 个地点
+                    {totalCost ? ` · 花费合计 ¥${totalCost}` : ""}
                     {trip.startDate ? ` · ${trip.startDate} 出发` : ""}
                   </p>
                   {trip.description ? <p className="trip-head-desc">{trip.description}</p> : null}
                 </div>
-                <button className="btn btn-ghost btn-sm" onClick={() => setEditingHeader(true)}>编辑信息</button>
+                <div className="trip-head-actions">
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditingHeader(true)}>编辑信息</button>
+                  <form
+                    className="trip-delete"
+                    action={deleteTripAction}
+                    onSubmit={(e) => {
+                      if (!window.confirm("删除整个行程？所有天、地点、照片都会一并删除，无法恢复。")) {
+                        e.preventDefault();
+                      }
+                    }}
+                  >
+                    <input type="hidden" name="id" value={trip.id} />
+                    <button type="submit" className="btn btn-sm trip-delete-btn">删除行程</button>
+                  </form>
+                </div>
               </>
             )}
           </header>
@@ -351,7 +514,9 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
                     id={`place-${p.id}`}
                     className={`t-place${editor?.mode === "edit" && editor.placeId === p.id ? " t-place-active" : ""}`}
                     draggable
-                    onDragStart={() => (dragFrom.current = pi)}
+                    onDragStart={() => {
+                      dragFrom.current = { dayId: day.id, placeId: p.id, index: pi };
+                    }}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
@@ -375,7 +540,29 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
                         {p.note ? <em className="t-note-preview">{p.note.slice(0, 24)}</em> : null}
                       </span>
                     </button>
-                    <span className="t-place-grip" title="拖拽排序">⋮⋮</span>
+                    {day.places.length > 1 ? (
+                      <span className="t-place-nav">
+                        <button
+                          className="icon-btn"
+                          title="上移"
+                          aria-label={`上移 ${p.name}`}
+                          disabled={pending || pi === 0}
+                          onClick={() => movePlaceRow(day.id, pi, -1)}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          className="icon-btn"
+                          title="下移"
+                          aria-label={`下移 ${p.name}`}
+                          disabled={pending || pi === day.places.length - 1}
+                          onClick={() => movePlaceRow(day.id, pi, 1)}
+                        >
+                          ▼
+                        </button>
+                      </span>
+                    ) : null}
+                    <span className="t-place-grip" title="拖拽排序（仅限同一天）">⋮⋮</span>
                   </li>
                 ))}
                 {day.places.length === 0 ? <li className="t-place-empty">这一天还没有安排，点下面添加地点。</li> : null}
@@ -395,7 +582,10 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
                   <li key={p.id} id={`place-${p.id}`} className={`t-place${editor?.mode === "edit" && editor.placeId === p.id ? " t-place-active" : ""}`}>
                     <span className="t-place-seq">·</span>
                     <button className="t-place-main" onClick={() => setEditor({ mode: "edit", placeId: p.id })}>
-                      <span className="t-place-name">{p.name}</span>
+                      <span className="t-place-name">
+                        {p.name}
+                        {p.lat === null ? <em className="t-place-unpinned" title="尚未标注坐标">未标注</em> : null}
+                      </span>
                       <span className="t-place-tags">
                         {p.links.slice(0, 4).map((l) => {
                           const pf = platformById(l.platform);
@@ -417,30 +607,28 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
 
       {editor ? (
         <PlaceEditor
+          key={editor.mode === "add" ? `add-${editor.dayId ?? "loose"}` : `edit-${editor.placeId}`}
           trip={trip}
           editor={editor}
           place={editingPlace}
           pending={pending}
           uploading={uploading}
-          setMsg={setMsg}
           onClose={() => setEditor(null)}
-          // 点选坐标需要看到地图：关闭弹层，进入点选模式（横幅提示，可取消）。
+          // 点选坐标前先保存草稿（PlaceEditor 内部处理），成功后才关闭并进入点选。
           onPicking={(placeId) => {
             setEditor(null);
             setPicking(placeId);
+            document.querySelector(".travel-map-pane")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
           }}
           onMoveToDay={(placeId, dayId) => run(() => movePlaceAction(placeId, dayId))}
-          run={run}
           startUpload={async (placeId, files) => {
             const fd = new FormData();
             for (const f of files) fd.append("files", f);
             setUploading(true);
             try {
-              const r = await uploadPhotosAction(placeId, fd);
-              if (!r.ok) setMsg(r.error ?? "上传失败");
-              else setMsg(`已上传 ${r.count} 张照片`);
+              return await uploadPhotosAction(placeId, fd);
             } catch (e) {
-              setMsg(e instanceof Error ? e.message : "上传失败");
+              return { ok: false as const, error: e instanceof Error ? e.message : "上传失败" };
             } finally {
               setUploading(false);
             }
@@ -486,17 +674,17 @@ function TripHeaderForm({
 
 // —— 地点编辑器（弹层） ——
 
+type EditorNote = { kind: "error" | "ok"; text: string } | null;
+
 function PlaceEditor({
   trip,
   editor,
   place,
   pending,
   uploading,
-  setMsg,
   onClose,
   onPicking,
   onMoveToDay,
-  run,
   startUpload,
 }: {
   trip: Trip;
@@ -504,12 +692,10 @@ function PlaceEditor({
   place: Place | null;
   pending: boolean;
   uploading: boolean;
-  setMsg: (s: string | null) => void;
   onClose: () => void;
   onPicking: (placeId: number) => void;
   onMoveToDay: (placeId: number, dayId: number | null) => void;
-  run: (fn: () => Promise<{ ok: boolean; error?: string }>) => void;
-  startUpload: (placeId: number, files: File[]) => Promise<void>;
+  startUpload: (placeId: number, files: File[]) => Promise<{ ok: boolean; count?: number; error?: string }>;
 }) {
   const isAdd = editor.mode === "add";
   const defaultDayId = isAdd ? editor.dayId : null;
@@ -520,36 +706,120 @@ function PlaceEditor({
   const [note, setNote] = useState(place?.note ?? "");
   const [linkUrl, setLinkUrl] = useState("");
   const [linkTitle, setLinkTitle] = useState("");
+  const [editorNote, setEditorNote] = useState<EditorNote>(null);
+  const [mediaBusy, setMediaBusy] = useState(false);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const [modalPending, startModalTransition] = useTransition();
+
+  // 弹层内操作：错误/成功显示在弹层内（页面级 msg 会被遮罩挡住）。
+  const runModal = (
+    fn: () => Promise<{ ok: boolean; error?: string }>,
+    opts?: { okNote?: string; onSuccess?: () => void },
+  ) => {
+    startModalTransition(async () => {
+      let r: { ok: boolean; error?: string };
+      try {
+        r = await fn();
+      } catch (e) {
+        setEditorNote({ kind: "error", text: e instanceof Error ? e.message : "操作失败" });
+        return;
+      }
+      if (!r.ok) {
+        setEditorNote({ kind: "error", text: r.error ?? "操作失败" });
+        return;
+      }
+      if (opts?.okNote) setEditorNote({ kind: "ok", text: opts.okNote });
+      opts?.onSuccess?.();
+    });
+  };
+
+  const busy = pending || modalPending;
 
   const save = () => {
     const n = name.trim();
     if (!n) {
-      setMsg("地点名称不能为空");
+      setEditorNote({ kind: "error", text: "地点名称不能为空" });
       return;
     }
     if (isAdd) {
-      run(async () => {
-        const r = await addPlaceAction(trip.id, defaultDayId, n);
-        if (!r.ok || r.id === undefined) return r;
-        const patch: Record<string, string> = {};
-        if (timeLabel.trim()) patch.timeLabel = timeLabel;
-        if (cost.trim()) patch.cost = cost;
-        if (address.trim()) patch.address = address;
-        if (note.trim()) patch.note = note;
-        if (Object.keys(patch).length > 0) {
-          const r2 = await updatePlaceAction(r.id, patch);
-          if (!r2.ok) return r2;
-        }
-        onClose();
-        return { ok: true };
-      });
+      runModal(
+        async () => {
+          const r = await addPlaceAction(trip.id, defaultDayId, n);
+          if (!r.ok || r.id === undefined) return r;
+          const patch: Record<string, string> = {};
+          if (timeLabel.trim()) patch.timeLabel = timeLabel;
+          if (cost.trim()) patch.cost = cost;
+          if (address.trim()) patch.address = address;
+          if (note.trim()) patch.note = note;
+          if (Object.keys(patch).length > 0) {
+            const r2 = await updatePlaceAction(r.id, patch);
+            if (!r2.ok) return r2;
+          }
+          return { ok: true };
+        },
+        { onSuccess: onClose },
+      );
     } else if (place) {
-      run(async () => {
-        const r = await updatePlaceAction(place.id, { name, timeLabel, cost, address, note });
-        if (r.ok) onClose();
-        return r;
+      runModal(() => updatePlaceAction(place.id, { name, timeLabel, cost, address, note }), {
+        onSuccess: onClose,
       });
+    }
+  };
+
+  // 点选坐标：先保存草稿（成功才关弹层），避免丢失未保存的名称/备注等编辑。
+  const startPicking = () => {
+    if (!place) return;
+    const n = name.trim();
+    if (!n) {
+      setEditorNote({ kind: "error", text: "请先填写地点名称再点选坐标" });
+      return;
+    }
+    runModal(async () => {
+      const r = await updatePlaceAction(place.id, { name: n, timeLabel, cost, address, note });
+      if (!r.ok) return r;
+      onClose();
+      onPicking(place.id);
+      return { ok: true };
+    });
+  };
+
+  // 照片上传：上限 9 张；顺序压缩（避免并发解码爆内存）；错误显示在弹层内。
+  const onPhotoFiles = async (fileList: FileList | null) => {
+    if (!place) return;
+    const files = Array.from(fileList ?? []);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+    if (files.length === 0 || mediaBusy || uploading) return;
+    setEditorNote(null);
+    const existing = place.photos.length;
+    const remaining = MAX_PHOTOS_PER_PLACE - existing;
+    if (remaining <= 0) {
+      setEditorNote({ kind: "error", text: "每个地点最多 9 张照片" });
+      return;
+    }
+    if (files.length > remaining) {
+      setEditorNote({ kind: "error", text: `照片超限：最多 9 张，还能添加 ${remaining} 张` });
+      return;
+    }
+    for (const f of files) {
+      if (f.size > MAX_PHOTO_BYTES) {
+        setEditorNote({ kind: "error", text: `「${f.name}」超过 30MB，已取消上传` });
+        return;
+      }
+    }
+    setMediaBusy(true);
+    try {
+      const jpegs: File[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const blob = await compressToJpeg(files[i]); // 顺序执行
+        jpegs.push(new File([blob], `photo-${i}.jpg`, { type: "image/jpeg" }));
+      }
+      const r = await startUpload(place.id, jpegs);
+      if (!r.ok) setEditorNote({ kind: "error", text: r.error ?? "上传失败" });
+      else setEditorNote({ kind: "ok", text: `已上传 ${r.count} 张照片` });
+    } catch (err) {
+      setEditorNote({ kind: "error", text: err instanceof Error ? err.message : "图片处理失败" });
+    } finally {
+      setMediaBusy(false);
     }
   };
 
@@ -561,6 +831,12 @@ function PlaceEditor({
           <h2>{isAdd ? "添加地点" : `编辑：${place?.name ?? ""}`}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="关闭">✕</button>
         </header>
+
+        {editorNote ? (
+          <p className={`t-modal-note ${editorNote.kind === "error" ? "t-modal-note-error" : "t-modal-note-ok"}`} role="status">
+            {editorNote.text}
+          </p>
+        ) : null}
 
         <div className="t-form">
           <label className="t-field">
@@ -599,9 +875,15 @@ function PlaceEditor({
                 </label>
                 <div className="t-field t-field-actions">
                   <span>&nbsp;</span>
-                  <button className="btn btn-secondary btn-sm" onClick={() => onPicking(place.id)}>📍 在地图上点选</button>
+                  <button className="btn btn-secondary btn-sm" disabled={busy} onClick={startPicking}>📍 在地图上点选</button>
                   {place.lat !== null ? (
-                    <button className="btn btn-ghost btn-sm" onClick={() => run(() => updatePlaceAction(place.id, { lat: null, lng: null }))}>清除</button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      disabled={busy}
+                      onClick={() => runModal(() => updatePlaceAction(place.id, { lat: null, lng: null }), { okNote: "已清除坐标" })}
+                    >
+                      清除
+                    </button>
                   ) : null}
                 </div>
               </div>
@@ -633,8 +915,9 @@ function PlaceEditor({
                         <button
                           className="icon-btn"
                           title="删除链接"
+                          disabled={busy}
                           onClick={() => {
-                            if (window.confirm("删除该链接？")) run(() => deleteLinkAction(l.id));
+                            if (window.confirm("删除该链接？")) runModal(() => deleteLinkAction(l.id));
                           }}
                         >
                           ✕
@@ -649,12 +932,12 @@ function PlaceEditor({
                   <input className="input" value={linkTitle} onChange={(e) => setLinkTitle(e.target.value)} placeholder="备注名（选填）" maxLength={100} />
                   <button
                     className="btn btn-secondary btn-sm"
-                    disabled={pending || !linkUrl.trim()}
+                    disabled={busy || !linkUrl.trim()}
                     onClick={() => {
                       const pid = place.id;
                       const url = linkUrl;
                       const title = linkTitle;
-                      run(async () => {
+                      runModal(async () => {
                         const r = await addLinkAction(pid, url, title);
                         if (r.ok) {
                           setLinkUrl("");
@@ -670,7 +953,7 @@ function PlaceEditor({
               </section>
 
               <section className="t-section">
-                <h3>照片{place.photos.length > 0 ? `（${place.photos.length}）` : ""}</h3>
+                <h3>照片{place.photos.length > 0 ? `（${place.photos.length}/9）` : ""}</h3>
                 <div className="t-photos">
                   {place.photos.map((ph) => (
                     <div key={ph.id} className="t-photo">
@@ -679,16 +962,21 @@ function PlaceEditor({
                       <button
                         className="t-photo-del"
                         title="删除照片"
+                        disabled={busy}
                         onClick={() => {
-                          if (window.confirm("删除该照片？")) run(() => deletePhotoAction(ph.id));
+                          if (window.confirm("删除该照片？")) runModal(() => deletePhotoAction(ph.id));
                         }}
                       >
                         ✕
                       </button>
                     </div>
                   ))}
-                  <button className="t-photo-add" disabled={uploading} onClick={() => photoInputRef.current?.click()}>
-                    {uploading ? "上传中…" : "＋ 添加"}
+                  <button
+                    className="t-photo-add"
+                    disabled={mediaBusy || uploading}
+                    onClick={() => photoInputRef.current?.click()}
+                  >
+                    {mediaBusy ? "处理中…" : uploading ? "上传中…" : "＋ 添加"}
                   </button>
                 </div>
                 <input
@@ -697,30 +985,20 @@ function PlaceEditor({
                   accept="image/*"
                   multiple
                   hidden
-                  onChange={async (e) => {
-                    const files = Array.from(e.target.files ?? []);
-                    e.target.value = "";
-                    if (files.length === 0) return;
-                    try {
-                      const blobs = await Promise.all(files.map((f) => compressToJpeg(f)));
-                      const jpegs = blobs.map((b, i) => new File([b], `photo-${i}.jpg`, { type: "image/jpeg" }));
-                      await startUpload(place.id, jpegs);
-                    } catch (err) {
-                      setMsg(err instanceof Error ? err.message : "图片处理失败");
-                    }
-                  }}
+                  disabled={mediaBusy || uploading}
+                  onChange={(e) => void onPhotoFiles(e.target.files)}
                 />
-                <p className="t-hint">上传前会在浏览器压缩到长边 1600px，省流量也不占 NAS 空间。</p>
+                <p className="t-hint">每地点最多 9 张；上传前浏览器压缩到长边 1600px（单张 ≤30MB、≤3200 万像素）。</p>
               </section>
 
               <div className="t-danger-zone">
                 <button
                   className="btn btn-danger btn-sm"
-                  disabled={pending}
+                  disabled={busy}
                   onClick={() => {
                     if (window.confirm(`删除地点「${place.name}」及其链接与照片？`)) {
                       const pid = place.id;
-                      run(async () => {
+                      runModal(async () => {
                         const r = await deletePlaceAction(pid);
                         if (r.ok) onClose();
                         return r;
@@ -737,7 +1015,7 @@ function PlaceEditor({
 
         <footer className="t-modal-foot">
           <button className="btn btn-ghost" onClick={onClose}>取消</button>
-          <button className="btn btn-primary" disabled={pending} onClick={save}>{isAdd ? "添加" : "保存"}</button>
+          <button className="btn btn-primary" disabled={busy} onClick={save}>{isAdd ? "添加" : "保存"}</button>
         </footer>
       </div>
     </div>

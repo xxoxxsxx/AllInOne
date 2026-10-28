@@ -3,7 +3,6 @@ import Link from "next/link";
 import { getTravelDB, listTripSummaries } from "@/lib/travel/db";
 
 import { NewTripForm } from "./new-trip-form";
-import "./travel.css";
 
 export const dynamic = "force-dynamic";
 

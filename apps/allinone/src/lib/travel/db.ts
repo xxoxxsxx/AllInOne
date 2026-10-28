@@ -156,6 +156,19 @@ function migrate(db: Database.Database): void {
   db.pragma(`user_version = ${TRAVEL_SCHEMA_VERSION}`);
 }
 
+function textField(value: string, label: string, max: number): string {
+  if (typeof value !== "string" || value.length > max) throw new Error(`${label}最多 ${max} 个字符`);
+  return value.trim();
+}
+
+function dateField(value: string): string {
+  const date = textField(value, "出发日期", 10);
+  if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)) {
+    throw new Error("出发日期无效");
+  }
+  return date;
+}
+
 function now(): string {
   return new Date().toISOString();
 }
@@ -281,8 +294,8 @@ export function listTripSummaries(db: Database.Database): TripSummary[] {
     .prepare(
       `SELECT p.trip_id AS trip_id, ph.file AS file
        FROM place_photos ph JOIN places p ON p.id = ph.place_id
-       JOIN trip_days d ON d.id = p.day_id
-       ORDER BY d.sort_order, p.sort_order, ph.sort_order, ph.id`,
+       LEFT JOIN trip_days d ON d.id = p.day_id
+       ORDER BY (d.id IS NULL), d.sort_order, p.sort_order, p.id, ph.sort_order, ph.id`,
     )
     .all() as Array<{ trip_id: number; file: string }>;
   for (const r of coverRows) {
@@ -303,13 +316,13 @@ export function listTripSummaries(db: Database.Database): TripSummary[] {
 // —— 行程 ——
 
 export function createTrip(db: Database.Database, input: { title: string; description?: string; startDate?: string }): number {
-  const title = input.title.trim();
+  const title = textField(input.title, "行程名称", 80);
   if (!title) throw new Error("行程名称不能为空");
   const at = now();
   const create = db.transaction(() => {
     const res = db
       .prepare(`INSERT INTO trips(title,description,start_date,created_at,updated_at) VALUES(?,?,?,?,?)`)
-      .run(title, (input.description ?? "").trim(), (input.startDate ?? "").trim(), at, at);
+      .run(title, textField(input.description ?? "", "行程简介", 200), dateField(input.startDate ?? ""), at, at);
     const tripId = Number(res.lastInsertRowid);
     db.prepare(`INSERT INTO trip_days(trip_id,title,sort_order) VALUES(?,?,0)`).run(tripId, "Day 1");
     return tripId;
@@ -322,22 +335,26 @@ export function updateTrip(db: Database.Database, tripId: number, patch: { title
     | { title: string; description: string; start_date: string }
     | undefined;
   if (!cur) throw new Error("行程不存在");
-  const title = patch.title !== undefined ? patch.title.trim() : cur.title;
+  const title = patch.title !== undefined ? textField(patch.title, "行程名称", 80) : cur.title;
   if (!title) throw new Error("行程名称不能为空");
-  const description = patch.description !== undefined ? patch.description.trim() : cur.description;
-  const startDate = patch.startDate !== undefined ? patch.startDate.trim() : cur.start_date;
+  const description = patch.description !== undefined ? textField(patch.description, "行程简介", 200) : cur.description;
+  const startDate = patch.startDate !== undefined ? dateField(patch.startDate) : cur.start_date;
   db.prepare(`UPDATE trips SET title=?,description=?,start_date=?,updated_at=? WHERE id=?`).run(title, description, startDate, now(), tripId);
 }
 
-export function deleteTrip(db: Database.Database, tripId: number): void {
-  db.prepare(`DELETE FROM trips WHERE id=?`).run(tripId);
+export function deleteTrip(db: Database.Database, tripId: number): string[] {
+  return db.transaction(() => {
+    const files = db.prepare(`SELECT ph.file FROM place_photos ph JOIN places p ON p.id=ph.place_id WHERE p.trip_id=?`).all(tripId) as Array<{ file: string }>;
+    db.prepare(`DELETE FROM trips WHERE id=?`).run(tripId);
+    return files.map((p) => p.file);
+  })();
 }
 
 // —— 天 ——
 
 export function addDay(db: Database.Database, tripId: number, title?: string): number {
   const n = Number((db.prepare(`SELECT COUNT(*) AS n FROM trip_days WHERE trip_id=?`).get(tripId) as { n: number } | undefined)?.n ?? 0);
-  const dayTitle = (title ?? "").trim() || `Day ${n + 1}`;
+  const dayTitle = textField(title ?? "", "天名称", 80) || `Day ${n + 1}`;
   const max = Number((db.prepare(`SELECT COALESCE(MAX(sort_order),-1) AS m FROM trip_days WHERE trip_id=?`).get(tripId) as { m: number } | undefined)?.m ?? -1);
   const res = db.prepare(`INSERT INTO trip_days(trip_id,title,sort_order) VALUES(?,?,?)`).run(tripId, dayTitle, max + 1);
   touchTrip(db, tripId);
@@ -345,7 +362,7 @@ export function addDay(db: Database.Database, tripId: number, title?: string): n
 }
 
 export function renameDay(db: Database.Database, dayId: number, title: string): void {
-  const t = title.trim();
+  const t = textField(title, "天名称", 80);
   if (!t) throw new Error("天名称不能为空");
   const day = db.prepare(`SELECT trip_id FROM trip_days WHERE id=?`).get(dayId) as { trip_id: number } | undefined;
   if (!day) throw new Error("天不存在");
@@ -395,9 +412,14 @@ export type PlacePatch = {
   note?: string;
 };
 
-export function addPlace(db: Database.Database, tripId: number, dayId: number | null, name: string): number {
-  const n = (name ?? "").trim();
+export function addPlace(db: Database.Database, tripId: number, dayId: number | null, name: string, patch: PlacePatch = {}): number {
+  const n = textField(name, "地点名称", 80);
   if (!n) throw new Error("地点名称不能为空");
+  if (dayId !== null) {
+    const day = db.prepare(`SELECT trip_id FROM trip_days WHERE id=?`).get(dayId) as { trip_id: number } | undefined;
+    if (!day || day.trip_id !== tripId) throw new Error("目标天不属于该行程");
+  }
+  return db.transaction(() => {
   let sortOrder = 0;
   if (dayId !== null) {
     sortOrder = Number(
@@ -409,8 +431,10 @@ export function addPlace(db: Database.Database, tripId: number, dayId: number | 
       `INSERT INTO places(trip_id,day_id,name,sort_order,created_at) VALUES(?,?,?,?,?)`,
     )
     .run(tripId, dayId, n, sortOrder, now());
-  touchTrip(db, tripId);
-  return Number(res.lastInsertRowid);
+  const id = Number(res.lastInsertRowid);
+  updatePlace(db, id, { ...patch, name: n });
+  return id;
+  })();
 }
 
 export function updatePlace(db: Database.Database, placeId: number, patch: PlacePatch): void {
@@ -418,12 +442,12 @@ export function updatePlace(db: Database.Database, placeId: number, patch: Place
     | { trip_id: number; name: string; lat: number | null; lng: number | null; address: string; time_label: string; cost: string; note: string }
     | undefined;
   if (!cur) throw new Error("地点不存在");
-  const name = patch.name !== undefined ? patch.name.trim() : cur.name;
+  const name = patch.name !== undefined ? textField(patch.name, "地点名称", 80) : cur.name;
   if (!name) throw new Error("地点名称不能为空");
   const lat = patch.lat !== undefined ? patch.lat : cur.lat;
   const lng = patch.lng !== undefined ? patch.lng : cur.lng;
   if ((lat === null) !== (lng === null)) throw new Error("经纬度必须成对设置");
-  if (lat !== null && !(Math.abs(lat) <= 90) || (lng !== null && !(Math.abs(lng!) <= 180))) {
+  if ((lat !== null && (typeof lat !== "number" || !Number.isFinite(lat) || Math.abs(lat) > 90)) || (lng !== null && (typeof lng !== "number" || !Number.isFinite(lng) || Math.abs(lng) > 180))) {
     throw new Error("经纬度超出范围");
   }
   db.prepare(
@@ -432,17 +456,23 @@ export function updatePlace(db: Database.Database, placeId: number, patch: Place
     name,
     lat,
     lng,
-    patch.address !== undefined ? patch.address.trim() : cur.address,
-    patch.timeLabel !== undefined ? patch.timeLabel.trim() : cur.time_label,
-    patch.cost !== undefined ? patch.cost.trim() : cur.cost,
-    patch.note !== undefined ? patch.note : cur.note,
+    patch.address !== undefined ? textField(patch.address, "地址", 200) : cur.address,
+    patch.timeLabel !== undefined ? textField(patch.timeLabel, "时间段", 40) : cur.time_label,
+    patch.cost !== undefined ? textField(patch.cost, "花费", 40) : cur.cost,
+    patch.note !== undefined ? textField(patch.note, "备注", 2000) : cur.note,
     placeId,
   );
   touchTrip(db, cur.trip_id);
 }
 
-export function deletePlace(db: Database.Database, placeId: number): void {
-  db.prepare(`DELETE FROM places WHERE id=?`).run(placeId);
+export function deletePlace(db: Database.Database, placeId: number): string[] {
+  return db.transaction(() => {
+    const tripId = getTripIdOfPlace(db, placeId);
+    const files = db.prepare(`SELECT file FROM place_photos WHERE place_id=?`).all(placeId) as Array<{ file: string }>;
+    db.prepare(`DELETE FROM places WHERE id=?`).run(placeId);
+    if (tripId) touchTrip(db, tripId);
+    return files.map((p) => p.file);
+  })();
 }
 
 // 天内重排：orderedIds 必须是该天全部地点 id 的一个排列（数量一致、无重复、无陌生 id）。
@@ -457,7 +487,7 @@ export function reorderPlaces(db: Database.Database, dayId: number, orderedIds: 
   ) {
     throw new Error("排序数据与当天地点不一致，请刷新后重试");
   }
-  const tripId = (db.prepare(`SELECT trip_id FROM places WHERE id=?`).get(orderedIds[0]) as { trip_id: number } | undefined)?.trip_id;
+  const tripId = (db.prepare(`SELECT trip_id FROM trip_days WHERE id=?`).get(dayId) as { trip_id: number } | undefined)?.trip_id;
   const update = db.transaction(() => {
     const stmt = db.prepare(`UPDATE places SET sort_order=? WHERE id=?`);
     orderedIds.forEach((id, i) => stmt.run(i, id));
@@ -471,6 +501,7 @@ export function movePlace(db: Database.Database, placeId: number, toDayId: numbe
     | { trip_id: number; day_id: number | null }
     | undefined;
   if (!place) throw new Error("地点不存在");
+  if (place.day_id === toDayId) return;
   if (toDayId !== null) {
     const day = db.prepare(`SELECT trip_id FROM trip_days WHERE id=?`).get(toDayId) as { trip_id: number } | undefined;
     if (!day || day.trip_id !== place.trip_id) throw new Error("目标天不属于该行程");
@@ -486,11 +517,21 @@ export function movePlace(db: Database.Database, placeId: number, toDayId: numbe
 // —— 链接 ——
 
 export function normalizeUrl(raw: string): string {
-  let url = (raw ?? "").trim();
-  if (!url) throw new Error("链接不能为空");
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = `https://${url}`;
-  if (url.length > 2048) throw new Error("链接过长");
-  return url;
+  let text = raw.trim();
+  if (!text) throw new Error("链接不能为空");
+  if (text.length > 2048) throw new Error("链接过长");
+  if (/\s/.test(text)) throw new Error("请粘贴完整的网址");
+  if (!/^https?:\/\//i.test(text)) {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(text)) throw new Error("仅支持 http/https 链接");
+    text = `https://${text}`;
+  }
+  try {
+    const url = new URL(text);
+    if (!url.hostname || url.username || url.password) throw new Error();
+    return url.href;
+  } catch {
+    throw new Error("链接格式无效");
+  }
 }
 
 export function addLink(db: Database.Database, placeId: number, rawUrl: string, title = ""): number {
@@ -528,7 +569,9 @@ export function addPhotoRow(db: Database.Database, placeId: number, file: string
 export function deletePhoto(db: Database.Database, photoId: number): string | null {
   const row = db.prepare(`SELECT file FROM place_photos WHERE id=?`).get(photoId) as { file: string } | undefined;
   if (!row) return null;
+  const tripId = (db.prepare(`SELECT p.trip_id FROM place_photos ph JOIN places p ON p.id=ph.place_id WHERE ph.id=?`).get(photoId) as { trip_id: number }).trip_id;
   db.prepare(`DELETE FROM place_photos WHERE id=?`).run(photoId);
+  touchTrip(db, tripId);
   return row.file;
 }
 

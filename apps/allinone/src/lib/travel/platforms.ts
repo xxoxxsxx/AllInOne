@@ -28,33 +28,33 @@ const PLATFORMS: Record<string, Platform> = {
   link: { id: "link", name: "链接", color: "#5b6673" },
 };
 
-// 顺序即匹配优先级：短链域名（xhslink 等）放在主站之前。
-const RULES: Array<[RegExp, string]> = [
-  [/(\.|\/\/)(xiaohongshu\.com|xhslink\.com)/i, "xiaohongshu"],
-  [/(\.|\/\/)(douyin\.com|v\.douyin\.com|iesdouyin\.com)/i, "douyin"],
-  [/(\.|\/\/)(bilibili\.com|b23\.tv)/i, "bilibili"],
-  [/(\.|\/\/)dianping\.com/i, "dianping"],
-  [/(\.|\/\/)meituan\.com/i, "meituan"],
-  [/(\.|\/\/)(ctrip\.com|trip\.com)/i, "ctrip"],
-  [/(\.|\/\/)qunar\.com/i, "qunar"],
-  [/(\.|\/\/)fliggy\.com/i, "fliggy"],
-  [/(\.|\/\/)weibo\.(cn|com)/i, "weibo"],
-  [/(\.|\/\/)(weixin\.qq\.com|mp\.weixin\.qq\.com)/i, "wechat"],
-  [/(\.|\/\/)youtube\.com/i, "youtube"],
-  [/(\.|\/\/)youtu\.be/i, "youtube"],
-  [/(\.|\/\/)instagram\.com/i, "instagram"],
-  [/(\.|\/\/)tiktok\.com/i, "tiktok"],
-  [/(\.|\/\/)(twitter\.com|x\.com)/i, "x"],
-  [/(\.|\/\/)(google\.[a-z.]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)/i, "googlemaps"],
-  [/(\.|\/\/)(amap\.com|uri\.amap\.com)/i, "amap"],
-  [/(\.|\/\/)(map\.baidu\.com|j\.amap\.com)/i, "baidumap"],
+const DOMAINS: Array<[string[], string]> = [
+  [["xiaohongshu.com", "xhslink.com"], "xiaohongshu"],
+  [["douyin.com", "iesdouyin.com"], "douyin"],
+  [["bilibili.com", "b23.tv"], "bilibili"],
+  [["dianping.com"], "dianping"], [["meituan.com"], "meituan"],
+  [["ctrip.com", "trip.com"], "ctrip"], [["qunar.com"], "qunar"],
+  [["fliggy.com"], "fliggy"], [["weibo.cn", "weibo.com"], "weibo"],
+  [["weixin.qq.com"], "wechat"], [["youtube.com", "youtu.be"], "youtube"],
+  [["instagram.com"], "instagram"], [["tiktok.com"], "tiktok"],
+  [["twitter.com", "x.com"], "x"], [["amap.com"], "amap"],
+  [["map.baidu.com"], "baidumap"],
 ];
 
 export function detectPlatform(rawUrl: string): Platform {
-  const url = (rawUrl || "").trim();
-  for (const [re, id] of RULES) {
-    if (re.test(url)) return PLATFORMS[id];
-  }
+  try {
+    const text = rawUrl.trim();
+    const url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+    if (!["http:", "https:"].includes(url.protocol)) return PLATFORMS.link;
+    const host = url.hostname.toLowerCase();
+    if (host === "maps.app.goo.gl" || (host === "goo.gl" && url.pathname.startsWith("/maps")) ||
+        (/^(www\.|maps\.)?google\.(com|cn|co\.jp|co\.uk|com\.hk|com\.tw)$/.test(host) && url.pathname.startsWith("/maps"))) {
+      return PLATFORMS.googlemaps;
+    }
+    for (const [domains, id] of DOMAINS) {
+      if (domains.some((d) => host === d || host.endsWith(`.${d}`))) return PLATFORMS[id];
+    }
+  } catch { /* 未知或无效 URL 显示通用链接。 */ }
   return PLATFORMS.link;
 }
 
