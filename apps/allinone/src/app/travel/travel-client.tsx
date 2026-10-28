@@ -284,8 +284,8 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
       const icon = L.divIcon({
         className: "",
         html: `<div class="t-pin${isActive ? " t-pin-active" : ""}" style="--pin:${c.color}${pickingHere ? ";animation:t-pulse 1s infinite" : ""}"><span>${c.seq}</span></div>`,
-        iconSize: [26, 26],
-        iconAnchor: [13, 13],
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
       });
       const marker = L.marker([v.lat, v.lng], { icon, title: `第 ${c.seq} 站` });
       marker.on("click", () => {
@@ -302,8 +302,8 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
       const icon = L.divIcon({
         className: "",
         html: `<div class="t-pin t-pin-loose${isActive ? " t-pin-active" : ""}" style="--pin:${LOOSE_COLOR}${pickingHere ? ";animation:t-pulse 1s infinite" : ""}"><span>?</span></div>`,
-        iconSize: [26, 26],
-        iconAnchor: [13, 13],
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
       });
       const marker = L.marker([v.lat, v.lng], { icon, title: "待安排" });
       marker.on("click", () => {

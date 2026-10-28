@@ -1,5 +1,12 @@
 /* 旅行攻略样式：沿用门户变量（globals.css :root），地图窗格 + 行程列表双栏。 */
 
+/* 门户壳 .site-main 限宽 960px，会把行程双栏压扁；travel 页面自管宽度与留白。
+   旧浏览器不支持 :has 时退化为门户默认限宽布局，功能不受影响。 */
+body:has(.travel-page) > .site-main {
+  max-width: none;
+  padding: 0;
+}
+
 .travel-page {
   padding: 24px 16px 64px;
 }
@@ -107,9 +114,9 @@
   cursor: not-allowed;
 }
 .btn-sm {
-  height: 34px;
-  padding: 0 12px;
-  font-size: 13px;
+  height: 38px;
+  padding: 0 15px;
+  font-size: 14px;
 }
 .btn-primary {
   background: var(--accent);
@@ -146,8 +153,8 @@
   color: #fff;
 }
 .icon-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -171,13 +178,13 @@
   color: var(--text-2);
 }
 .input {
-  height: 40px;
-  padding: 0 12px;
+  height: 44px;
+  padding: 0 14px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  font-size: 14px;
+  font-size: 15px;
   width: 100%;
 }
 textarea.input {
@@ -251,20 +258,30 @@ textarea.input {
   font-size: 13px;
 }
 
-/* —— 详情双栏 —— */
+/* —— 详情双栏（宽屏铺满，右栏随视口加宽） —— */
 .travel-detail-grid {
   display: grid;
   gap: 20px;
   grid-template-columns: minmax(0, 1fr);
 }
+.travel-detail .travel-container {
+  max-width: 1760px;
+}
+.travel-detail {
+  padding: 20px 28px 64px;
+}
 @media (min-width: 960px) {
   .travel-detail-grid {
-    grid-template-columns: minmax(0, 1fr) 420px;
+    grid-template-columns: minmax(0, 1fr) clamp(440px, 32vw, 560px);
+    gap: 28px;
     align-items: start;
   }
   .travel-map-pane {
     position: sticky;
     top: 16px;
+  }
+  .travel-detail .travel-map {
+    height: clamp(480px, calc(100vh - 250px), 940px);
   }
 }
 
@@ -287,12 +304,12 @@ textarea.input {
   overflow: hidden;
 }
 .tile-switch button {
-  height: 34px;
-  padding: 0 12px;
+  height: 38px;
+  padding: 0 16px;
   border: none;
   background: var(--surface);
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
 }
 .tile-switch button.on {
@@ -312,7 +329,7 @@ textarea.input {
 }
 @media (max-width: 959px) {
   .travel-map {
-    height: 300px;
+    height: clamp(280px, 48vh, 420px);
   }
 }
 .travel-picking {
@@ -340,9 +357,12 @@ textarea.input {
   overflow-wrap: anywhere;
 }
 .travel-map-hint {
-  margin-top: 8px;
+  margin-top: 10px;
   color: var(--text-2);
-  font-size: 12px;
+  font-size: 13px;
+}
+.travel-back {
+  font-size: 15px;
 }
 
 /* Leaflet 深浅主题微调 */
@@ -361,8 +381,8 @@ textarea.input {
 
 /* 序号大头针 */
 .t-pin {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border-radius: 50% 50% 50% 4px;
   transform: rotate(-45deg);
   background: var(--pin, var(--accent));
@@ -375,7 +395,7 @@ textarea.input {
 .t-pin span {
   transform: rotate(45deg);
   color: #fff;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1;
 }
@@ -402,13 +422,13 @@ textarea.input {
   padding: 4px 2px 12px;
 }
 .trip-head-title {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 650;
 }
 .trip-head-meta {
   margin-top: 4px;
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 14px;
 }
 .trip-head-desc {
   margin-top: 6px;
@@ -459,8 +479,9 @@ textarea.input {
   border-bottom: 1px solid var(--border);
 }
 .t-day-badge {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
+  font-size: 14px;
   border-radius: 50%;
   background: var(--day-color, var(--accent));
   color: #fff;
@@ -477,7 +498,7 @@ textarea.input {
   border: 1px solid transparent;
   background: transparent;
   color: var(--text);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   padding: 4px 8px;
   border-radius: 8px;
@@ -501,7 +522,7 @@ textarea.input {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 6px;
+  padding: 8px 8px;
   border-radius: 10px;
 }
 .t-place:hover {
@@ -511,8 +532,9 @@ textarea.input {
   background: var(--accent-soft);
 }
 .t-place-seq {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--day-color, var(--accent)) 14%, var(--surface));
   color: var(--day-color, var(--accent));
@@ -538,7 +560,7 @@ textarea.input {
   font: inherit;
 }
 .t-place-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 550;
 }
 .t-place-unpinned {
@@ -555,7 +577,7 @@ textarea.input {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-2);
 }
 .t-tag {
@@ -599,9 +621,13 @@ textarea.input {
   line-height: 1;
 }
 .t-place-empty {
-  padding: 8px 10px;
+  padding: 10px 10px;
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 14px;
+}
+.t-day-add {
+  height: 38px;
+  margin: 0 10px 14px;
 }
 .t-day-add {
   margin: 0 10px 12px;
@@ -637,7 +663,7 @@ textarea.input {
 .t-modal-panel {
   position: relative;
   width: 100%;
-  max-width: 560px;
+  max-width: 680px;
   max-height: 88vh;
   overflow: auto;
   background: var(--surface);
@@ -657,7 +683,7 @@ textarea.input {
   margin-bottom: 12px;
 }
 .t-modal-head h2 {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 650;
 }
 /* 弹层内消息条：错误/成功不藏在遮罩后面 */
@@ -691,7 +717,7 @@ textarea.input {
 .t-field {
   display: grid;
   gap: 6px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-2);
 }
 .t-field-row {
@@ -733,7 +759,7 @@ textarea.input {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 14px;
 }
 .t-link-name {
   font-weight: 550;
