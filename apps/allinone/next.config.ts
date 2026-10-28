@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
       { source: "/framelab/", destination: "/framelab/index.html" },
       { source: "/qrlab", destination: "/qrlab/index.html" },
       { source: "/qrlab/", destination: "/qrlab/index.html" },
+      { source: "/collage", destination: "/collage/index.html" },
+      { source: "/collage/", destination: "/collage/index.html" },
     ];
   },
   async headers() {

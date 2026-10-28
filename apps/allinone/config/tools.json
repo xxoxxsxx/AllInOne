@@ -85,5 +85,28 @@
     "visible": true,
     "lifecycle": "active",
     "integration": "path"
+  },
+  {
+    "id": "collage",
+    "name": "摄影拼图",
+    "description": "多图构图、独立裁切与留白排版，在浏览器本地导出高清拼图",
+    "category": "media",
+    "tags": [
+      "摄影",
+      "照片",
+      "拼图",
+      "留白"
+    ],
+    "aliases": [
+      "Photo Collage"
+    ],
+    "icon": "image",
+    "kind": "static",
+    "entry": "/collage/",
+    "openMode": "same-tab",
+    "order": 35,
+    "visible": true,
+    "lifecycle": "active",
+    "integration": "path"
   }
 ]

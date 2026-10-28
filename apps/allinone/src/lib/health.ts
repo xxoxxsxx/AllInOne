@@ -48,8 +48,8 @@ function checkTool(id: string): ToolStatus {
     const p = path.join(process.cwd(), "public", "framelab", "index.html");
     state = fs.existsSync(p) ? "ok" : "unknown";
     reason = state === "ok" ? undefined : "status";
-  } else if (id === "qrlab") {
-    const p = path.join(process.cwd(), "public", "qrlab", "index.html");
+  } else if (id === "qrlab" || id === "collage") {
+    const p = path.join(process.cwd(), "public", id, "index.html");
     state = fs.existsSync(p) ? "ok" : "unknown";
     reason = state === "ok" ? undefined : "status";
   } else {
