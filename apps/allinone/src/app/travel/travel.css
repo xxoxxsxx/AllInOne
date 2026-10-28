@@ -205,15 +205,47 @@ textarea.input {
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 }
 .trip-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--surface);
   overflow: hidden;
-  text-decoration: none;
   color: var(--text);
   transition: border-color 0.15s, transform 0.15s;
+}
+.trip-card-link {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+}
+.trip-card-delete {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+}
+.trip-card-delete-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--text-2);
+  font-size: 15px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.trip-card-delete-btn:hover {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
 }
 .trip-card:hover {
   border-color: var(--accent);

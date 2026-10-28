@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { getTravelDB, listTripSummaries } from "@/lib/travel/db";
 
+import { DeleteTripButton } from "./delete-trip-button";
 import { NewTripForm } from "./new-trip-form";
 
 export const dynamic = "force-dynamic";
@@ -45,24 +46,27 @@ export default async function TravelHomePage({ searchParams }: PageProps) {
         ) : (
           <div className="trip-grid">
             {trips.map((t) => (
-              <Link key={t.id} href={`/travel/${t.id}`} className="trip-card">
-                <div className="trip-card-cover">
-                  {t.coverFile ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={`/api/travel/photos/${t.coverFile}`} alt="" loading="lazy" />
-                  ) : (
-                    <span className="trip-card-cover-empty" aria-hidden>🗺️</span>
-                  )}
-                </div>
-                <div className="trip-card-body">
-                  <h2 className="trip-card-title">{t.title}</h2>
-                  {t.description ? <p className="trip-card-desc">{t.description}</p> : null}
-                  <p className="trip-card-meta">
-                    {t.dayCount} 天 · {t.placeCount} 个地点
-                    {t.startDate ? ` · ${t.startDate} 出发` : ""}
-                  </p>
-                </div>
-              </Link>
+              <div key={t.id} className="trip-card">
+                <Link href={`/travel/${t.id}`} className="trip-card-link">
+                  <div className="trip-card-cover">
+                    {t.coverFile ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={`/api/travel/photos/${t.coverFile}`} alt="" loading="lazy" />
+                    ) : (
+                      <span className="trip-card-cover-empty" aria-hidden>🗺️</span>
+                    )}
+                  </div>
+                  <div className="trip-card-body">
+                    <h2 className="trip-card-title">{t.title}</h2>
+                    {t.description ? <p className="trip-card-desc">{t.description}</p> : null}
+                    <p className="trip-card-meta">
+                      {t.dayCount} 天 · {t.placeCount} 个地点
+                      {t.startDate ? ` · ${t.startDate} 出发` : ""}
+                    </p>
+                  </div>
+                </Link>
+                <DeleteTripButton tripId={t.id} title={t.title} />
+              </div>
             ))}
           </div>
         )}
