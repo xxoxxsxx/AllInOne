@@ -5,17 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import type { Trip } from "@/lib/travel/db";
 import type { SearchPlace } from "@/lib/travel/search-types";
+import { readSearchResponse } from "@/lib/travel/search-response";
 import { addPlaceAction } from "./actions";
 import "./place-search.css";
-
-function isPlace(value: unknown): value is SearchPlace {
-  if (!value || typeof value !== "object") return false;
-  const place = value as Partial<SearchPlace>;
-  return typeof place.id === "string" && typeof place.name === "string" &&
-    typeof place.address === "string" && typeof place.lat === "number" &&
-    typeof place.lng === "number" && Number.isFinite(place.lat) && Number.isFinite(place.lng) &&
-    Math.abs(place.lat) <= 90 && Math.abs(place.lng) <= 180;
-}
 
 export function PlaceSearch({ trip, configured, onLocate, onAdded }: {
   trip: Trip;
@@ -76,9 +68,7 @@ export function PlaceSearch({ trip, configured, onLocate, onAdded }: {
       });
       const data: unknown = await response.json();
       if (!mounted.current || version !== sequence.current || controller.signal.aborted) return;
-      const result = data as { ok?: boolean; places?: unknown; error?: unknown };
-      if (!response.ok || result?.ok !== true) throw new Error(typeof result?.error === "string" ? result.error : "地点搜索失败，请稍后重试");
-      if (!Array.isArray(result.places) || !result.places.every(isPlace)) throw new Error("搜索服务返回了无效的地点数据，请重试");
+      const result = readSearchResponse(response.ok, data);
       setPlaces(result.places); setSearched(true);
     } catch (reason) {
       if (!mounted.current || version !== sequence.current || controller.signal.aborted) return;
@@ -116,11 +106,11 @@ export function PlaceSearch({ trip, configured, onLocate, onAdded }: {
     <div className="travel-search-heading"><h2>搜索地点</h2><Link href="/travel/settings">搜索设置</Link></div>
     <form className="travel-search-form" onSubmit={search} aria-busy={loading}>
       <label htmlFor={`${id}-query`}>景点、店名或地址
-        <input id={`${id}-query`} value={query} maxLength={100} required disabled={addingId !== null}
+        <input id={`${id}-query`} value={query} maxLength={80} required disabled={addingId !== null}
           placeholder="例如：太平山顶、星光大道" autoComplete="off" onChange={event => changeInput("query", event.target.value)} />
       </label>
       <label htmlFor={`${id}-city`}>城市（可选）
-        <input id={`${id}-city`} value={city} maxLength={80} disabled={addingId !== null}
+        <input id={`${id}-city`} value={city} maxLength={40} disabled={addingId !== null}
           placeholder="例如：香港" autoComplete="off" onChange={event => changeInput("city", event.target.value)} />
       </label>
       <button type="submit" disabled={loading || addingId !== null || !query.trim()}>{loading ? "搜索中…" : "搜索"}</button>
