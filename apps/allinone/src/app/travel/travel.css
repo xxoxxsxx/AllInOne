@@ -857,7 +857,23 @@ textarea.input {
   object-fit: cover;
   display: block;
 }
+.t-photo-view {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+}
+.t-photo-view img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 .t-photo-del {
+  z-index: 1;
   position: absolute;
   top: 4px;
   right: 4px;
@@ -899,4 +915,82 @@ textarea.input {
   padding-top: 12px;
   display: flex;
   justify-content: flex-end;
+}
+
+/* —— 照片灯箱 —— */
+.t-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(0, 0, 0, 0.93);
+  display: flex;
+  flex-direction: column;
+}
+.t-lightbox-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.t-lightbox-caption {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.t-lightbox-close,
+.t-lightbox-nav {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.t-lightbox-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.t-lightbox-close:hover,
+.t-lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.t-lightbox-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 12px 24px;
+}
+.t-lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.t-lightbox-nav {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font-size: 26px;
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+}
+@media (max-width: 640px) {
+  .t-lightbox-nav {
+    position: fixed;
+    bottom: 18px;
+  }
+  .t-lightbox-nav[aria-label="上一张"] { left: 18px; }
+  .t-lightbox-nav[aria-label="下一张"] { right: 18px; }
 }

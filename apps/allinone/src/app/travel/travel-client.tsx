@@ -15,6 +15,7 @@ import type { Place, Trip } from "@/lib/travel/db";
 import { storageToTile, tileToStorage, type TileId } from "@/lib/travel/coordinates";
 import { platformById } from "@/lib/travel/platforms";
 import { dayDateLabel } from "@/lib/travel/planning";
+import { PhotoLightbox, type LightboxPhoto } from "./photo-lightbox";
 import { BatchPlacesButton } from "./batch-places";
 import { TravelExportButton } from "./export-trip";
 
@@ -407,6 +408,39 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
   const editingPlace = editor?.mode === "edit" ? placeById.get(editor.placeId) ?? null : null;
   const pickingPlace = picking !== null ? placeById.get(picking) ?? null : null;
 
+  // —— 照片灯箱：行程内全局有序（天顺序 → 地点顺序 → 照片顺序，含待安排） ——
+  const allPhotos = useMemo<LightboxPhoto[]>(() => {
+    const list: LightboxPhoto[] = [];
+    const pushPlace = (dayTitle: string | null, p: Place) => {
+      p.photos.forEach((ph, i) => {
+        list.push({
+          url: `/api/travel/photos/${ph.file}`,
+          caption: `${p.name}${dayTitle ? ` · ${dayTitle}` : ""}${p.photos.length > 1 ? ` · ${i + 1}/${p.photos.length}` : ""}`,
+        });
+      });
+    };
+    trip.days.forEach((day) => day.places.forEach((p) => pushPlace(day.title, p)));
+    trip.loose.forEach((p) => pushPlace(null, p));
+    return list;
+  }, [trip]);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const openPhoto = (placeId: number, photoIndex: number) => {
+    // 全局列表与渲染顺序一致：天 → 地点 → 照片；直接按 key 定位全局下标。
+    const orderedIds: Array<{ placeId: number; file: string }> = [];
+    trip.days.forEach((day) => day.places.forEach((p) => p.photos.forEach((ph) => orderedIds.push({ placeId: p.id, file: ph.file }))));
+    trip.loose.forEach((p) => p.photos.forEach((ph) => orderedIds.push({ placeId: p.id, file: ph.file })));
+    let seen = -1;
+    for (let i = 0; i < orderedIds.length; i += 1) {
+      if (orderedIds[i].placeId === placeId) {
+        seen += 1;
+        if (seen === photoIndex) {
+          setLightboxIndex(i);
+          return;
+        }
+      }
+    }
+  };
+
   return (
     <main className="travel-page travel-detail">
       <div className="travel-container travel-detail-grid">
@@ -459,6 +493,11 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
                   {trip.description ? <p className="trip-head-desc">{trip.description}</p> : null}
                 </div>
                 <div className="trip-head-actions">
+                  {allPhotos.length > 0 ? (
+                    <button className="btn btn-ghost btn-sm" onClick={() => setLightboxIndex(0)} title="浏览行程内全部照片">
+                      📷 全部照片 {allPhotos.length}
+                    </button>
+                  ) : null}
                   <TravelExportButton trip={trip} />
                   <button className="btn btn-ghost btn-sm" onClick={() => setEditingHeader(true)}>编辑信息</button>
                   <form
@@ -629,6 +668,7 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
             document.querySelector(".travel-map-pane")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
           }}
           onMoveToDay={(placeId, dayId) => run(() => movePlaceAction(placeId, dayId))}
+          onOpenPhoto={(placeId, photoIndex) => openPhoto(placeId, photoIndex)}
           startUpload={async (placeId, files) => {
             const fd = new FormData();
             for (const f of files) fd.append("files", f);
@@ -641,6 +681,14 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
               setUploading(false);
             }
           }}
+        />
+      ) : null}
+      {lightboxIndex !== null && allPhotos.length > 0 ? (
+        <PhotoLightbox
+          photos={allPhotos}
+          index={Math.min(lightboxIndex, allPhotos.length - 1)}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={setLightboxIndex}
         />
       ) : null}
     </main>
@@ -693,6 +741,7 @@ function PlaceEditor({
   onClose,
   onPicking,
   onMoveToDay,
+  onOpenPhoto,
   startUpload,
 }: {
   trip: Trip;
@@ -703,6 +752,7 @@ function PlaceEditor({
   onClose: () => void;
   onPicking: (placeId: number) => void;
   onMoveToDay: (placeId: number, dayId: number | null) => void;
+  onOpenPhoto: (placeId: number, photoIndex: number) => void;
   startUpload: (placeId: number, files: File[]) => Promise<{ ok: boolean; count?: number; error?: string }>;
 }) {
   const isAdd = editor.mode === "add";
@@ -965,8 +1015,16 @@ function PlaceEditor({
                 <div className="t-photos">
                   {place.photos.map((ph) => (
                     <div key={ph.id} className="t-photo">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`/api/travel/photos/${ph.file}`} alt="" loading="lazy" />
+                      <button
+                        type="button"
+                        className="t-photo-view"
+                        title="查看大图"
+                        aria-label={`查看大图：${place.name} 第 ${place.photos.indexOf(ph) + 1} 张`}
+                        onClick={() => onOpenPhoto(place.id, place.photos.indexOf(ph))}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`/api/travel/photos/${ph.file}`} alt="" loading="lazy" />
+                      </button>
                       <button
                         className="t-photo-del"
                         title="删除照片"
