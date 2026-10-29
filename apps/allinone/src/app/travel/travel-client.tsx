@@ -13,6 +13,7 @@ import "leaflet/dist/leaflet.css";
 
 import type { Place, TransportLeg, Trip } from "@/lib/travel/db";
 import { storageToTile, tileToStorage, type TileId } from "@/lib/travel/coordinates";
+import { BASEMAPS } from "@/lib/travel/basemaps";
 import { platformById } from "@/lib/travel/platforms";
 import { dayDateLabel } from "@/lib/travel/planning";
 import { DAY_COLORS, adjacentRoutePairs, routeColor, arrowGeometry } from "@/lib/travel/routes";
@@ -118,6 +119,8 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
   const [editor, setEditor] = useState<Editor>(null);
   const [picking, setPicking] = useState<number | null>(null);
   const [tile, setTile] = useState<TileId>("amap");
+  const [tileStatus, setTileStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [tileAttempt, setTileAttempt] = useState(0);
   const [mapReady, setMapReady] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingHeader, setEditingHeader] = useState(false);
@@ -274,19 +277,38 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
       prevTileRef.current = tile;
     }
     if (layerRef.current) map.removeLayer(layerRef.current);
-    layerRef.current =
-      tile === "amap"
-        ? L.tileLayer("https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}", {
-            subdomains: "1234",
-            maxZoom: 18,
-            attribution: "© 高德地图",
-          })
-        : L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            maxZoom: 19,
-            attribution: "© OpenStreetMap",
-          });
-    layerRef.current.addTo(map);
-  }, [tile, mapReady]);
+    const source = BASEMAPS[tile];
+    const layer = L.tileLayer(source.url, {
+      maxZoom: source.maxZoom, attribution: source.attribution,
+      ...(source.subdomains ? { subdomains: source.subdomains } : {}),
+      // OSM requires a Referer on browser requests. The site default is same-origin.
+      referrerPolicy: "strict-origin-when-cross-origin",
+    });
+    layerRef.current = layer;
+    let active = true;
+    let failed = 0;
+    let loaded = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const clearTimer = () => { if (timer) clearTimeout(timer); };
+    const loading = () => {
+      failed = 0; loaded = 0; clearTimer();
+      if (active) setTileStatus("loading");
+      timer = setTimeout(() => { if (active) setTileStatus("error"); }, 10000);
+    };
+    const tileLoaded = () => { loaded += 1; };
+    const tileFailed = () => { failed += 1; };
+    const finished = () => {
+      clearTimer();
+      if (active) setTileStatus(failed > 0 || loaded === 0 ? "error" : "ready");
+    };
+    layer.on("loading", loading).on("tileload", tileLoaded).on("tileerror", tileFailed).on("load", finished);
+    loading(); layer.addTo(map);
+    return () => {
+      active = false; clearTimer();
+      layer.off("loading", loading).off("tileload", tileLoaded).off("tileerror", tileFailed).off("load", finished);
+      if (map.hasLayer(layer)) map.removeLayer(layer);
+    };
+  }, [tile, mapReady, tileAttempt]);
 
   // 标注与路线重绘（数据或底图变化时）。存储坐标 → 当前底图视图坐标。
   useEffect(() => {
@@ -490,6 +512,7 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
               <button className="btn btn-ghost btn-sm" onClick={fitAll} title="缩放到全部地点">⌖ 全览</button>
               <div className="tile-switch" role="tablist" aria-label="底图">
                 <button role="tab" aria-selected={tile === "amap"} className={tile === "amap" ? "on" : ""} onClick={() => setTile("amap")}>高德</button>
+                <button role="tab" aria-selected={tile === "esri"} className={tile === "esri" ? "on" : ""} onClick={() => setTile("esri")}>全球</button>
                 <button role="tab" aria-selected={tile === "osm"} className={tile === "osm" ? "on" : ""} onClick={() => setTile("osm")}>OSM</button>
               </div>
             </div>
@@ -503,6 +526,12 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
               </div>
             ) : null}
           </div>
+          {tileStatus === "loading" && <p className="travel-map-hint" role="status">正在加载{BASEMAPS[tile].label}底图…</p>}
+          {tileStatus === "error" && <div className="travel-tile-error" role="alert">
+            <span>{BASEMAPS[tile].label}底图加载失败或超时，可换用其他底图。已保存地点不受影响。</span>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTileAttempt(v => v + 1)}>重试底图</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTile(tile === "esri" ? "osm" : "esri")}>{tile === "esri" ? "切换 OSM" : "切换全球底图"}</button>
+          </div>}
           <p className="travel-map-hint">地图仅供示意，不用于导航。在地点上选「点选坐标」后点击地图即可标注。</p>
           <PlaceSearch
             trip={trip}

@@ -4,7 +4,7 @@
 
 export type LatLng = { lat: number; lng: number };
 
-export type TileId = "amap" | "osm";
+export type TileId = "amap" | "osm" | "esri";
 
 const PI = Math.PI;
 const A = 6378245; // 克拉索夫斯基椭球长半轴
@@ -65,10 +65,10 @@ export function gcj02ToWgs84(p: LatLng): LatLng {
 
 // 存储值（GCJ-02）→ 当前底图渲染坐标。
 export function storageToTile(tile: TileId, p: LatLng): LatLng {
-  return tile === "osm" ? gcj02ToWgs84(p) : p;
+  return tile !== "amap" ? gcj02ToWgs84(p) : p;
 }
 
 // 当前底图点击坐标 → 存储值（GCJ-02）。
 export function tileToStorage(tile: TileId, p: LatLng): LatLng {
-  return tile === "osm" ? wgs84ToGcj02(p) : p;
+  return tile !== "amap" ? wgs84ToGcj02(p) : p;
 }
