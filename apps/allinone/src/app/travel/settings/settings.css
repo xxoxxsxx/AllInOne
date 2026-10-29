@@ -1,0 +1,112 @@
+/* 高德 Key 设置页（settings-form.tsx 专用） */
+
+.travel-settings-card {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.travel-settings-card h2 {
+  font-size: 20px;
+  font-weight: 650;
+}
+.travel-settings-card > p {
+  margin: 6px 0 16px;
+  color: var(--text-2);
+  font-size: 14px;
+}
+.travel-settings-form {
+  display: grid;
+  gap: 10px;
+}
+.travel-settings-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text);
+}
+.travel-settings-form input {
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+.travel-settings-form input:focus-visible {
+  outline: 2px solid var(--accent);
+  border-color: transparent;
+}
+.travel-settings-form input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.travel-settings-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.7;
+}
+.travel-settings-hint a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.travel-settings-hint a:hover {
+  text-decoration: underline;
+}
+.travel-settings-error {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  color: var(--danger);
+  font-size: 14px;
+}
+.travel-settings-notice {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--border));
+  background: color-mix(in srgb, var(--ok) 8%, var(--surface));
+  color: var(--ok);
+  font-size: 14px;
+}
+.travel-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.travel-settings-actions button {
+  height: 42px;
+  padding: 0 20px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+.travel-settings-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.travel-settings-actions .travel-settings-danger {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  color: var(--danger);
+}
+.travel-settings-actions .travel-settings-danger:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.travel-settings-footnote {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-2);
+}

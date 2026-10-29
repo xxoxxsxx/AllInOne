@@ -1,0 +1,186 @@
+/* 高德地点搜索（place-search.tsx 专用，类名限定避免污染） */
+
+.travel-search {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.travel-search-unconfigured {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 14px;
+}
+.travel-search-unconfigured a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.travel-search-unconfigured a:hover {
+  text-decoration: underline;
+}
+.travel-search-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.travel-search-heading h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.travel-search-heading a {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+}
+.travel-search-heading a:hover {
+  text-decoration: underline;
+}
+.travel-search-form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 640px) {
+  .travel-search-form {
+    grid-template-columns: 2fr 1fr auto;
+    align-items: end;
+  }
+}
+.travel-search-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.travel-search-form input {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+.travel-search-form input:focus-visible {
+  outline: 2px solid var(--accent);
+  border-color: transparent;
+}
+.travel-search-form input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.travel-search-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.travel-search-error {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  color: var(--danger);
+  font-size: 13px;
+}
+.travel-search-notice {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--border));
+  background: color-mix(in srgb, var(--ok) 8%, var(--surface));
+  color: var(--ok);
+  font-size: 13px;
+}
+.travel-search-day {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.travel-search-day select {
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+.travel-search-results {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.travel-search-results li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.travel-search-place {
+  min-width: 0;
+}
+.travel-search-place h3 {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.travel-search-place p {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.travel-search-result-actions {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.travel-search-result-actions button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.travel-search-result-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.travel-search-result-actions .travel-search-add {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.travel-search-result-actions .travel-search-add:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+.travel-search-attribution {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.travel-search-empty {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}

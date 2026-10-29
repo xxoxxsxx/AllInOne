@@ -11,7 +11,7 @@ import { dataDir } from "@/lib/data-dir";
 import { detectPlatform } from "./platforms";
 import { parsePlaceLines } from "./planning";
 
-export const TRAVEL_SCHEMA_VERSION = 3;
+export const TRAVEL_SCHEMA_VERSION = 4;
 
 export type PlaceLink = {
   id: number;
@@ -203,6 +203,15 @@ function migrate(db: Database.Database): void {
         color TEXT NOT NULL,
         PRIMARY KEY (trip_id, from_place_id, to_place_id)
       );
+    `);
+  }
+  if (version < 4) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS travel_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        amap_key TEXT NOT NULL DEFAULT ''
+      );
+      INSERT OR IGNORE INTO travel_settings(id) VALUES(1);
     `);
   }
   db.pragma(`user_version = ${TRAVEL_SCHEMA_VERSION}`);
@@ -837,4 +846,23 @@ export function setRouteColor(db: Database.Database, tripId: number, fromPlaceId
     touchTrip(db, tripId);
   });
   save();
+}
+
+
+// —— 高德搜索设置（Key 仅在服务端读取，页面只传 hasKey） ——
+export function getAmapKey(db: Database.Database): string {
+  const row = db.prepare("SELECT amap_key FROM travel_settings WHERE id=1").get() as { amap_key: string } | undefined;
+  return row?.amap_key ?? "";
+}
+
+export function getAmapSettingsStatus(db: Database.Database): { hasKey: boolean } {
+  return { hasKey: getAmapKey(db) !== "" };
+}
+
+/** Empty string removes the key; callers decide whether an empty form means no change. */
+export function saveAmapKey(db: Database.Database, value: string): void {
+  if (typeof value !== "string") throw new Error("高德 Key 格式无效，请填写 32 位十六进制 Web 服务 Key");
+  const key = value.trim();
+  if (key && !/^[a-f0-9]{32}$/i.test(key)) throw new Error("高德 Key 格式无效，请填写 32 位十六进制 Web 服务 Key");
+  db.prepare("INSERT INTO travel_settings(id,amap_key) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET amap_key=excluded.amap_key").run(key.toLowerCase());
 }

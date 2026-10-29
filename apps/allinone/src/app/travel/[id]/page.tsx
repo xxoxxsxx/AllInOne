@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { getTravelDB, getTrip } from "@/lib/travel/db";
+import { getAmapKey, getTravelDB, getTrip } from "@/lib/travel/db";
 
 import { TravelClient } from "../travel-client";
 
@@ -12,5 +12,5 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
   if (!Number.isInteger(tripId) || tripId <= 0) notFound();
   const trip = getTrip(getTravelDB(), tripId);
   if (!trip) notFound();
-  return <TravelClient trip={trip} />;
+  return <TravelClient trip={trip} searchConfigured={getAmapKey(getTravelDB()).trim() !== ""} />;
 }

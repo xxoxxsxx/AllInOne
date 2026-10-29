@@ -75,7 +75,7 @@ test("v2 database keeps transports and upgrades to v3 with route_styles", () => 
     db.close();
     const reopened = openTravelDB(dir, path.join(dir, "travel.db"));
     const trip = getTrip(reopened, tripId)!;
-    assert.equal(Number(reopened.pragma("user_version", { simple: true })), 3);
+    assert.equal(Number(reopened.pragma("user_version", { simple: true })), 4);
     assert.equal(trip.days[0].places.length, 2, "places preserved");
     assert.deepEqual(trip.routeStyles, []);
     reopened.close();

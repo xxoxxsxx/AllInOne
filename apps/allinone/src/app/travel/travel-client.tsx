@@ -17,6 +17,7 @@ import { platformById } from "@/lib/travel/platforms";
 import { dayDateLabel } from "@/lib/travel/planning";
 import { DAY_COLORS, adjacentRoutePairs, routeColor, arrowGeometry } from "@/lib/travel/routes";
 import { PhotoLightbox, type LightboxPhoto } from "./photo-lightbox";
+import { PlaceSearch } from "./place-search";
 import { BatchPlacesButton } from "./batch-places";
 import { TravelExportButton } from "./export-trip";
 import {
@@ -102,7 +103,7 @@ function formatCost(n: number): string {
   return Number.isInteger(rounded) ? String(rounded) : String(rounded);
 }
 
-export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
+export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Trip; searchConfigured: boolean }) {
   const [trip, setTrip] = useState<Trip>(initialTrip);
   useEffect(() => setTrip(initialTrip), [initialTrip]);
 
@@ -503,6 +504,24 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
             ) : null}
           </div>
           <p className="travel-map-hint">地图仅供示意，不用于导航。在地点上选「点选坐标」后点击地图即可标注。</p>
+          <PlaceSearch
+            trip={trip}
+            configured={searchConfigured}
+            onLocate={(place) => {
+              const map = mapRef.current;
+              if (!map || place.lat === null || place.lng === null) return;
+              const v = storageToTile(tile, { lat: place.lat, lng: place.lng });
+              map.setView([v.lat, v.lng], Math.max(map.getZoom(), 13));
+              document.querySelector(".travel-map-pane")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }}
+            onAdded={(place) => {
+              const map = mapRef.current;
+              if (!map || place.lat === null || place.lng === null) return;
+              const v = storageToTile(tile, { lat: place.lat, lng: place.lng });
+              map.setView([v.lat, v.lng], Math.max(map.getZoom(), 13));
+              setMsg(`已添加「${place.name}」并定位`);
+            }}
+          />
         </section>
 
         <section className="travel-list-pane">
