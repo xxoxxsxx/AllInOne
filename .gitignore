@@ -17,3 +17,5 @@ config/health.json
 .DS_Store
 *.log
 tsconfig.tsbuildinfo
+
+apps/allinone/data/
