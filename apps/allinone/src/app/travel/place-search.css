@@ -133,6 +133,10 @@
   border-radius: 12px;
   background: var(--surface-2);
 }
+.travel-search-results li.travel-search-selected {
+  border-color: #f97316;
+  background: color-mix(in srgb, #f97316 8%, var(--surface));
+}
 .travel-search-place {
   min-width: 0;
 }

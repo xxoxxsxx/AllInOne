@@ -11,6 +11,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "r
 import type { Map as LeafletMap, LayerGroup, Polyline, TileLayer } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+import type { SearchPlace } from "@/lib/travel/search-types";
 import type { Place, TransportLeg, Trip } from "@/lib/travel/db";
 import { storageToTile, tileToStorage, type TileId } from "@/lib/travel/coordinates";
 import { BASEMAPS } from "@/lib/travel/basemaps";
@@ -118,6 +119,7 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
 
   const [editor, setEditor] = useState<Editor>(null);
   const [picking, setPicking] = useState<number | null>(null);
+  const [located, setLocated] = useState<{ place: SearchPlace; savedId?: number } | null>(null);
   const [tile, setTile] = useState<TileId>("amap");
   const [tileStatus, setTileStatus] = useState<"loading" | "ready" | "error">("loading");
   const [tileAttempt, setTileAttempt] = useState(0);
@@ -310,6 +312,30 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
     };
   }, [tile, mapReady, tileAttempt]);
 
+  // 搜索预览独立于行程图层；普通重绘不会清掉候选标记。
+  useEffect(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    if (!L || !map || !mapReady || !located) return;
+    const view = storageToTile(tile, located.place);
+    map.setView([view.lat, view.lng], Math.min(BASEMAPS[tile].maxZoom, Math.max(map.getZoom(), 16)));
+    // 服务端刷新后使用正式编号标记；刷新前继续预览，避免定位指示闪失。
+    if (located.savedId && placeById.has(located.savedId)) return;
+    const preview = L.layerGroup().addTo(map);
+    const icon = L.divIcon({
+      className: "t-search-location-icon",
+      html: '<span class="t-search-location-halo"></span><span class="t-search-location-pin">搜</span>',
+      iconSize: [40, 40], iconAnchor: [20, 20],
+    });
+    const marker = L.marker([view.lat, view.lng], { icon, zIndexOffset: 1000, title: located.place.name }).addTo(preview);
+    const caption = document.createElement("div");
+    const name = document.createElement("strong"); name.textContent = located.place.name;
+    const note = document.createElement("span"); note.textContent = "搜索定位 · 尚未加入行程";
+    caption.append(name, note);
+    marker.bindTooltip(caption, { permanent: true, direction: "top", offset: [0, -22], className: "t-search-location-label" });
+    return () => { if (map.hasLayer(preview)) map.removeLayer(preview); };
+  }, [located, tile, mapReady, placeById]);
+
   // 标注与路线重绘（数据或底图变化时）。存储坐标 → 当前底图视图坐标。
   useEffect(() => {
     const L = leafletRef.current;
@@ -325,7 +351,7 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
     const toView = (p: { lat: number; lng: number }) => storageToTile(tile, p);
 
     for (const c of routeCoords) {
-      const isActive = editorPlaceId === c.placeId;
+      const isActive = editorPlaceId === c.placeId || located?.savedId === c.placeId;
       const pickingHere = pickingRef.current === c.placeId;
       const v = toView(c);
       const icon = L.divIcon({
@@ -339,11 +365,16 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
         setEditor({ mode: "edit", placeId: c.placeId });
         document.getElementById(`place-${c.placeId}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       });
+      if (located?.savedId === c.placeId) {
+        const label = document.createElement("strong"); label.textContent = located.place.name;
+        marker.bindTooltip(label, { permanent: true, direction: "top", offset: [0, -20], className: "t-search-location-label" });
+        marker.setZIndexOffset(1000);
+      }
       group.addLayer(marker);
     }
     // 待安排地点：灰色 ? 针（不进入路线，也不编号）。
     for (const c of looseCoords) {
-      const isActive = editorPlaceId === c.placeId;
+      const isActive = editorPlaceId === c.placeId || located?.savedId === c.placeId;
       const pickingHere = pickingRef.current === c.placeId;
       const v = toView(c);
       const icon = L.divIcon({
@@ -357,6 +388,11 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
         setEditor({ mode: "edit", placeId: c.placeId });
         document.getElementById(`place-${c.placeId}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       });
+      if (located?.savedId === c.placeId) {
+        const label = document.createElement("strong"); label.textContent = located.place.name;
+        marker.bindTooltip(label, { permanent: true, direction: "top", offset: [0, -20], className: "t-search-location-label" });
+        marker.setZIndexOffset(1000);
+      }
       group.addLayer(marker);
     }
     // 只连接同一天真实相邻且都有坐标的地点；不跨天，也不跳过未标注点。
@@ -391,7 +427,7 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
     map.on("zoomend", refreshArrows);
     return () => { map.off("zoomend", refreshArrows); };
 
-  }, [trip, tile, mapReady, editor, picking, routeCoords, looseCoords, segmentOptions]);
+  }, [trip, tile, mapReady, editor, picking, routeCoords, looseCoords, segmentOptions, located]);
 
   const fitAll = () => {
     const L = leafletRef.current;
@@ -519,6 +555,10 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
           </div>
           <div className="travel-map-wrap">
             <div ref={mapElRef} className="travel-map" />
+            {located && <div className="travel-located" role="status">
+              <div><strong>{located.place.name}</strong><span>{located.savedId ? "已加入行程，地图上已突出显示" : "搜索定位 · 尚未加入行程"}</span></div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setLocated(null)}>清除定位</button>
+            </div>}
             {pickingPlace ? (
               <div className="travel-picking">
                 <span>点击地图为「{pickingPlace.name}」设置坐标</span>
@@ -536,19 +576,16 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
           <PlaceSearch
             trip={trip}
             configured={searchConfigured}
-            onSourceChange={source => setTile(source === "global" ? "esri" : "amap")}
+            selectedPlaceId={located?.place.id ?? null}
+            onClearLocate={() => setLocated(null)}
+            onSourceChange={source => { setLocated(null); setTile(source === "global" ? "esri" : "amap"); }}
             onLocate={(place) => {
-              const map = mapRef.current;
-              if (!map || place.lat === null || place.lng === null) return;
-              const v = storageToTile(tile, { lat: place.lat, lng: place.lng });
-              map.setView([v.lat, v.lng], Math.max(map.getZoom(), 13));
-              document.querySelector(".travel-map-pane")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              setPicking(null);
+              setLocated({ place });
+              mapElRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
             }}
-            onAdded={(place) => {
-              const map = mapRef.current;
-              if (!map || place.lat === null || place.lng === null) return;
-              const v = storageToTile(tile, { lat: place.lat, lng: place.lng });
-              map.setView([v.lat, v.lng], Math.max(map.getZoom(), 13));
+            onAdded={(place, savedId) => {
+              setLocated({ place, savedId });
               setMsg(`已添加「${place.name}」并定位`);
             }}
           />
@@ -770,6 +807,7 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
           // 点选坐标前先保存草稿（PlaceEditor 内部处理），成功后才关闭并进入点选。
           onPicking={(placeId) => {
             setEditor(null);
+            setLocated(null);
             setPicking(placeId);
             document.querySelector(".travel-map-pane")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
           }}

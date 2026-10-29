@@ -9,12 +9,14 @@ import { readSearchResponse } from "@/lib/travel/search-response";
 import { addPlaceAction } from "./actions";
 import "./place-search.css";
 
-export function PlaceSearch({ trip, configured, onLocate, onAdded, onSourceChange }: {
+export function PlaceSearch({ trip, configured, onLocate, onAdded, onSourceChange, selectedPlaceId, onClearLocate }: {
   trip: Trip;
   configured: boolean;
   onSourceChange: (source: "amap" | "global") => void;
   onLocate: (place: SearchPlace) => void;
-  onAdded: (place: SearchPlace) => void;
+  onAdded: (place: SearchPlace, savedId: number) => void;
+  selectedPlaceId: string | null;
+  onClearLocate: () => void;
 }) {
   const router = useRouter();
   const id = useId();
@@ -50,6 +52,7 @@ export function PlaceSearch({ trip, configured, onLocate, onAdded, onSourceChang
   const changeInput = (kind: "query" | "city", value: string) => {
     sequence.current += 1;
     request.current?.abort();
+    onClearLocate();
     setLoading(false); setPlaces([]); setSearched(false); setError(""); setNotice("");
     if (kind === "query") setQuery(value); else setCity(value);
   };
@@ -89,9 +92,9 @@ export function PlaceSearch({ trip, configured, onLocate, onAdded, onSourceChang
     try {
       const result = await addPlaceAction(trip.id, targetId, place.name, { address: place.address, lat: place.lat, lng: place.lng });
       if (!mounted.current) return;
-      if (!result.ok) { setError(result.error || "添加失败，请重试"); return; }
+      if (!result.ok || result.id === undefined) { setError(result.error || "添加失败，请重试"); return; }
       setNotice(`已将「${place.name}」加入「${targetName}」`);
-      onAdded(place);
+      onAdded(place, result.id);
       router.refresh();
     } catch {
       if (mounted.current) setError("添加请求未完成。请先核对行程列表是否已添加，再重试，避免重复。");
@@ -136,10 +139,10 @@ export function PlaceSearch({ trip, configured, onLocate, onAdded, onSourceChang
         </select>
       </label>
       <ul className="travel-search-results">
-        {places.map(place => <li key={place.id}>
+        {places.map(place => <li key={place.id} className={selectedPlaceId === place.id ? "travel-search-selected" : ""}>
           <div className="travel-search-place"><h3>{place.name}</h3><p>{place.address || "暂无详细地址"}</p></div>
           <div className="travel-search-result-actions">
-            <button type="button" disabled={addingId !== null} onClick={() => onLocate(place)} aria-label={`定位 ${place.name}`}>定位</button>
+            <button type="button" disabled={addingId !== null} aria-pressed={selectedPlaceId === place.id} onClick={() => onLocate(place)} aria-label={`定位 ${place.name}`}>定位</button>
             <button type="button" className="travel-search-add" disabled={addingId !== null} onClick={() => void add(place)}
               aria-label={`加入行程 ${place.name}`}>{addingId === place.id ? "添加中…" : "加入行程"}</button>
           </div>
