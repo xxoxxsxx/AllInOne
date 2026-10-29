@@ -1014,3 +1014,156 @@ textarea.input {
   .t-lightbox-nav[aria-label="上一张"] { left: 18px; }
   .t-lightbox-nav[aria-label="下一张"] { right: 18px; }
 }
+
+/* —— 相邻景点交通段 —— */
+.t-transport-li {
+  padding: 0 0 0 30px;
+}
+.t-transport {
+  min-width: 0;
+}
+.t-transport-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.t-transport-pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.t-transport-pill.has-options {
+  border-style: solid;
+  color: var(--text);
+}
+.t-transport-line {
+  color: var(--day-color, var(--accent));
+  font-weight: 700;
+}
+.t-transport-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.t-transport-empty {
+  color: var(--text-2);
+}
+.t-transport-count {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 11px;
+  background: var(--surface);
+}
+.t-transport-panel {
+  margin: 6px 0 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.t-transport-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.t-transport-error {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  color: var(--danger);
+  font-size: 13px;
+}
+.t-transport-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.t-transport-option {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  display: grid;
+  gap: 8px;
+}
+.t-transport-option.is-preferred {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+.t-transport-option-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.t-transport-pref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.t-transport-option-mode {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.t-transport-fields {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.8fr;
+  gap: 6px;
+}
+@media (max-width: 640px) {
+  .t-transport-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.t-transport-add {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  display: grid;
+  gap: 8px;
+}
+.t-transport-none {
+  color: var(--text-2);
+  font-size: 13px;
+}
+.t-transport-panel-foot {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 地图连线上的首选方案标注（Leaflet tooltip） */
+.travel-map .t-seg-label {
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.travel-map .t-seg-label::before {
+  display: none;
+}

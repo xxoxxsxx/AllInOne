@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+
+import { acquireBodyScrollLock, releaseBodyScrollLock } from "./scroll-lock";
 import type { Trip } from "@/lib/travel/db";
 import { ExportAbortedError, type ExportedImage } from "@/lib/travel/export-image";
 import "./export-trip.css";
@@ -36,9 +38,8 @@ export function TravelExportButton({ trip }: { trip: Trip }) {
   useEffect(() => {
     if (!open) return;
     panel.current?.focus();
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = previous; trigger.current?.focus(); };
+    acquireBodyScrollLock();
+    return () => { releaseBodyScrollLock(); trigger.current?.focus(); };
   }, [open]);
 
   // busy 时关闭 = 取消在途生成：立即关面板并 abort，错误按取消静默。

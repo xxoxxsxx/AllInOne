@@ -7,17 +7,23 @@
 // 所有变更走 Server Actions；RSC 重验证后 props 更新，本地 state 跟随 props。
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { Map as LeafletMap, LayerGroup, Polyline, TileLayer } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-import type { Place, Trip } from "@/lib/travel/db";
+import type { Place, TransportLeg, Trip } from "@/lib/travel/db";
 import { storageToTile, tileToStorage, type TileId } from "@/lib/travel/coordinates";
 import { platformById } from "@/lib/travel/platforms";
 import { dayDateLabel } from "@/lib/travel/planning";
 import { PhotoLightbox, type LightboxPhoto } from "./photo-lightbox";
 import { BatchPlacesButton } from "./batch-places";
 import { TravelExportButton } from "./export-trip";
+import {
+  addTransportAction,
+  deleteTransportAction,
+  setPreferredTransportAction,
+  updateTransportAction,
+} from "./actions";
 
 import {
   addDayAction,
@@ -141,6 +147,19 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
     for (const p of trip.loose) m.set(p.id, p);
     return m;
   }, [trip]);
+
+  // 交通方案：按「起点-终点」分组（地点顺序调整后仍按对绑定，不会错配）。
+  const segmentOptions = useMemo(() => {
+    const m = new Map<string, TransportLeg[]>();
+    const key = (from: number, to: number) => `${from}-${to}`;
+    for (const t of [...trip.transports].sort((a, b) => Number(b.preferred) - Number(a.preferred))) {
+      const k = key(t.fromPlaceId, t.toPlaceId);
+      const list = m.get(k) ?? [];
+      list.push(t);
+      m.set(k, list);
+    }
+    return m;
+  }, [trip.transports]);
 
   // 行程统计（含待安排）：地点数量与花费合计。
   const allPlaces = useMemo(
@@ -316,16 +335,29 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
       });
       group.addLayer(marker);
     }
-    if (routeCoords.length >= 2) {
-      lineRef.current = L.polyline(
-        routeCoords.map((c) => {
-          const v = toView(c);
-          return [v.lat, v.lng] as [number, number];
-        }),
-        { color: "#2563eb", weight: 2, opacity: 0.65, dashArray: "6 8" },
-      ).addTo(map);
+    // 逐段画线：有交通方案的段实线 + 中点标注首选方案；无方案保持浅虚线。
+    for (let i = 1; i < routeCoords.length; i += 1) {
+      const a = routeCoords[i - 1], b = routeCoords[i];
+      const va = toView(a), vb = toView(b);
+      const key = `${a.placeId}-${b.placeId}`;
+      const options = segmentOptions.get(key) ?? [];
+      const pref = options.find((o) => o.preferred) ?? options[0] ?? null;
+      L.polyline(
+        [[va.lat, va.lng], [vb.lat, vb.lng]] as [number, number][],
+        pref
+          ? { color: a.color, weight: 3, opacity: 0.85 }
+          : { color: "#2563eb", weight: 2, opacity: 0.65, dashArray: "6 8" },
+      ).addTo(group);
+      if (pref) {
+        L.tooltip({
+          permanent: true,
+          direction: "top",
+          className: "t-seg-label",
+          content: `🚇 ${pref.mode}${pref.duration ? ` · ${pref.duration}` : ""}${pref.cost ? ` · ¥${pref.cost}` : ""}`,
+        }).setLatLng([(va.lat + vb.lat) / 2, (va.lng + vb.lng) / 2]).addTo(group);
+      }
     }
-  }, [trip, tile, mapReady, editor, picking, routeCoords, looseCoords]);
+  }, [trip, tile, mapReady, editor, picking, routeCoords, looseCoords, segmentOptions]);
 
   const fitAll = () => {
     const L = leafletRef.current;
@@ -548,20 +580,20 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
               {trip.startDate ? <p className="t-day-date">{dayDateLabel(trip.startDate, di)}</p> : null}
               <ol className="t-places">
                 {day.places.map((p, pi) => (
-                  <li
-                    key={p.id}
-                    id={`place-${p.id}`}
-                    className={`t-place${editor?.mode === "edit" && editor.placeId === p.id ? " t-place-active" : ""}`}
-                    draggable
-                    onDragStart={() => {
-                      dragFrom.current = { dayId: day.id, placeId: p.id, index: pi };
-                    }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      onDropDay(day.id, pi);
-                    }}
-                  >
+                  <Fragment key={p.id}>
+                    <li
+                      id={`place-${p.id}`}
+                      className={`t-place${editor?.mode === "edit" && editor.placeId === p.id ? " t-place-active" : ""}`}
+                      draggable
+                      onDragStart={() => {
+                        dragFrom.current = { dayId: day.id, placeId: p.id, index: pi };
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        onDropDay(day.id, pi);
+                      }}
+                    >
                     <span className="t-place-seq" title="游览顺序">{seqOf.get(p.id) ?? "·"}</span>
                     <button className="t-place-main" onClick={() => setEditor({ mode: "edit", placeId: p.id })}>
                       <span className="t-place-name">
@@ -603,6 +635,23 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
                     ) : null}
                     <span className="t-place-grip" title="拖拽排序（仅限同一天）">⋮⋮</span>
                   </li>
+                    {pi < day.places.length - 1 ? (() => {
+                      const nextPlace = day.places[pi + 1];
+                      const key = `${p.id}-${nextPlace.id}`;
+                      return (
+                        <li className="t-transport-li">
+                          <TransportRow
+                            tripId={trip.id}
+                            fromId={p.id}
+                            toId={nextPlace.id}
+                            fromName={p.name}
+                            toName={nextPlace.name}
+                            options={segmentOptions.get(key) ?? []}
+                          />
+                        </li>
+                      );
+                    })() : null}
+                  </Fragment>
                 ))}
                 {day.places.length === 0 ? <li className="t-place-empty">这一天还没有安排，点下面添加地点。</li> : null}
               </ol>
@@ -1079,6 +1128,222 @@ function PlaceEditor({
           <button className="btn btn-primary" disabled={busy} onClick={save}>{isAdd ? "添加" : "保存"}</button>
         </footer>
       </div>
+    </div>
+  );
+}
+
+// —— 相邻景点交通段：多方案（方式/耗时/费用/备注），可设首选 ——
+// 绑定「起点-终点」地点对：调整顺序后仍按对匹配显示，不会错配到其他景点。
+
+function transportSummary(o: TransportLeg): string {
+  return `${o.mode}${o.duration ? ` · ${o.duration}` : ""}${o.cost ? ` · ¥${o.cost}` : ""}`;
+}
+
+function TransportRow({
+  tripId,
+  fromId,
+  toId,
+  fromName,
+  toName,
+  options,
+}: {
+  tripId: number;
+  fromId: number;
+  toId: number;
+  fromName: string;
+  toName: string;
+  options: TransportLeg[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [pendingT, startTransitionT] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  const preferred = options.find((o) => o.preferred) ?? options[0] ?? null;
+  // 点选首选后的服务端往返期间，用本地「意向首选」保持 radio 状态不被重渲染弹回。
+  const [pendingPrefId, setPendingPrefId] = useState<number | null>(null);
+  const effectivePreferred = (option: TransportLeg): boolean =>
+    pendingPrefId !== null ? option.id === pendingPrefId : option.preferred;
+  const setPreferred = (id: number) => {
+    setPendingPrefId(id);
+    startTransitionT(async () => {
+      const r = await setPreferredTransportAction(id);
+      if (!r.ok) setErr(r.error ?? "操作失败");
+      setPendingPrefId(null);
+    });
+  };
+
+  const act = (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    startTransitionT(async () => {
+      const r = await fn();
+      if (!r.ok) setErr(r.error ?? "操作失败");
+      else setErr(null);
+    });
+  };
+
+  return (
+    <div className="t-transport">
+      <button
+        type="button"
+        className={`t-transport-pill${options.length ? " has-options" : ""}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title="编辑这段的交通方案"
+      >
+        <span className="t-transport-line" aria-hidden>↓</span>
+        {preferred ? (
+          <span className="t-transport-summary">
+            {transportSummary(preferred)}
+            {preferred.note ? ` · ${preferred.note.slice(0, 18)}` : ""}
+          </span>
+        ) : (
+          <span className="t-transport-summary t-transport-empty">＋ 添加交通方案</span>
+        )}
+        {options.length > 1 ? <span className="t-transport-count">{options.length} 个方案</span> : null}
+      </button>
+      {open ? (
+        <div className="t-transport-panel">
+          <p className="t-transport-title">{fromName} → {toName}</p>
+          {err ? <p className="t-transport-error" role="alert">{err}</p> : null}
+          <ul className="t-transport-options">
+            {options.map((o) => (
+              <TransportOptionRow
+                key={o.id}
+                tripId={tripId}
+                option={o}
+                preferred={effectivePreferred(o)}
+                pending={pendingT || (pendingPrefId !== null && pendingPrefId !== o.id)}
+                onSetPreferred={() => setPreferred(o.id)}
+                act={act}
+              />
+            ))}
+            {options.length === 0 ? (
+              <li className="t-transport-none">还没有方案。地铁 / 打车 / 步行都可以，支持多个备选。</li>
+            ) : null}
+          </ul>
+          <TransportAddRow
+            tripId={tripId}
+            fromId={fromId}
+            toId={toId}
+            fromName={fromName}
+            toName={toName}
+            firstOption={options.length === 0}
+            act={act}
+          />
+          <div className="t-transport-panel-foot">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>收起</button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TransportOptionRow({
+  tripId,
+  option,
+  preferred,
+  pending,
+  onSetPreferred,
+  act,
+}: {
+  tripId: number;
+  option: TransportLeg;
+  preferred: boolean;
+  pending: boolean;
+  onSetPreferred: () => void;
+  act: (fn: () => Promise<{ ok: boolean; error?: string }>) => void;
+}) {
+  const [mode, setMode] = useState(option.mode);
+  const [duration, setDuration] = useState(option.duration);
+  const [cost, setCost] = useState(option.cost);
+  const [note, setNote] = useState(option.note);
+  const dirty = mode !== option.mode || duration !== option.duration || cost !== option.cost || note !== option.note;
+  return (
+    <li className={`t-transport-option${preferred ? " is-preferred" : ""}`}>
+      <div className="t-transport-option-head">
+        <label className="t-transport-pref">
+          <input
+            type="radio"
+            name={`transport-pref-${option.fromPlaceId}-${option.toPlaceId}`}
+            checked={preferred}
+            disabled={pending || preferred}
+            onChange={onSetPreferred}
+          />
+          首选
+        </label>
+        <span className="t-transport-option-mode">{option.mode}</span>
+        <button
+          type="button"
+          className="icon-btn"
+          title="删除该方案"
+          disabled={pending}
+          onClick={() => { if (window.confirm("删除该交通方案？")) act(() => deleteTransportAction(option.id)); }}
+        >
+          🗑
+        </button>
+      </div>
+      <div className="t-transport-fields">
+        <input className="input" value={mode} onChange={(e) => setMode(e.target.value)} maxLength={40} placeholder="方式，如：地铁" aria-label={`交通方式（${option.id}）`} />
+        <input className="input" value={duration} onChange={(e) => setDuration(e.target.value)} maxLength={40} placeholder="耗时" aria-label={`预计耗时（${option.id}）`} />
+        <input className="input" value={cost} onChange={(e) => setCost(e.target.value)} maxLength={40} placeholder="¥" aria-label={`费用（${option.id}）`} />
+        <input className="input" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="备注：线路/出口等" aria-label={`交通备注（${option.id}）`} />
+      </div>
+      {dirty ? (
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          disabled={pending || !mode.trim()}
+          onClick={() => act(() => updateTransportAction(option.id, { mode, duration, cost, note }))}
+        >
+          保存修改
+        </button>
+      ) : null}
+    </li>
+  );
+}
+
+function TransportAddRow({
+  tripId,
+  fromId,
+  toId,
+  fromName,
+  toName,
+  firstOption,
+  act,
+}: {
+  tripId: number;
+  fromId: number;
+  toId: number;
+  fromName: string;
+  toName: string;
+  firstOption: boolean;
+  act: (fn: () => Promise<{ ok: boolean; error?: string }>) => void;
+}) {
+  const [mode, setMode] = useState("");
+  const [duration, setDuration] = useState("");
+  const [cost, setCost] = useState("");
+  const [note, setNote] = useState("");
+  const [pendingAdd, startTransitionAdd] = useTransition();
+  const ready = mode.trim() !== "" && !pendingAdd;
+  return (
+    <div className="t-transport-add">
+      <p className="t-hint">新增方案：{fromName} → {toName}</p>
+      <div className="t-transport-fields">
+        <input className="input" value={mode} onChange={(e) => setMode(e.target.value)} maxLength={40} placeholder="方式，如：地铁 2 号线" aria-label="新方案交通方式" />
+        <input className="input" value={duration} onChange={(e) => setDuration(e.target.value)} maxLength={40} placeholder="耗时" aria-label="新方案预计耗时" />
+        <input className="input" value={cost} onChange={(e) => setCost(e.target.value)} maxLength={40} placeholder="¥" aria-label="新方案费用" />
+        <input className="input" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="备注：线路/出口等" aria-label="新方案交通备注" />
+      </div>
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm"
+        disabled={!ready}
+        onClick={() => startTransitionAdd(async () => {
+          const r = await addTransportAction(tripId, fromId, toId, { mode, duration, cost, note, preferred: firstOption });
+          if (r.ok) { setMode(""); setDuration(""); setCost(""); setNote(""); }
+        })}
+      >
+        ＋ 添加方案
+      </button>
     </div>
   );
 }

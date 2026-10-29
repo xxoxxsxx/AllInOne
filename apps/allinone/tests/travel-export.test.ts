@@ -4,7 +4,7 @@ import { ExportAbortedError, layoutTrip, paginateBlocks, projectPoints, wrapText
 import type { Trip, Place } from "../src/lib/travel/db.ts";
 const measure = (s: string, size = 10) => Array.from(s).length * size;
 const place = (id: number): Place => ({ id, tripId: 1, dayId: 1, name: `地点${id}`, lat: 22.3, lng: 114.2, address: "地址", timeLabel: "上午", cost: "100", note: "完整备注\n第二行", links: [{ id: 1, title: "攻略链接", url: "https://example.com/攻略", platform: "link" }], photos: [1, 2, 3, 4].map(n => ({ id: n, file: `image${n}.png` })) });
-const trip: Trip = { id: 1, title: "香港", description: "测试完整行程", startDate: "2026-10-29", days: [{ id: 1, title: "Day 1", places: [place(1)] }, { id: 2, title: "Day 2", places: [place(2)] }], loose: [{ ...place(3), dayId: null, lat: null, lng: null }], updatedAt: "" };
+const trip: Trip = { id: 1, title: "香港", description: "测试完整行程", startDate: "2026-10-29", days: [{ id: 1, title: "Day 1", places: [place(1)] }, { id: 2, title: "Day 2", places: [place(2)] }], loose: [{ ...place(3), dayId: null, lat: null, lng: null }], transports: [], updatedAt: "" };
 
 test("Unicode wrapping preserves astral code points, blank lines and complete URLs", () => {
   const input = "甲😀乙丙\n\nhttps://example.com/很长的网址";
@@ -35,7 +35,7 @@ test("layout includes every field, global numbers, dates, loose places and limit
 });
 
 test("long notes paginate without dropping text lines or exceeding canvas size", () => {
-  const longTrip = { ...trip, days: [{ id: 1, title: "长行程", places: Array.from({ length: 30 }, (_, i) => ({ ...place(i), photos: [], note: `备注${i}:` + "很长的备注".repeat(50) })) }], loose: [] };
+  const longTrip = { ...trip, days: [{ id: 1, title: "长行程", places: Array.from({ length: 30 }, (_, i) => ({ ...place(i), photos: [], note: `备注${i}:` + "很长的备注".repeat(50) })) }], loose: [], transports: [] };
   const pages = layoutTrip(longTrip, measure);
   assert.ok(pages.length > 1);
   assert.ok(pages.every(p => p.height <= 12000));
@@ -52,7 +52,7 @@ test("projection handles singleton, duplicate coordinates, poles and date line",
 });
 
 test("empty trip renders one page and never shows the 待安排 group", () => {
-  const empty: Trip = { id: 1, title: "空行程", description: "", startDate: "", days: [], loose: [], updatedAt: "" };
+  const empty: Trip = { id: 1, title: "空行程", description: "", startDate: "", days: [], loose: [], transports: [], updatedAt: "" };
   const pages = layoutTrip(empty, measure);
   assert.equal(pages.length, 1);
   const text = pages.flatMap(p => p.blocks).filter(b => b.kind === "text").map(b => b.text).join("\n");
@@ -61,7 +61,7 @@ test("empty trip renders one page and never shows the 待安排 group", () => {
 });
 
 test("loose-only trip keeps its places under the 待安排 group", () => {
-  const looseOnly: Trip = { id: 1, title: "只有待安排", description: "", startDate: "", days: [], loose: [{ ...place(9), dayId: null }], updatedAt: "" };
+  const looseOnly: Trip = { id: 1, title: "只有待安排", description: "", startDate: "", days: [], loose: [{ ...place(9), dayId: null }], transports: [], updatedAt: "" };
   const pages = layoutTrip(looseOnly, measure);
   const text = pages.flatMap(p => p.blocks).filter(b => b.kind === "text").map(b => b.text).join("\n");
   assert.ok(text.includes("待安排"));
@@ -71,7 +71,7 @@ test("loose-only trip keeps its places under the 待安排 group", () => {
 });
 
 test("huge note with 4 photos stays complete, photos capped at 3", () => {
-  const big: Trip = { id: 1, title: "大备注", description: "", startDate: "", updatedAt: "", days: [{ id: 1, title: "Day 1", places: [{ id: 1, tripId: 1, dayId: 1, name: "长备注", lat: 31.2, lng: 121.4, address: "", timeLabel: "", cost: "", note: "好".repeat(2000), links: [{ id: 1, url: "https://x.example/a", platform: "link", title: "l" }], photos: [1, 2, 3, 4].map(n => ({ id: n, file: `a${n}.jpg` })) }] }], loose: [] };
+  const big: Trip = { id: 1, title: "大备注", description: "", startDate: "", updatedAt: "", days: [{ id: 1, title: "Day 1", places: [{ id: 1, tripId: 1, dayId: 1, name: "长备注", lat: 31.2, lng: 121.4, address: "", timeLabel: "", cost: "", note: "好".repeat(2000), links: [{ id: 1, url: "https://x.example/a", platform: "link", title: "l" }], photos: [1, 2, 3, 4].map(n => ({ id: n, file: `a${n}.jpg` })) }] }], loose: [], transports: [] };
   const pages = layoutTrip(big, measure);
   const blocks = pages.flatMap(p => p.blocks);
   const text = blocks.filter(b => b.kind === "text").map(b => b.text).join("");
@@ -86,4 +86,31 @@ test("ExportAbortedError is identifiable by name for silent cancellation", () =>
   const e = new ExportAbortedError();
   assert.equal(e.name, "ExportAbortedError");
   assert.ok(e instanceof Error);
+});
+
+test("layout renders transport options after each place with preferred first", () => {
+  const trip = {
+    id: 1, title: "交通导出", description: "", startDate: "2026-11-01", updatedAt: "",
+    transports: [
+      { id: 1, fromPlaceId: 101, toPlaceId: 102, mode: "地铁", duration: "25 分钟", cost: "8", note: "2号线", preferred: true },
+      { id: 2, fromPlaceId: 101, toPlaceId: 102, mode: "打车", duration: "15 分钟", cost: "35", note: "", preferred: false },
+      { id: 3, fromPlaceId: 102, toPlaceId: 103, mode: "轮渡", duration: "10 分钟", cost: "2", note: "", preferred: false },
+    ],
+    days: [
+      { id: 11, title: "Day 1", places: [
+        { id: 101, tripId: 1, dayId: 11, name: "码头", lat: 31.23, lng: 121.47, address: "", timeLabel: "", cost: "", note: "", links: [], photos: [] },
+        { id: 102, tripId: 1, dayId: 11, name: "老街", lat: 31.24, lng: 121.48, address: "", timeLabel: "", cost: "", note: "", links: [], photos: [] },
+        { id: 103, tripId: 1, dayId: 11, name: "灯塔", lat: 31.25, lng: 121.49, address: "", timeLabel: "", cost: "", note: "", links: [], photos: [] },
+      ] },
+    ],
+    loose: [],
+  } as unknown as Parameters<typeof layoutTrip>[0];
+  const pages = layoutTrip(trip, () => 10);
+  const all = pages.flatMap(p => p.blocks).filter(b => b.kind === "text") as Array<{ kind: "text"; text: string }>;
+  const texts = all.map(b => b.text);
+  assert.ok(texts.some(t => t.includes("→ 老街：地铁 · 25 分钟 · ¥8（首选）")), "preferred first: " + texts.join("|"));
+  assert.ok(texts.some(t => t.includes("→ 老街：打车 · 15 分钟 · ¥35")), "second option listed");
+  assert.ok(texts.some(t => t.includes("2号线")), "note rendered");
+  assert.ok(texts.some(t => t.includes("→ 灯塔：轮渡 · 10 分钟 · ¥2")), "second segment rendered");
+  assert.ok(!texts.some(t => t.includes("另有")), "under cap shows no overflow note");
 });

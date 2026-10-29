@@ -11,7 +11,7 @@ import { dataDir } from "@/lib/data-dir";
 import { detectPlatform } from "./platforms";
 import { parsePlaceLines } from "./planning";
 
-export const TRAVEL_SCHEMA_VERSION = 1;
+export const TRAVEL_SCHEMA_VERSION = 2;
 
 export type PlaceLink = {
   id: number;
@@ -53,7 +53,19 @@ export type Trip = {
   startDate: string;
   days: TripDay[];
   loose: Place[]; // 未分配到天的地点
+  transports: TransportLeg[]; // 相邻景点间的交通方案（全行程平铺）
   updatedAt: string;
+};
+
+export type TransportLeg = {
+  id: number;
+  fromPlaceId: number;
+  toPlaceId: number;
+  mode: string;
+  duration: string;
+  cost: string;
+  note: string;
+  preferred: boolean;
 };
 
 export type TripSummary = {
@@ -152,6 +164,26 @@ function migrate(db: Database.Database): void {
       CREATE INDEX idx_places_trip ON places(trip_id, day_id, sort_order);
       CREATE INDEX idx_place_links_place ON place_links(place_id, sort_order);
       CREATE INDEX idx_place_photos_place ON place_photos(place_id, sort_order);
+    `);
+  }
+  if (version < 2) {
+    // v2：相邻景点交通方案（按起点/终点绑定，重排不丢失；删地点级联清理）。
+    db.exec(`
+      CREATE TABLE place_transports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+        from_place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+        to_place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+        mode TEXT NOT NULL,
+        duration TEXT NOT NULL DEFAULT '',
+        cost TEXT NOT NULL DEFAULT '',
+        note TEXT NOT NULL DEFAULT '',
+        preferred INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_place_transports_trip ON place_transports(trip_id, sort_order);
+      CREATE INDEX idx_place_transports_pair ON place_transports(from_place_id, to_place_id);
     `);
   }
   db.pragma(`user_version = ${TRAVEL_SCHEMA_VERSION}`);
@@ -273,6 +305,7 @@ export function getTrip(db: Database.Database, tripId: number): Trip | null {
     startDate: trip.start_date,
     days,
     loose,
+    transports: listTransports(db, tripId),
     updatedAt: trip.updated_at,
   };
 }
@@ -599,4 +632,147 @@ export function getTripIdOfPlace(db: Database.Database, placeId: number): number
 
 export function touchTripById(db: Database.Database, tripId: number): void {
   touchTrip(db, tripId);
+}
+
+
+// —— 交通方案（相邻景点间；按起点/终点绑定，重排不丢失） ——
+
+export type TransportInput = {
+  mode: string;
+  duration?: string;
+  cost?: string;
+  note?: string;
+  preferred?: boolean;
+};
+
+export const MAX_TRANSPORT_OPTIONS_PER_SEGMENT = 6;
+
+function normalizePair(db: Database.Database, tripId: number, fromPlaceId: number, toPlaceId: number): void {
+  if (!Number.isSafeInteger(fromPlaceId) || !Number.isSafeInteger(toPlaceId)) throw new Error("参数无效");
+  if (fromPlaceId === toPlaceId) throw new Error("起点和终点不能是同一个地点");
+  const rows = db.prepare(
+    `SELECT id FROM places WHERE trip_id=? AND id IN (?,?)`,
+  ).all(tripId, fromPlaceId, toPlaceId) as Array<{ id: number }>;
+  if (rows.length !== 2) throw new Error("地点不属于该行程");
+}
+
+function transportField(value: string, label: string, max: number): string {
+  return textField(value, label, max);
+}
+
+export function listTransports(db: Database.Database, tripId: number): TransportLeg[] {
+  const rows = db.prepare(
+    `SELECT id,from_place_id,to_place_id,mode,duration,cost,note,preferred
+     FROM place_transports WHERE trip_id=? ORDER BY sort_order,id`,
+  ).all(tripId) as Array<{ id: number; from_place_id: number; to_place_id: number; mode: string; duration: string; cost: string; note: string; preferred: number }>;
+  return rows.map((r) => ({
+    id: r.id,
+    fromPlaceId: r.from_place_id,
+    toPlaceId: r.to_place_id,
+    mode: r.mode,
+    duration: r.duration,
+    cost: r.cost,
+    note: r.note,
+    preferred: r.preferred === 1,
+  }));
+}
+
+export function addTransport(db: Database.Database, tripId: number, fromPlaceId: number, toPlaceId: number, input: TransportInput): number {
+  normalizePair(db, tripId, fromPlaceId, toPlaceId);
+  const mode = transportField(input.mode, "交通方式", 40);
+  if (!mode) throw new Error("交通方式不能为空");
+  const segmentCount = Number((db.prepare(
+    `SELECT COUNT(*) AS n FROM place_transports WHERE trip_id=? AND from_place_id=? AND to_place_id=?`,
+  ).get(tripId, fromPlaceId, toPlaceId) as { n: number }).n);
+  if (segmentCount >= MAX_TRANSPORT_OPTIONS_PER_SEGMENT) throw new Error(`同一段最多 ${MAX_TRANSPORT_OPTIONS_PER_SEGMENT} 个交通方案`);
+  const create = db.transaction(() => {
+    if (input.preferred) {
+      db.prepare(`UPDATE place_transports SET preferred=0 WHERE trip_id=? AND from_place_id=? AND to_place_id=?`)
+        .run(tripId, fromPlaceId, toPlaceId);
+    }
+    const sortOrder = Number((db.prepare(
+      `SELECT COALESCE(MAX(sort_order),-1)+1 AS s FROM place_transports WHERE trip_id=? AND from_place_id=? AND to_place_id=?`,
+    ).get(tripId, fromPlaceId, toPlaceId) as { s: number }).s);
+    const res = db.prepare(
+      `INSERT INTO place_transports(trip_id,from_place_id,to_place_id,mode,duration,cost,note,preferred,sort_order,created_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      tripId, fromPlaceId, toPlaceId, mode,
+      transportField(input.duration ?? "", "预计耗时", 40),
+      transportField(input.cost ?? "", "费用", 40),
+      transportField(input.note ?? "", "交通备注", 500),
+      input.preferred ? 1 : 0,
+      sortOrder, now(),
+    );
+    touchTrip(db, tripId);
+    return Number(res.lastInsertRowid);
+  });
+  return create();
+}
+
+export function updateTransport(db: Database.Database, transportId: number, patch: Partial<TransportInput>): void {
+  const cur = db.prepare(`SELECT trip_id,from_place_id,to_place_id,preferred FROM place_transports WHERE id=?`).get(transportId) as
+    | { trip_id: number; from_place_id: number; to_place_id: number; preferred: number }
+    | undefined;
+  if (!cur) throw new Error("交通方案不存在");
+  const update = db.transaction(() => {
+    if (patch.preferred === true && !cur.preferred) {
+      db.prepare(`UPDATE place_transports SET preferred=0 WHERE trip_id=? AND from_place_id=? AND to_place_id=?`)
+        .run(cur.trip_id, cur.from_place_id, cur.to_place_id);
+    }
+    const next = {
+      mode: patch.mode !== undefined ? transportField(patch.mode, "交通方式", 40) : undefined,
+      duration: patch.duration !== undefined ? transportField(patch.duration, "预计耗时", 40) : undefined,
+      cost: patch.cost !== undefined ? transportField(patch.cost, "费用", 40) : undefined,
+      note: patch.note !== undefined ? transportField(patch.note, "交通备注", 500) : undefined,
+    };
+    db.prepare(
+      `UPDATE place_transports SET
+         mode=COALESCE(?,mode),
+         duration=COALESCE(?,duration),
+         cost=COALESCE(?,cost),
+         note=COALESCE(?,note),
+         preferred=CASE WHEN ? THEN 1 ELSE preferred END
+       WHERE id=?`,
+    ).run(next.mode ?? null, next.duration ?? null, next.cost ?? null, next.note ?? null, patch.preferred === true ? 1 : 0, transportId);
+    // mode 置空校验：COALESCE 后可能为空串
+    const mode = (db.prepare(`SELECT mode FROM place_transports WHERE id=?`).get(transportId) as { mode: string }).mode;
+    if (!mode) throw new Error("交通方式不能为空");
+    touchTrip(db, cur.trip_id);
+  });
+  update();
+}
+
+export function setPreferredTransport(db: Database.Database, transportId: number): void {
+  const cur = db.prepare(`SELECT trip_id,from_place_id,to_place_id FROM place_transports WHERE id=?`).get(transportId) as
+    | { trip_id: number; from_place_id: number; to_place_id: number }
+    | undefined;
+  if (!cur) throw new Error("交通方案不存在");
+  const swap = db.transaction(() => {
+    db.prepare(`UPDATE place_transports SET preferred=0 WHERE trip_id=? AND from_place_id=? AND to_place_id=?`)
+      .run(cur.trip_id, cur.from_place_id, cur.to_place_id);
+    db.prepare(`UPDATE place_transports SET preferred=1 WHERE id=?`).run(transportId);
+    touchTrip(db, cur.trip_id);
+  });
+  swap();
+}
+
+export function deleteTransport(db: Database.Database, transportId: number): void {
+  const cur = db.prepare(`SELECT trip_id FROM place_transports WHERE id=?`).get(transportId) as { trip_id: number } | undefined;
+  if (!cur) return;
+  db.prepare(`DELETE FROM place_transports WHERE id=?`).run(transportId);
+  touchTrip(db, cur.trip_id);
+}
+
+/** 行程内相邻景点对（按游览顺序，天内相邻）；用于 UI 展示连线与交通。 */
+export function transportSegments(db: Database.Database, tripId: number): Array<{ fromId: number; toId: number }> {
+  const trip = getTrip(db, tripId);
+  if (!trip) return [];
+  const pairs: Array<{ fromId: number; toId: number }> = [];
+  for (const day of trip.days) {
+    for (let i = 1; i < day.places.length; i += 1) {
+      pairs.push({ fromId: day.places[i - 1].id, toId: day.places[i].id });
+    }
+  }
+  return pairs;
 }

@@ -87,7 +87,8 @@ export function layoutTrip(trip: Trip, measure: (text: string, size: number) => 
     if (i === numbered.length - 1 && !g.places.length) return;
     gap(); text(g.title, 36, "#0f766e");
     if (!g.places.length) text("这一天暂无地点", 26);
-    for (const p of g.places) {
+    for (let pi = 0; pi < g.places.length; pi++) {
+      const p = g.places[pi];
       gap(); text(`${p.label}. ${p.name}`, 34, "#0f172a");
       if (p.timeLabel) text(`时间：${p.timeLabel}`);
       if (p.cost) text(`花费：¥${p.cost}`);
@@ -96,6 +97,22 @@ export function layoutTrip(trip: Trip, measure: (text: string, size: number) => 
       for (const link of p.links) { text(`攻略：${link.title || "参考链接"}`, 26, "#0f766e"); text(link.url, 24); }
       if (p.photos.length) blocks.push({ kind: "photos", files: p.photos.slice(0, 3).map(ph => ph.file), height: 300 });
       if (p.photos.length > 3) text(`另有 ${p.photos.length - 3} 张照片未收录`, 24);
+      // 到下一站的交通方案（同一天内相邻；首选优先，最多列 3 个）。
+      const next = g.places[pi + 1];
+      if (next) {
+        const options = trip.transports
+          .filter(t => t.fromPlaceId === p.id && t.toPlaceId === next.id)
+          .sort((a, b) => Number(b.preferred) - Number(a.preferred));
+        if (options.length) {
+          for (const o of options.slice(0, 3)) {
+            const preferredMark = o.preferred ? "（首选）" : "";
+            const detail = [o.duration, o.cost ? `¥${o.cost}` : ""].filter(Boolean).join(" · ");
+            text(`→ ${next.name}：${o.mode}${detail ? ` · ${detail}` : ""}${preferredMark}`, 26, "#0f766e");
+            if (o.note) text(`　${o.note}`, 24);
+          }
+          if (options.length > 3) text(`　另有 ${options.length - 3} 个交通方案未收录`, 24);
+        }
+      }
     }
   });
   return paginateBlocks(blocks);

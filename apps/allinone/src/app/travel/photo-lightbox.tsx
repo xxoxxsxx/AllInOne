@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { acquireBodyScrollLock, releaseBodyScrollLock } from "./scroll-lock";
+
 export type LightboxPhoto = { id: number; url: string; caption: string };
 
 export function PhotoLightbox({ photos, photoId, onClose, onNavigate }: {
@@ -22,13 +24,12 @@ export function PhotoLightbox({ photos, photoId, onClose, onNavigate }: {
   useEffect(() => {
     const target = document.activeElement as HTMLElement | null;
     const el = dialog.current;
-    const previous = document.body.style.overflow;
     el?.showModal();
     closeButton.current?.focus();
-    document.body.style.overflow = "hidden";
+    acquireBodyScrollLock();
     return () => {
       el?.close();
-      document.body.style.overflow = previous;
+      releaseBodyScrollLock();
       if (target?.isConnected) target.focus();
     };
   }, []);

@@ -26,6 +26,11 @@ import {
   reorderPlaces,
   updatePlace,
   updateTrip,
+  addTransport,
+  deleteTransport,
+  setPreferredTransport,
+  updateTransport,
+  type TransportInput,
   type PlacePatch,
 } from "@/lib/travel/db";
 import { removePhotoFile, removePhotoFiles } from "@/lib/travel/photos";
@@ -224,6 +229,54 @@ export async function deleteLinkAction(linkId: number): Promise<{ ok: boolean; e
     const row = db.prepare(`SELECT p.trip_id FROM place_links l JOIN places p ON p.id=l.place_id WHERE l.id=?`).get(linkId) as { trip_id: number } | undefined;
     deleteLink(db, linkId);
     if (row) revalidateTrip(row.trip_id);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// —— 交通方案 ——
+
+export async function addTransportAction(tripId: number, fromPlaceId: number, toPlaceId: number, input: TransportInput): Promise<{ ok: boolean; id?: number; error?: string }> {
+  try {
+    const id = addTransport(getTravelDB(), tripId, fromPlaceId, toPlaceId, input);
+    revalidateTrip(tripId);
+    return { ok: true, id };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function updateTransportAction(transportId: number, patch: Partial<TransportInput>): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const db = getTravelDB();
+    updateTransport(db, transportId, patch);
+    const tripId = db.prepare(`SELECT trip_id FROM place_transports WHERE id=?`).get(transportId) as { trip_id: number } | undefined;
+    if (tripId) revalidateTrip(tripId.trip_id);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function setPreferredTransportAction(transportId: number): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const db = getTravelDB();
+    setPreferredTransport(db, transportId);
+    const tripId = db.prepare(`SELECT trip_id FROM place_transports WHERE id=?`).get(transportId) as { trip_id: number } | undefined;
+    if (tripId) revalidateTrip(tripId.trip_id);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function deleteTransportAction(transportId: number): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const db = getTravelDB();
+    const tripId = db.prepare(`SELECT trip_id FROM place_transports WHERE id=?`).get(transportId) as { trip_id: number } | undefined;
+    deleteTransport(db, transportId);
+    if (tripId) revalidateTrip(tripId.trip_id);
     return { ok: true };
   } catch (e) {
     return fail(e);
