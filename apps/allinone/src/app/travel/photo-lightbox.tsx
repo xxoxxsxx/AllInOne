@@ -1,95 +1,81 @@
 "use client";
 
-// 照片灯箱：全屏查看大图，←/→ 或箭头按钮翻页，Esc 关闭；预加载相邻两张。
-// photos 为行程内全局有序列表，从任意缩略图进入都能连续翻完整趟行程。
+import { useEffect, useRef, useState } from "react";
 
-import { useEffect } from "react";
+export type LightboxPhoto = { id: number; url: string; caption: string };
 
-export type LightboxPhoto = {
-  url: string;
-  caption: string;
-};
-
-export function PhotoLightbox({
-  photos,
-  index,
-  onClose,
-  onNavigate,
-}: {
+export function PhotoLightbox({ photos, photoId, onClose, onNavigate }: {
   photos: LightboxPhoto[];
-  index: number;
+  photoId: number;
   onClose: () => void;
-  onNavigate: (index: number) => void;
+  onNavigate: (photoId: number) => void;
 }) {
-  const count = photos.length;
+  const dialog = useRef<HTMLDialogElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const index = photos.findIndex(p => p.id === photoId);
   const photo = photos[index];
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
+  // Native modal isolates background controls, including the still-mounted editor.
+  // Keep this effect independent of navigation so focus/scroll restoration happens
+  // only on open/close (also balanced under StrictMode's setup-cleanup-setup).
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowLeft") onNavigate((index - 1 + count) % count);
-      else if (e.key === "ArrowRight") onNavigate((index + 1) % count);
-    };
-    window.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
+    const target = document.activeElement as HTMLElement | null;
+    const el = dialog.current;
+    const previous = document.body.style.overflow;
+    el?.showModal();
+    closeButton.current?.focus();
     document.body.style.overflow = "hidden";
     return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
+      el?.close();
+      document.body.style.overflow = previous;
+      if (target?.isConnected) target.focus();
     };
-  }, [index, count, onClose, onNavigate]);
+  }, []);
 
-  // 预加载相邻照片，翻页不闪白。
   useEffect(() => {
+    if (!photo) onClose();
+  }, [photo, onClose]);
+
+  useEffect(() => {
+    if (index < 0 || photos.length < 2) return;
     for (const i of [index - 1, index + 1]) {
-      const neighbor = photos[(i + count) % count];
-      if (neighbor) {
-        const img = new Image();
-        img.src = neighbor.url;
-      }
+      const img = new Image();
+      img.src = photos[(i + photos.length) % photos.length].url;
     }
-  }, [index, count, photos]);
+  }, [index, photos]);
 
-  if (!photo) return null;
+  const navigate = (delta: number) => {
+    if (index >= 0 && photos.length > 1) onNavigate(photos[(index + delta + photos.length) % photos.length].id);
+  };
 
-  return (
-    <div
-      className="t-lightbox"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`照片 ${index + 1} / ${count}`}
-      onClick={onClose}
-    >
-      <header className="t-lightbox-head">
-        <span className="t-lightbox-caption">
-          {photo.caption} · {index + 1} / {count}
-        </span>
-        <button type="button" className="t-lightbox-close" onClick={onClose} aria-label="关闭灯箱">✕</button>
-      </header>
-      <div className="t-lightbox-stage">
-        {count > 1 ? (
-          <button
-            type="button"
-            className="t-lightbox-nav"
-            aria-label="上一张"
-            onClick={(e) => { e.stopPropagation(); onNavigate((index - 1 + count) % count); }}
-          >
-            ‹
-          </button>
-        ) : null}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="t-lightbox-img" src={photo.url} alt={photo.caption} onClick={(e) => e.stopPropagation()} />
-        {count > 1 ? (
-          <button
-            type="button"
-            className="t-lightbox-nav"
-            aria-label="下一张"
-            onClick={(e) => { e.stopPropagation(); onNavigate((index + 1) % count); }}
-          >
-            ›
-          </button>
-        ) : null}
+  return <dialog ref={dialog} className="t-lightbox" aria-label={`照片 ${index + 1} / ${photos.length}`}
+    onCancel={e => { e.preventDefault(); onClose(); }}
+    onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    onKeyDown={e => {
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault(); e.stopPropagation(); navigate(e.key === "ArrowLeft" ? -1 : 1);
+      }
+      if (e.key === "Tab") {
+        const buttons = dialog.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
+        if (!buttons?.length) return;
+        const first = buttons[0], last = buttons[buttons.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }}>
+    <header className="t-lightbox-head">
+      <span className="t-lightbox-caption" aria-live="polite">{photo?.caption} · {index + 1} / {photos.length}</span>
+      <button ref={closeButton} type="button" className="t-lightbox-close" onClick={onClose} aria-label="关闭灯箱">✕</button>
+    </header>
+    <div className="t-lightbox-stage" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      {photos.length > 1 && <button type="button" className="t-lightbox-nav" aria-label="上一张" onClick={() => navigate(-1)}>‹</button>}
+      <div className="t-lightbox-frame" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+        {photo && (failedUrl === photo.url ? <p role="alert" className="t-lightbox-error">照片加载失败，请关闭后重试；仍可继续浏览其他照片。</p> :
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={photo.url} className="t-lightbox-img" src={photo.url} alt={photo.caption} onError={() => setFailedUrl(photo.url)} />)}
       </div>
+      {photos.length > 1 && <button type="button" className="t-lightbox-nav" aria-label="下一张" onClick={() => navigate(1)}>›</button>}
     </div>
-  );
+  </dialog>;
 }

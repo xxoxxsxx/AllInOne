@@ -414,6 +414,7 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
     const pushPlace = (dayTitle: string | null, p: Place) => {
       p.photos.forEach((ph, i) => {
         list.push({
+          id: ph.id,
           url: `/api/travel/photos/${ph.file}`,
           caption: `${p.name}${dayTitle ? ` · ${dayTitle}` : ""}${p.photos.length > 1 ? ` · ${i + 1}/${p.photos.length}` : ""}`,
         });
@@ -423,23 +424,17 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
     trip.loose.forEach((p) => pushPlace(null, p));
     return list;
   }, [trip]);
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const openPhoto = (placeId: number, photoIndex: number) => {
-    // 全局列表与渲染顺序一致：天 → 地点 → 照片；直接按 key 定位全局下标。
-    const orderedIds: Array<{ placeId: number; file: string }> = [];
-    trip.days.forEach((day) => day.places.forEach((p) => p.photos.forEach((ph) => orderedIds.push({ placeId: p.id, file: ph.file }))));
-    trip.loose.forEach((p) => p.photos.forEach((ph) => orderedIds.push({ placeId: p.id, file: ph.file })));
-    let seen = -1;
-    for (let i = 0; i < orderedIds.length; i += 1) {
-      if (orderedIds[i].placeId === placeId) {
-        seen += 1;
-        if (seen === photoIndex) {
-          setLightboxIndex(i);
-          return;
-        }
-      }
-    }
+  const [lightboxPhotoId, setLightboxPhotoId] = useState<number | null>(null);
+  const openPhoto = (photoId: number) => {
+    if (allPhotos.some(photo => photo.id === photoId)) setLightboxPhotoId(photoId);
   };
+  // If an in-flight RSC update removes the active photo, close the viewer rather
+  // than silently showing the next item at its old index.
+  useEffect(() => {
+    if (lightboxPhotoId !== null && !allPhotos.some(photo => photo.id === lightboxPhotoId)) {
+      setLightboxPhotoId(null);
+    }
+  }, [allPhotos, lightboxPhotoId]);
 
   return (
     <main className="travel-page travel-detail">
@@ -494,7 +489,7 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
                 </div>
                 <div className="trip-head-actions">
                   {allPhotos.length > 0 ? (
-                    <button className="btn btn-ghost btn-sm" onClick={() => setLightboxIndex(0)} title="浏览行程内全部照片">
+                    <button className="btn btn-ghost btn-sm" onClick={() => setLightboxPhotoId(allPhotos[0].id)} title="浏览行程内全部照片">
                       📷 全部照片 {allPhotos.length}
                     </button>
                   ) : null}
@@ -668,7 +663,7 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
             document.querySelector(".travel-map-pane")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
           }}
           onMoveToDay={(placeId, dayId) => run(() => movePlaceAction(placeId, dayId))}
-          onOpenPhoto={(placeId, photoIndex) => openPhoto(placeId, photoIndex)}
+          onOpenPhoto={openPhoto}
           startUpload={async (placeId, files) => {
             const fd = new FormData();
             for (const f of files) fd.append("files", f);
@@ -683,12 +678,12 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
           }}
         />
       ) : null}
-      {lightboxIndex !== null && allPhotos.length > 0 ? (
+      {lightboxPhotoId !== null && allPhotos.some(photo => photo.id === lightboxPhotoId) ? (
         <PhotoLightbox
           photos={allPhotos}
-          index={Math.min(lightboxIndex, allPhotos.length - 1)}
-          onClose={() => setLightboxIndex(null)}
-          onNavigate={setLightboxIndex}
+          photoId={lightboxPhotoId}
+          onClose={() => setLightboxPhotoId(null)}
+          onNavigate={setLightboxPhotoId}
         />
       ) : null}
     </main>
@@ -752,7 +747,7 @@ function PlaceEditor({
   onClose: () => void;
   onPicking: (placeId: number) => void;
   onMoveToDay: (placeId: number, dayId: number | null) => void;
-  onOpenPhoto: (placeId: number, photoIndex: number) => void;
+  onOpenPhoto: (photoId: number) => void;
   startUpload: (placeId: number, files: File[]) => Promise<{ ok: boolean; count?: number; error?: string }>;
 }) {
   const isAdd = editor.mode === "add";
@@ -1020,7 +1015,7 @@ function PlaceEditor({
                         className="t-photo-view"
                         title="查看大图"
                         aria-label={`查看大图：${place.name} 第 ${place.photos.indexOf(ph) + 1} 张`}
-                        onClick={() => onOpenPhoto(place.id, place.photos.indexOf(ph))}
+                        onClick={() => onOpenPhoto(ph.id)}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={`/api/travel/photos/${ph.file}`} alt="" loading="lazy" />
