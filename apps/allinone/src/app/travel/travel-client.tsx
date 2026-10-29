@@ -536,6 +536,7 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
           <PlaceSearch
             trip={trip}
             configured={searchConfigured}
+            onSourceChange={source => setTile(source === "global" ? "esri" : "amap")}
             onLocate={(place) => {
               const map = mapRef.current;
               if (!map || place.lat === null || place.lng === null) return;
