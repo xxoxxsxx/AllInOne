@@ -10,6 +10,7 @@ import { redirect } from "next/navigation";
 import {
   addLink,
   addPlace,
+  batchAddPlaces,
   addDay as appendDay,
   createTrip,
   deleteDay,
@@ -139,6 +140,16 @@ export async function addPlaceAction(tripId: number, dayId: number | null, name:
     const id = addPlace(getTravelDB(), tripId, dayId, name, patch);
     revalidateTrip(tripId);
     return { ok: true, id };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function batchAddPlacesAction(tripId: number, dayId: number | null, rawText: string): Promise<{ ok: boolean; count?: number; error?: string }> {
+  try {
+    const ids = batchAddPlaces(getTravelDB(), tripId, dayId, rawText);
+    revalidateTrip(tripId);
+    return { ok: true, count: ids.length };
   } catch (e) {
     return fail(e);
   }

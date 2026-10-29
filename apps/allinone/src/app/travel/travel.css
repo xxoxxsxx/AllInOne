@@ -469,9 +469,25 @@ textarea.input {
 }
 .trip-head-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 8px;
-  flex-shrink: 0;
+}
+.travel-detail .trip-head {
+  flex-wrap: wrap;
+}
+.t-day-date {
+  margin: 0;
+  padding: 10px 16px 2px;
+  color: var(--day-color, var(--accent));
+  font-size: 14px;
+  font-weight: 500;
+}
+.t-day-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px 14px;
 }
 .trip-delete {
   display: inline-flex;

@@ -14,6 +14,9 @@ import "leaflet/dist/leaflet.css";
 import type { Place, Trip } from "@/lib/travel/db";
 import { storageToTile, tileToStorage, type TileId } from "@/lib/travel/coordinates";
 import { platformById } from "@/lib/travel/platforms";
+import { dayDateLabel } from "@/lib/travel/planning";
+import { BatchPlacesButton } from "./batch-places";
+import { TravelExportButton } from "./export-trip";
 
 import {
   addDayAction,
@@ -456,6 +459,7 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
                   {trip.description ? <p className="trip-head-desc">{trip.description}</p> : null}
                 </div>
                 <div className="trip-head-actions">
+                  <TravelExportButton trip={trip} />
                   <button className="btn btn-ghost btn-sm" onClick={() => setEditingHeader(true)}>编辑信息</button>
                   <form
                     className="trip-delete"
@@ -507,6 +511,7 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
                   </button>
                 </span>
               </header>
+              {trip.startDate ? <p className="t-day-date">{dayDateLabel(trip.startDate, di)}</p> : null}
               <ol className="t-places">
                 {day.places.map((p, pi) => (
                   <li
@@ -567,7 +572,10 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
                 ))}
                 {day.places.length === 0 ? <li className="t-place-empty">这一天还没有安排，点下面添加地点。</li> : null}
               </ol>
-              <button className="btn btn-ghost btn-sm t-day-add" onClick={() => setEditor({ mode: "add", dayId: day.id })}>＋ 添加地点</button>
+              <div className="t-day-add-actions">
+                <button className="btn btn-ghost btn-sm" onClick={() => setEditor({ mode: "add", dayId: day.id })}>＋ 添加地点</button>
+                <BatchPlacesButton tripId={trip.id} dayId={day.id} dayTitle={day.title} />
+              </div>
             </section>
           ))}
 

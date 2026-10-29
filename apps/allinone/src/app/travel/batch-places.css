@@ -1,0 +1,22 @@
+.travel-batch { display: inline-block; }
+.travel-batch-open, .travel-batch-dialog button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); cursor: pointer; font-size: 14px; }
+.travel-batch-open:hover { border-color: var(--accent); color: var(--accent); }
+.travel-batch-dialog { margin: auto; padding: 24px; width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); overflow-y: auto; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--text); }
+.travel-batch-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.travel-batch-dialog header, .travel-batch-dialog footer { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.travel-batch-dialog header { margin-bottom: 16px; }
+.travel-batch-dialog h2 { font-size: 20px; overflow-wrap: anywhere; }
+.travel-batch-dialog header button { flex-shrink: 0; font-size: 22px; }
+.travel-batch-label { display: grid; gap: 8px; font-size: 15px; }
+.travel-batch-label textarea { width: 100%; min-height: 160px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); resize: vertical; font-size: 16px; line-height: 1.7; }
+.travel-batch-label textarea:focus-visible, .travel-batch-dialog button:focus-visible, .travel-batch-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.travel-batch-dialog p { margin: 10px 0; font-size: 13px; color: var(--text-2); }
+.travel-batch-dialog .travel-batch-error { color: var(--danger); }
+.travel-batch-preview { margin: 16px 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.travel-batch-preview h3 { font-size: 14px; font-weight: 600; }
+.travel-batch-preview ol { max-height: 180px; overflow-y: auto; list-style: decimal; padding-left: 28px; margin-top: 8px; }
+.travel-batch-preview li { padding: 3px 0; overflow-wrap: anywhere; }
+.travel-batch-dialog footer { justify-content: flex-end; flex-wrap: wrap; }
+.travel-batch-dialog .travel-batch-confirm { background: var(--accent); border-color: var(--accent); color: white; }
+.travel-batch-dialog button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 480px) { .travel-batch-dialog { padding: 16px; } }

@@ -9,6 +9,7 @@ import path from "node:path";
 
 import { dataDir } from "@/lib/data-dir";
 import { detectPlatform } from "./platforms";
+import { parsePlaceLines } from "./planning";
 
 export const TRAVEL_SCHEMA_VERSION = 1;
 
@@ -435,6 +436,22 @@ export function addPlace(db: Database.Database, tripId: number, dayId: number | 
   updatePlace(db, id, { ...patch, name: n });
   return id;
   })();
+}
+
+/** Validate the whole batch before writing; nested addPlace transactions use savepoints. */
+export function batchAddPlaces(db: Database.Database, tripId: number, dayId: number | null, rawText: string): number[] {
+  const names = parsePlaceLines(rawText);
+  if (names.length === 0) throw new Error("请至少输入一个地点名称");
+  if (!Number.isSafeInteger(tripId) || tripId <= 0 ||
+      (dayId !== null && (!Number.isSafeInteger(dayId) || dayId <= 0))) throw new Error("行程或天参数无效");
+  return db.transaction(() => {
+    if (!db.prepare(`SELECT id FROM trips WHERE id=?`).get(tripId)) throw new Error("行程不存在");
+    if (dayId !== null) {
+      const day = db.prepare(`SELECT trip_id FROM trip_days WHERE id=?`).get(dayId) as { trip_id: number } | undefined;
+      if (!day || day.trip_id !== tripId) throw new Error("目标天不属于该行程");
+    }
+    return names.map((name) => addPlace(db, tripId, dayId, name));
+  }).immediate();
 }
 
 export function updatePlace(db: Database.Database, placeId: number, patch: PlacePatch): void {
