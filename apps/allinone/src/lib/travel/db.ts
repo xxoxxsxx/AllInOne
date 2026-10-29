@@ -11,7 +11,7 @@ import { dataDir } from "@/lib/data-dir";
 import { detectPlatform } from "./platforms";
 import { parsePlaceLines } from "./planning";
 
-export const TRAVEL_SCHEMA_VERSION = 2;
+export const TRAVEL_SCHEMA_VERSION = 3;
 
 export type PlaceLink = {
   id: number;
@@ -46,6 +46,12 @@ export type TripDay = {
   places: Place[];
 };
 
+export type RouteStyle = {
+  fromPlaceId: number;
+  toPlaceId: number;
+  color: string;
+};
+
 export type Trip = {
   id: number;
   title: string;
@@ -54,6 +60,7 @@ export type Trip = {
   days: TripDay[];
   loose: Place[]; // 未分配到天的地点
   transports: TransportLeg[]; // 相邻景点间的交通方案（全行程平铺）
+  routeStyles: RouteStyle[]; // 连线自定义颜色（按有向地点对）
   updatedAt: string;
 };
 
@@ -186,6 +193,18 @@ function migrate(db: Database.Database): void {
       CREATE INDEX idx_place_transports_pair ON place_transports(from_place_id, to_place_id);
     `);
   }
+  if (version < 3) {
+    // v3：连线自定义颜色（按有向地点对；PK 天然去重，删地点级联清理）。
+    db.exec(`
+      CREATE TABLE route_styles (
+        trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+        from_place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+        to_place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+        color TEXT NOT NULL,
+        PRIMARY KEY (trip_id, from_place_id, to_place_id)
+      );
+    `);
+  }
   db.pragma(`user_version = ${TRAVEL_SCHEMA_VERSION}`);
 }
 
@@ -306,6 +325,7 @@ export function getTrip(db: Database.Database, tripId: number): Trip | null {
     days,
     loose,
     transports: listTransports(db, tripId),
+    routeStyles: listRouteStyles(db, tripId),
     updatedAt: trip.updated_at,
   };
 }
@@ -775,4 +795,46 @@ export function transportSegments(db: Database.Database, tripId: number): Array<
     }
   }
   return pairs;
+}
+
+// —— 连线颜色（按有向地点对；空色值=重置为默认天色） ——
+
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/;
+
+export function normalizeHexColor(raw: string): string {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (!HEX_COLOR_RE.test(value)) throw new Error("颜色格式应为 #RRGGBB");
+  return value;
+}
+
+function listRouteStyles(db: Database.Database, tripId: number): RouteStyle[] {
+  const rows = db.prepare(
+    `SELECT from_place_id,to_place_id,color FROM route_styles WHERE trip_id=?`,
+  ).all(tripId) as Array<{ from_place_id: number; to_place_id: number; color: string }>;
+  return rows.map((r) => ({ fromPlaceId: r.from_place_id, toPlaceId: r.to_place_id, color: r.color }));
+}
+
+/** color 为空串时删除该对的样式（恢复默认天色）；否则严格校验 #RRGGBB 后写入。 */
+export function setRouteColor(db: Database.Database, tripId: number, fromPlaceId: number, toPlaceId: number, color: string): void {
+  if (!Number.isSafeInteger(fromPlaceId) || !Number.isSafeInteger(toPlaceId)) throw new Error("参数无效");
+  if (fromPlaceId === toPlaceId) throw new Error("起点和终点不能是同一个地点");
+  const trimmed = String(color ?? "").trim();
+  if (trimmed === "") {
+    db.prepare(`DELETE FROM route_styles WHERE trip_id=? AND from_place_id=? AND to_place_id=?`)
+      .run(tripId, fromPlaceId, toPlaceId);
+    touchTrip(db, tripId);
+    return;
+  }
+  const normalized = normalizeHexColor(trimmed);
+  const places = db.prepare(`SELECT id FROM places WHERE trip_id=? AND id IN (?,?)`)
+    .all(tripId, fromPlaceId, toPlaceId) as Array<{ id: number }>;
+  if (places.length !== 2) throw new Error("地点不属于该行程");
+  const save = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO route_styles(trip_id,from_place_id,to_place_id,color) VALUES(?,?,?,?)
+       ON CONFLICT(trip_id,from_place_id,to_place_id) DO UPDATE SET color=excluded.color`,
+    ).run(tripId, fromPlaceId, toPlaceId, normalized);
+    touchTrip(db, tripId);
+  });
+  save();
 }

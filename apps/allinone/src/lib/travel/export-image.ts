@@ -1,6 +1,7 @@
 import type { Trip } from "./db";
 import { dayDateLabel } from "./planning";
 import { gcj02ToWgs84 } from "./coordinates";
+import { adjacentRoutePairs, arrowGeometry, routeColor } from "./routes";
 
 export const EXPORT_WIDTH = 1080;
 export const EXPORT_MAX_HEIGHT = 12000;
@@ -10,7 +11,8 @@ const CONTENT = EXPORT_WIDTH - PAD * 2;
 export type TextBlock = { kind: "text"; text: string; size: number; color: string; height: number };
 export type PhotoBlock = { kind: "photos"; files: string[]; height: number };
 export type MapPoint = { label: string; lat: number; lng: number; group: number };
-export type MapBlock = { kind: "map"; points: MapPoint[]; height: number };
+export type MapEdge = { fromIndex: number; toIndex: number; color: string };
+export type MapBlock = { kind: "map"; points: MapPoint[]; edges: MapEdge[]; height: number };
 export type ExportBlock = TextBlock | PhotoBlock | MapBlock;
 export type ExportPage = { blocks: ExportBlock[]; height: number };
 
@@ -78,10 +80,20 @@ export function layoutTrip(trip: Trip, measure: (text: string, size: number) => 
   const numbered = groups.map((g, group) => ({ ...g, places: g.places.map(p => ({ ...p, label: String(++seq), group })) }));
   const all = numbered.flatMap(g => g.places);
   if (all.length > 1000) throw new Error("地点超过 1000 个，请拆分行程后导出");
-  const points: MapPoint[] = all.filter(p => p.lat !== null && p.lng !== null && Number.isFinite(p.lat) && Number.isFinite(p.lng)).map(p => ({ ...gcj02ToWgs84({ lat: p.lat!, lng: p.lng! }), label: p.label, group: p.group }));
+  const locatedPlaces = all.filter(p => p.lat !== null && p.lng !== null && Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  const indexOfPlace = new Map(locatedPlaces.map((p, index) => [p.id, index]));
+  const points: MapPoint[] = locatedPlaces.map(p => ({ ...gcj02ToWgs84({ lat: p.lat!, lng: p.lng! }), label: p.label, group: p.group }));
+  // 真实相邻（同天内、两端已定位）才连线；待安排与跨天不连。边带全局下标与颜色。
+  const edges: MapEdge[] = adjacentRoutePairs(trip)
+    .map(({ from, to, dayIndex }) => {
+      const fromIndex = indexOfPlace.get(from.id), toIndex = indexOfPlace.get(to.id);
+      if (fromIndex === undefined || toIndex === undefined) return null;
+      return { fromIndex, toIndex, color: routeColor(trip, from.id, to.id, dayIndex) };
+    })
+    .filter((edge): edge is MapEdge => edge !== null);
   gap(); text("地点分布示意 · 非道路路线", 30, "#0f766e");
   text(`已标注 ${points.length} 个地点 · 未标注 ${all.length - points.length} 个地点`, 24);
-  if (points.length) blocks.push({ kind: "map", points, height: 500 });
+  if (points.length) blocks.push({ kind: "map", points, edges, height: 500 });
   else text("暂无坐标，以下保留完整行程内容。", 26);
   numbered.forEach((g, i) => {
     if (i === numbered.length - 1 && !g.places.length) return;
@@ -177,13 +189,22 @@ export async function renderTripImages(
         } else if (block.kind === "map") {
           ctx.fillStyle = "#f1f5f9"; ctx.fillRect(PAD, y, CONTENT, block.height - 16);
           const projected = projectPoints(block.points, CONTENT, block.height - 16);
-          ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 3; ctx.setLineDash([9, 9]);
-          for (let i = 1; i < projected.length; i++) {
-            const a = projected[i - 1], b = projected[i];
-            if (a.group !== b.group || b.group === trip.days.length) continue;
+          // 仅真实相邻段连线（带各自颜色与箭头）；跨天/跳过未定位的段不画。
+          for (const edge of block.edges) {
+            const a = projected[edge.fromIndex], b = projected[edge.toIndex];
+            if (!a || !b) continue;
+            ctx.strokeStyle = edge.color; ctx.lineWidth = 3.5;
             ctx.beginPath(); ctx.moveTo(PAD + a.x, y + a.y); ctx.lineTo(PAD + b.x, y + b.y); ctx.stroke();
+            const arrow = arrowGeometry({ x: PAD + a.x, y: y + a.y }, { x: PAD + b.x, y: y + b.y }, 12);
+            if (arrow) {
+              ctx.fillStyle = edge.color;
+              ctx.beginPath();
+              ctx.moveTo(PAD + arrow[0].x, y + arrow[0].y);
+              ctx.lineTo(PAD + arrow[1].x, y + arrow[1].y);
+              ctx.lineTo(PAD + arrow[2].x, y + arrow[2].y);
+              ctx.closePath(); ctx.fill();
+            }
           }
-          ctx.setLineDash([]);
           for (const p of projected) {
             ctx.fillStyle = p.group === trip.days.length ? "#64748b" : "#0f766e";
             ctx.beginPath(); ctx.arc(PAD + p.x, y + p.y, 23, 0, Math.PI * 2); ctx.fill();

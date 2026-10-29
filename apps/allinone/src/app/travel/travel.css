@@ -1167,3 +1167,44 @@ textarea.input {
 .travel-map .t-seg-label::before {
   display: none;
 }
+
+/* 连线颜色选择 */
+.t-route-colors {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.t-route-swatches {
+  display: inline-flex;
+  gap: 6px;
+}
+.t-route-swatches button {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  padding: 0;
+}
+.t-route-swatches button[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.t-route-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.t-route-custom input[type="color"] {
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}

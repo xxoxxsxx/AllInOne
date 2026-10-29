@@ -15,10 +15,12 @@ import type { Place, TransportLeg, Trip } from "@/lib/travel/db";
 import { storageToTile, tileToStorage, type TileId } from "@/lib/travel/coordinates";
 import { platformById } from "@/lib/travel/platforms";
 import { dayDateLabel } from "@/lib/travel/planning";
+import { DAY_COLORS, adjacentRoutePairs, routeColor, arrowGeometry } from "@/lib/travel/routes";
 import { PhotoLightbox, type LightboxPhoto } from "./photo-lightbox";
 import { BatchPlacesButton } from "./batch-places";
 import { TravelExportButton } from "./export-trip";
 import {
+  setRouteColorAction,
   addTransportAction,
   deleteTransportAction,
   setPreferredTransportAction,
@@ -48,7 +50,6 @@ type Editor =
   | { mode: "edit"; placeId: number }
   | null;
 
-const DAY_COLORS = ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a813"];
 const LOOSE_COLOR = "#5b6673";
 const MAX_PHOTOS_PER_PLACE = 9;
 const MAX_PHOTO_BYTES = 30 * 1024 * 1024; // 30MB/张（压缩前）
@@ -335,28 +336,38 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
       });
       group.addLayer(marker);
     }
-    // 逐段画线：有交通方案的段实线 + 中点标注首选方案；无方案保持浅虚线。
-    for (let i = 1; i < routeCoords.length; i += 1) {
-      const a = routeCoords[i - 1], b = routeCoords[i];
-      const va = toView(a), vb = toView(b);
-      const key = `${a.placeId}-${b.placeId}`;
-      const options = segmentOptions.get(key) ?? [];
+    // 只连接同一天真实相邻且都有坐标的地点；不跨天，也不跳过未标注点。
+    const arrows: Array<() => void> = [];
+    for (const { from, to, dayIndex } of adjacentRoutePairs(trip)) {
+      if (from.lat === null || from.lng === null || to.lat === null || to.lng === null) continue;
+      const va = toView({ lat: from.lat, lng: from.lng }), vb = toView({ lat: to.lat, lng: to.lng });
+      const color = routeColor(trip, from.id, to.id, dayIndex);
+      const options = segmentOptions.get(`${from.id}-${to.id}`) ?? [];
       const pref = options.find((o) => o.preferred) ?? options[0] ?? null;
-      L.polyline(
-        [[va.lat, va.lng], [vb.lat, vb.lng]] as [number, number][],
-        pref
-          ? { color: a.color, weight: 3, opacity: 0.85 }
-          : { color: "#2563eb", weight: 2, opacity: 0.65, dashArray: "6 8" },
-      ).addTo(group);
-      if (pref) {
-        L.tooltip({
-          permanent: true,
-          direction: "top",
-          className: "t-seg-label",
-          content: `🚇 ${pref.mode}${pref.duration ? ` · ${pref.duration}` : ""}${pref.cost ? ` · ¥${pref.cost}` : ""}`,
-        }).setLatLng([(va.lat + vb.lat) / 2, (va.lng + vb.lng) / 2]).addTo(group);
-      }
+      const line = L.polyline([[va.lat, va.lng], [vb.lat, vb.lng]], {
+        color, weight: pref ? 3 : 2.5, opacity: 0.85,
+        ...(pref ? {} : { dashArray: "6 8" }), className: "t-route-line",
+      }).addTo(group);
+      // 图层坐标计算箭头，缩放后仍保持固定像素大小，方向始终从起点指向终点。
+      const arrow = L.polyline([], { color, weight: 4, opacity: 1, interactive: false,
+        lineCap: "round", lineJoin: "round", className: "t-route-arrow" }).addTo(group);
+      const updateArrow = () => {
+        const a = map.latLngToLayerPoint([va.lat, va.lng]);
+        const b = map.latLngToLayerPoint([vb.lat, vb.lng]);
+        const shape = arrowGeometry(a, b, 12);
+        arrow.setLatLngs(shape ? shape.map(p => map.layerPointToLatLng(L.point(p.x, p.y))) : []);
+      };
+      updateArrow(); arrows.push(updateArrow);
+      // 使用文本节点，避免交通方式中的 HTML 被 Leaflet 当作 HTML 执行。
+      const label = document.createElement("span");
+      label.textContent = pref ? transportSummary(pref) : `${from.name} → ${to.name}`;
+      label.style.borderColor = color;
+      line.bindTooltip(label, { permanent: !!pref, direction: "top", className: "t-seg-label" });
     }
+    const refreshArrows = () => arrows.forEach(update => update());
+    map.on("zoomend", refreshArrows);
+    return () => { map.off("zoomend", refreshArrows); };
+
   }, [trip, tile, mapReady, editor, picking, routeCoords, looseCoords, segmentOptions]);
 
   const fitAll = () => {
@@ -641,6 +652,8 @@ export function TravelClient({ trip: initialTrip }: { trip: Trip }) {
                       return (
                         <li className="t-transport-li">
                           <TransportRow
+                            key={key}
+                            color={routeColor(trip, p.id, nextPlace.id, di)}
                             tripId={trip.id}
                             fromId={p.id}
                             toId={nextPlace.id}
@@ -1140,6 +1153,7 @@ function transportSummary(o: TransportLeg): string {
 }
 
 function TransportRow({
+  color,
   tripId,
   fromId,
   toId,
@@ -1147,6 +1161,7 @@ function TransportRow({
   toName,
   options,
 }: {
+  color: string;
   tripId: number;
   fromId: number;
   toId: number;
@@ -1188,7 +1203,7 @@ function TransportRow({
         aria-expanded={open}
         title="编辑这段的交通方案"
       >
-        <span className="t-transport-line" aria-hidden>↓</span>
+        <span className="t-transport-line" style={{ color }} aria-hidden>↓</span>
         {preferred ? (
           <span className="t-transport-summary">
             {transportSummary(preferred)}
@@ -1202,6 +1217,7 @@ function TransportRow({
       {open ? (
         <div className="t-transport-panel">
           <p className="t-transport-title">{fromName} → {toName}</p>
+          <RouteColorControl tripId={tripId} fromId={fromId} toId={toId} color={color} />
           {err ? <p className="t-transport-error" role="alert">{err}</p> : null}
           <ul className="t-transport-options">
             {options.map((o) => (
@@ -1346,4 +1362,41 @@ function TransportAddRow({
       </button>
     </div>
   );
+}
+
+
+function RouteColorControl({ tripId, fromId, toId, color }: {
+  tripId: number; fromId: number; toId: number; color: string;
+}) {
+  const [draft, setDraft] = useState(color);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const lock = useRef(false);
+  useEffect(() => setDraft(color), [color]);
+  const save = async (value: string) => {
+    if (lock.current) return;
+    lock.current = true; setSaving(true); setError("");
+    try {
+      const result = await setRouteColorAction(tripId, fromId, toId, value);
+      if (!result.ok) setError(result.error || "颜色保存失败");
+    } catch { setError("请求失败，请重试"); }
+    finally { lock.current = false; setSaving(false); }
+  };
+  return <div className="t-route-colors">
+    <span>连线颜色</span>
+    <div className="t-route-swatches" role="group" aria-label="连线预设颜色">
+      {DAY_COLORS.map(value => <button key={value} type="button" aria-label={`连线颜色 ${value}`}
+        aria-pressed={color === value} disabled={saving} style={{ backgroundColor: value }}
+        onClick={() => void save(value)} />)}
+    </div>
+    <label className="t-route-custom">自定义
+      <input type="color" aria-label="自定义连线颜色" value={draft} disabled={saving}
+        onChange={event => setDraft(event.target.value)} />
+    </label>
+    <button type="button" className="btn btn-ghost btn-sm" disabled={saving || draft === color}
+      onClick={() => void save(draft)}>{saving ? "保存中…" : "应用颜色"}</button>
+    <button type="button" className="btn btn-ghost btn-sm" disabled={saving}
+      onClick={() => void save("")}>恢复当天颜色</button>
+    {error && <p role="alert" className="t-transport-error">{error}</p>}
+  </div>;
 }

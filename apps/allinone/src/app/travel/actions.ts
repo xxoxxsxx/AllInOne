@@ -30,6 +30,7 @@ import {
   deleteTransport,
   setPreferredTransport,
   updateTransport,
+  setRouteColor,
   type TransportInput,
   type PlacePatch,
 } from "@/lib/travel/db";
@@ -277,6 +278,19 @@ export async function deleteTransportAction(transportId: number): Promise<{ ok: 
     const tripId = db.prepare(`SELECT trip_id FROM place_transports WHERE id=?`).get(transportId) as { trip_id: number } | undefined;
     deleteTransport(db, transportId);
     if (tripId) revalidateTrip(tripId.trip_id);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// —— 连线颜色 ——
+
+/** color 为空串表示恢复默认天色。 */
+export async function setRouteColorAction(tripId: number, fromId: number, toId: number, color: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    setRouteColor(getTravelDB(), tripId, fromId, toId, color);
+    revalidateTrip(tripId);
     return { ok: true };
   } catch (e) {
     return fail(e);
