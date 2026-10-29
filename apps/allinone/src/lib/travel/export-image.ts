@@ -102,11 +102,22 @@ export function layoutTrip(trip: Trip, measure: (text: string, size: number) => 
 }
 
 export type ExportedImage = { blob: Blob; name: string; width: number; height: number };
+
+/** 用户关闭面板 / 组件卸载触发的取消；调用方按 name 静默处理，不当作失败。 */
+export class ExportAbortedError extends Error {
+  constructor() {
+    super("导出已取消");
+    this.name = "ExportAbortedError";
+  }
+}
+
 function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("PNG 生成失败，可能超出设备内存限制")), "image/png"));
 }
-async function loadPhoto(file: string): Promise<ImageBitmap> {
+async function loadPhoto(file: string, signal?: AbortSignal): Promise<ImageBitmap> {
   const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  signal?.addEventListener("abort", onAbort, { once: true });
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
     const response = await fetch(`/api/travel/photos/${encodeURIComponent(file)}`, { signal: controller.signal });
@@ -114,11 +125,20 @@ async function loadPhoto(file: string): Promise<ImageBitmap> {
     const blob = await response.blob();
     if (blob.size > 8 * 1024 * 1024) throw new Error("照片过大");
     return await createImageBitmap(blob, { resizeWidth: 480, resizeQuality: "high" });
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
 }
 
-/** Only one page canvas and one decoded photograph are live at a time. */
-export async function renderTripImages(trip: Trip, onProgress: (done: number, total: number) => void): Promise<{ images: ExportedImage[]; warnings: string[] }> {
+/** Only one page canvas and one decoded photograph are live at a time.
+ *  signal 中止后：照片 fetch 立即失败，页面边界快速退出并抛 ExportAbortedError，
+ *  不再继续消耗解码与 toBlob 资源（已完成页随异常一并丢弃）。 */
+export async function renderTripImages(
+  trip: Trip,
+  onProgress: (done: number, total: number) => void,
+  signal?: AbortSignal,
+): Promise<{ images: ExportedImage[]; warnings: string[] }> {
   const canvas = document.createElement("canvas");
   canvas.width = EXPORT_WIDTH; canvas.height = 1;
   const ctx = canvas.getContext("2d");
@@ -129,6 +149,7 @@ export async function renderTripImages(trip: Trip, onProgress: (done: number, to
   let totalBytes = 0;
   try {
     for (let index = 0; index < pages.length; index++) {
+      if (signal?.aborted) throw new ExportAbortedError();
       const page = pages[index]; canvas.height = page.height;
       ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.textBaseline = "top";
@@ -155,14 +176,16 @@ export async function renderTripImages(trip: Trip, onProgress: (done: number, to
         } else {
           const width = (CONTENT - 24 * (block.files.length - 1)) / block.files.length;
           for (let i = 0; i < block.files.length; i++) {
+            if (signal?.aborted) throw new ExportAbortedError();
             const x = PAD + i * (width + 24), h = block.height - 18;
             ctx.fillStyle = "#f1f5f9"; ctx.fillRect(x, y, width, h);
             let bitmap: ImageBitmap | undefined;
             try {
-              bitmap = await loadPhoto(block.files[i]);
+              bitmap = await loadPhoto(block.files[i], signal);
               const scale = Math.min(width / bitmap.width, h / bitmap.height);
               ctx.drawImage(bitmap, x + (width - bitmap.width * scale) / 2, y + (h - bitmap.height * scale) / 2, bitmap.width * scale, bitmap.height * scale);
-            } catch {
+            } catch (e) {
+              if (signal?.aborted || e instanceof ExportAbortedError) throw new ExportAbortedError();
               warnings.push(`照片加载失败：${block.files[i]}`);
               ctx.font = font(22); ctx.fillStyle = "#b45309"; ctx.fillText("照片加载失败", x + 14, y + 30);
             } finally { bitmap?.close(); }

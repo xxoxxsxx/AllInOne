@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { layoutTrip, paginateBlocks, projectPoints, wrapText, type ExportBlock } from "../src/lib/travel/export-image.ts";
+import { ExportAbortedError, layoutTrip, paginateBlocks, projectPoints, wrapText, type ExportBlock } from "../src/lib/travel/export-image.ts";
 import type { Trip, Place } from "../src/lib/travel/db.ts";
 const measure = (s: string, size = 10) => Array.from(s).length * size;
 const place = (id: number): Place => ({ id, tripId: 1, dayId: 1, name: `地点${id}`, lat: 22.3, lng: 114.2, address: "地址", timeLabel: "上午", cost: "100", note: "完整备注\n第二行", links: [{ id: 1, title: "攻略链接", url: "https://example.com/攻略", platform: "link" }], photos: [1, 2, 3, 4].map(n => ({ id: n, file: `image${n}.png` })) });
@@ -49,4 +49,41 @@ test("projection handles singleton, duplicate coordinates, poles and date line",
   const [single] = projectPoints([{ label: "1", lat: 0, lng: 0, group: 0 }], 968, 484);
   assert.equal(single.x, 484); assert.equal(single.y, 242);
   assert.deepEqual(projectPoints([], 968, 484), []);
+});
+
+test("empty trip renders one page and never shows the 待安排 group", () => {
+  const empty: Trip = { id: 1, title: "空行程", description: "", startDate: "", days: [], loose: [], updatedAt: "" };
+  const pages = layoutTrip(empty, measure);
+  assert.equal(pages.length, 1);
+  const text = pages.flatMap(p => p.blocks).filter(b => b.kind === "text").map(b => b.text).join("\n");
+  assert.ok(text.includes("空行程"));
+  assert.ok(!text.includes("待安排"));
+});
+
+test("loose-only trip keeps its places under the 待安排 group", () => {
+  const looseOnly: Trip = { id: 1, title: "只有待安排", description: "", startDate: "", days: [], loose: [{ ...place(9), dayId: null }], updatedAt: "" };
+  const pages = layoutTrip(looseOnly, measure);
+  const text = pages.flatMap(p => p.blocks).filter(b => b.kind === "text").map(b => b.text).join("\n");
+  assert.ok(text.includes("待安排"));
+  assert.ok(text.includes("1. 地点9"));
+  const map = pages.flatMap(p => p.blocks).find(b => b.kind === "map");
+  assert.equal(map?.points.length, 1);
+});
+
+test("huge note with 4 photos stays complete, photos capped at 3", () => {
+  const big: Trip = { id: 1, title: "大备注", description: "", startDate: "", updatedAt: "", days: [{ id: 1, title: "Day 1", places: [{ id: 1, tripId: 1, dayId: 1, name: "长备注", lat: 31.2, lng: 121.4, address: "", timeLabel: "", cost: "", note: "好".repeat(2000), links: [{ id: 1, url: "https://x.example/a", platform: "link", title: "l" }], photos: [1, 2, 3, 4].map(n => ({ id: n, file: `a${n}.jpg` })) }] }], loose: [] };
+  const pages = layoutTrip(big, measure);
+  const blocks = pages.flatMap(p => p.blocks);
+  const text = blocks.filter(b => b.kind === "text").map(b => b.text).join("");
+  assert.ok(text.includes("好".repeat(2000)), "2000-char note fully preserved");
+  assert.ok(text.includes("另有 1 张照片未收录"));
+  const photos = blocks.filter(b => b.kind === "photos");
+  assert.equal(photos.length, 1);
+  assert.deepEqual(photos[0].kind === "photos" ? photos[0].files : [], ["a1.jpg", "a2.jpg", "a3.jpg"]);
+});
+
+test("ExportAbortedError is identifiable by name for silent cancellation", () => {
+  const e = new ExportAbortedError();
+  assert.equal(e.name, "ExportAbortedError");
+  assert.ok(e instanceof Error);
 });
