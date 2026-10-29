@@ -48,7 +48,7 @@
 }
 @media (min-width: 640px) {
   .travel-search-form {
-    grid-template-columns: 2fr 1fr auto;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
     align-items: end;
   }
 }
@@ -184,3 +184,11 @@
   font-size: 13px;
   color: var(--text-2);
 }
+
+/* 每个按钮直接指定服务，不再保留会被忽略的来源切换。 */
+.travel-search-buttons { display: flex; flex-wrap: wrap; gap: 8px; grid-column: 1 / -1; }
+.travel-search-buttons button { min-height: 40px; padding: 8px 18px; border: 1px solid var(--accent); border-radius: 10px; background: var(--surface); color: var(--accent); font-size: 14px; cursor: pointer; }
+.travel-search-buttons .travel-search-global { background: var(--accent); color: white; }
+.travel-search-buttons button:disabled { opacity: .5; cursor: not-allowed; }
+.travel-search-buttons button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.travel-search-form input { min-width: 0; width: 100%; }

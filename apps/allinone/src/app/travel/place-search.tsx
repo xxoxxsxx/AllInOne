@@ -18,7 +18,7 @@ export function PlaceSearch({ trip, configured, onLocate, onAdded, onSourceChang
 }) {
   const router = useRouter();
   const id = useId();
-  const [source, setSource] = useState<"amap" | "global">(configured ? "amap" : "global");
+  const [source, setSource] = useState<"amap" | "global" | null>(null);
   const [attribution, setAttribution] = useState("");
   const [query, setQuery] = useState("");
   const [city, setCity] = useState("");
@@ -53,18 +53,19 @@ export function PlaceSearch({ trip, configured, onLocate, onAdded, onSourceChang
     setLoading(false); setPlaces([]); setSearched(false); setError(""); setNotice("");
     if (kind === "query") setQuery(value); else setCity(value);
   };
-  const search = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if ((source === "amap" && !configured) || addLock.current) return;
+  const search = async (selectedSource: "amap" | "global") => {
+    if (loading || (selectedSource === "amap" && !configured) || addLock.current) return;
     const q = query.trim();
-    if (!q) { setError("请输入景点、店名或地址"); return; }
+    if (q.length < 2) { setError("请输入至少 2 个字符进行搜索"); return; }
+    setSource(selectedSource);
+    onSourceChange(selectedSource);
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
     const version = ++sequence.current;
     setLoading(true); setSearched(false); setPlaces([]); setError(""); setNotice("");
     try {
-      const params = new URLSearchParams({ q, source });
+      const params = new URLSearchParams({ q, source: selectedSource });
       if (city.trim()) params.set("city", city.trim());
       const response = await fetch(`/api/travel/search?${params}`, {
         signal: controller.signal, cache: "no-store", headers: { Accept: "application/json" },
@@ -100,34 +101,31 @@ export function PlaceSearch({ trip, configured, onLocate, onAdded, onSourceChang
     }
   };
 
-  const available = source === "global" || configured;
   return <section className="travel-search" aria-label="地点搜索">
     <div className="travel-search-heading"><h2>搜索地点</h2><Link href="/travel/settings">搜索设置</Link></div>
-    <div className="travel-search-sources" role="group" aria-label="地点搜索来源">
-      {(["amap", "global"] as const).map(value => <button key={value} type="button"
-        aria-pressed={source === value} disabled={addingId !== null}
-        onClick={() => {
-          sequence.current += 1; request.current?.abort();
-          setSource(value); setPlaces([]); setSearched(false); setError(""); setNotice(""); setLoading(false);
-          onSourceChange(value);
-        }}>{value === "amap" ? "高德（国内）" : "全球（国外地址）"}</button>)}
-    </div>
-    {!available && <div className="travel-search-unconfigured">
-      <span>国内搜索需要配置高德 Web 服务 Key；全球搜索无需 Key。</span>
+    {!configured && <div className="travel-search-unconfigured">
+      <span>全球搜索无需 Key；高德搜索需要先配置。</span>
       <Link href="/travel/settings">设置高德搜索 →</Link>
     </div>}
-    <form className="travel-search-form" onSubmit={search} aria-busy={loading}>
+    <form className="travel-search-form" onSubmit={event => { event.preventDefault(); }} aria-busy={loading}>
       <label htmlFor={`${id}-query`}>景点、店名或地址
-        <input id={`${id}-query`} value={query} maxLength={80} required disabled={!available || addingId !== null}
-          placeholder={source === "global" ? "例如：Eiffel Tower 或 5 Avenue Anatole France" : "例如：太平山顶、星光大道"} autoComplete="off" onChange={event => changeInput("query", event.target.value)} />
+        <input id={`${id}-query`} value={query} maxLength={80} required disabled={addingId !== null}
+          placeholder="例如：浅草寺、Senso-ji、太平山顶" autoComplete="off" onChange={event => changeInput("query", event.target.value)} />
       </label>
       <label htmlFor={`${id}-city`}>城市（可选）
-        <input id={`${id}-city`} value={city} maxLength={40} disabled={!available || addingId !== null}
-          placeholder={source === "global" ? "例如：Paris, France" : "例如：香港"} autoComplete="off" onChange={event => changeInput("city", event.target.value)} />
+        <input id={`${id}-city`} value={city} maxLength={40} disabled={addingId !== null}
+          placeholder="例如：東京、Tokyo、香港" autoComplete="off" onChange={event => changeInput("city", event.target.value)} />
       </label>
-      <button type="submit" disabled={!available || loading || addingId !== null || query.trim().length < 2}>{loading ? "搜索中…" : "搜索"}</button>
+      <div className="travel-search-buttons" role="group" aria-label="选择服务并搜索">
+        <button type="button" disabled={!configured || loading || addingId !== null || query.trim().length < 2}
+          title={configured ? "使用高德搜索国内地点" : "请先在搜索设置中配置高德 Key"}
+          onClick={() => void search("amap")}>{loading && source === "amap" ? "高德搜索中…" : "高德搜索"}</button>
+        <button type="button" className="travel-search-global" disabled={loading || addingId !== null || query.trim().length < 2}
+          onClick={() => void search("global")}>{loading && source === "global" ? "全球搜索中…" : "全球搜索"}</button>
+      </div>
     </form>
-    <p className="travel-search-hint">{source === "global" ? "全球搜索由 Photon / OpenStreetMap 提供，无需 Key；可用英文或当地语言并填写城市/国家，每秒最多一次。" : "国内搜索由高德地图提供。"} 选择候选地点后可定位，或加入指定天。</p>
+    <p className="travel-search-hint">国内地点点「高德搜索」，国外地址点「全球搜索」。全球搜索支持英文或当地名称，可补充城市/国家，无需 Key。</p>
+    {source && <p className="travel-search-hint" role="status">{loading ? "正在使用" : "本次使用"}：{source === "amap" ? "高德地图" : "全球 · Photon / OpenStreetMap"}</p>}
     {error && <p className="travel-search-error" role="alert">{error}</p>}
     {notice && <p className="travel-search-notice" role="status">{notice}</p>}
     {places.length > 0 && <>
