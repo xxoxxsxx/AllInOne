@@ -44,7 +44,10 @@ def verify_checkout(source: Path) -> list[str]:
         raise RuntimeError(f"Source pin mismatch: expected {COMMIT}, got {head}")
     if git(source, "status", "--porcelain", "--untracked-files=no"):
         raise RuntimeError("Pinned source has modified tracked files")
-    files = git(source, "ls-files", "src/spektrafilm").splitlines()
+    tracked = git(source, "ls-files", "src/spektrafilm").splitlines()
+    # Setuptools includes Python modules and declared data/**/*, not the
+    # package's developer README. Compare all installed runtime sources/assets.
+    files = [name for name in tracked if name.endswith(".py") or name.startswith("src/spektrafilm/data/")]
     if not files:
         raise RuntimeError("Pinned checkout has no tracked spektrafilm package files")
     return files

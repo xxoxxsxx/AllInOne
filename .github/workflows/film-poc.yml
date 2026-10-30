@@ -36,7 +36,7 @@ jobs:
         if: always()
         run: |
           echo 'Linux ARM64 under QEMU on an x86 GitHub runner. Timing is NOT an RK3588 benchmark. No image is published and no NAS deployment is changed.' >> "$GITHUB_STEP_SUMMARY"
-          if [ -f artifacts/result.json ]; then cat artifacts/result.json >> "$GITHUB_STEP_SUMMARY"; fi
+          if [ -f artifacts/metrics.json ]; then cat artifacts/metrics.json >> "$GITHUB_STEP_SUMMARY"; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
