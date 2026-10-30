@@ -30,8 +30,37 @@ for requirement in metadata['project']['dependencies']:
 with (out / 'install.log').open('w') as log:
     installed = subprocess.run([sys.executable, '-m', 'pip', 'install', '--only-binary=:all:',
                                 '--report', str(out / 'installed.json'), str(source)], stdout=log, stderr=subprocess.STDOUT)
+report['full_install_passed'] = installed.returncode == 0
 if installed.returncode:
-    print((out / 'install.log').read_text()[-12000:], flush=True)
-    sys.exit(installed.returncode)
-subprocess.run([sys.executable, '-m', 'pip', 'check'], check=True)
+    print('Full distribution failed; testing explicitly curated headless dependency set.', flush=True)
+    # Exclude only desktop GUI and LUT-authoring extras. Runtime source and
+    # profiles remain byte-for-byte upstream. Keep all numeric and image IO deps.
+    omitted = {'qtpy', 'pyside6', 'napari', 'pyconify', 'markdown'}
+    import re
+    requirements = [r for r in metadata['project']['dependencies']
+                    if re.split(r'[<>=!~\[ ]', r, maxsplit=1)[0].lower() not in omitted]
+    report['headless_requirements'] = requirements
+    report['omitted_desktop_requirements'] = sorted(omitted)
+    (out / 'dependencies.json').write_text(json.dumps(report, indent=2))
+    with (out / 'headless-install.log').open('w') as log:
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '--only-binary=:all:',
+                        '--report', str(out / 'headless-installed.json'), *requirements],
+                       stdout=log, stderr=subprocess.STDOUT, check=True)
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-deps', str(source)],
+                       stdout=log, stderr=subprocess.STDOUT, check=True)
+    # pip check still sees upstream desktop metadata; allow only those explicit
+    # absent extras, never numeric ABI/version conflicts or other missing deps.
+    checked = subprocess.run([sys.executable, '-m', 'pip', 'check'], capture_output=True, text=True)
+    (out / 'pip-check.log').write_text(checked.stdout + checked.stderr)
+    allowed = {f'spektrafilm 0.3.4 requires {name}, which is not installed.' for name in omitted}
+    issues = checked.stdout.strip().splitlines() if checked.returncode else []
+    if checked.stderr or any(line.lower() not in allowed for line in issues):
+        raise RuntimeError('Unexpected dependency conflict: ' + checked.stdout + checked.stderr)
+    report['install_mode'] = 'headless (desktop metadata omissions explicitly checked)'
+else:
+    subprocess.run([sys.executable, '-m', 'pip', 'check'], check=True)
+    report['install_mode'] = 'full upstream distribution'
+(out / 'dependencies.json').write_text(json.dumps(report, indent=2))
+with (out / 'freeze.txt').open('w') as log:
+    subprocess.run([sys.executable, '-m', 'pip', 'freeze'], stdout=log, check=True)
 subprocess.run([sys.executable, '/poc/smoke.py'], check=True)
