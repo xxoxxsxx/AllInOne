@@ -1,0 +1,45 @@
+name: Film ARM64 PoC
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/film-poc.yml'
+      - 'scripts/film-poc/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: film-poc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arm64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: Build ARM64 dependency and render image
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          docker build --platform linux/arm64 --progress plain -t film-poc scripts/film-poc 2>&1 | tee artifacts/build.log
+      - name: Render 1MP Portra 400 and Endura on ARM64
+        run: |
+          set -o pipefail
+          docker run --rm --platform linux/arm64 --memory=6g --cpus=2 -v "$PWD/artifacts:/artifacts" film-poc 2>&1 | tee artifacts/render.log
+      - name: Record verification limits
+        if: always()
+        run: |
+          echo 'Linux ARM64 under QEMU on an x86 GitHub runner. Timing is NOT an RK3588 benchmark. No image is published and no NAS deployment is changed.' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f artifacts/result.json ]; then cat artifacts/result.json >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: film-arm64-poc
+          path: artifacts/
+          retention-days: 14
