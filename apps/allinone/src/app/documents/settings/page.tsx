@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import { todayStr } from "@/lib/documents/constants";
 import { getDocumentsDB, listDocuments } from "@/lib/documents/db";
 import { getReminderSettings, selectExpiringDocuments } from "@/lib/documents/reminders";
-import { loadNotificationConfigFromStocks, summarizeChannels, type ChannelSummary } from "@/lib/documents/reminders-run";
+import { summarizeReminderChannels } from "@/lib/documents/reminders-channels";
 
 import { RemindersSettings } from "./reminders-settings";
 
@@ -13,9 +13,9 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "到期提醒设置 · 证件夹" };
 
 // /documents/settings 路由页：服务端读取提醒设置与推送渠道（Bark/飞书/Telegram）状态后挂载设置面板。
-// 渠道地址/Key/Webhook 复用行情（TickerSentry）设置，只在服务端读取；
-// 页面仅展示「启用开关 + 是否已配置（Bark 另加主机名）」，绝不把机密下发给客户端。
-// 面板本体在 ./reminders-settings.tsx，动作在 ../reminders-actions.ts。
+// 渠道配置保存在证件夹自己的 reminder_channels 表（documents.db），独立于行情设置；
+// 「从行情设置导入」是一次性手动覆盖操作。页面仅展示「启用开关 + 是否已配置（Bark 另加主机名）」，
+// 绝不把机密下发给客户端。面板本体在 ./reminders-settings.tsx，动作在 ../reminders-actions.ts。
 
 const PREVIEW_LIMIT = 10;
 
@@ -51,11 +51,13 @@ const previewListStyle: CSSProperties = {
   color: "var(--text-2, #666)",
 };
 
-function channelStateText(channel: ChannelSummary): string {
+type ChannelLine = { name: string; enabled: boolean; configured: boolean; host?: string };
+
+function channelStateText(channel: ChannelLine): string {
   if (channel.enabled && channel.configured) {
-    return channel.name === "Bark" && channel.host ? `已启用 · 已配置（${channel.host}）` : "已启用 · 已配置";
+    return channel.host ? `已启用 · 已配置（${channel.host}）` : "已启用 · 已配置";
   }
-  if (channel.enabled) return "已启用但未配置（到行情设置补全后才会推送）";
+  if (channel.enabled) return "已启用但未配置（在本页补全后才会推送）";
   return "未启用";
 }
 
@@ -63,21 +65,13 @@ export default async function ReminderSettingsPage() {
   const db = getDocumentsDB();
   const settings = getReminderSettings(db);
   const dueDocs = selectExpiringDocuments(listDocuments(db, todayStr()));
-  // stocks 库不可用时按「全部未启用」展示，页面不因 stocks 缺失而渲染失败。
-  const channels = summarizeChannels(loadNotificationConfigFromStocks() ?? {
-    Bark: { URL: "", Key: "", Local: false },
-    BarkEnabled: false,
-    FeishuWebhook: "",
-    FeishuSecret: "",
-    FeishuEnabled: false,
-    TGToken: "",
-    TGChatID: "",
-    TGEnabled: false,
-    Proxy: "",
-    BarkProxy: false,
-    FeishuProxy: false,
-    TGProxy: false,
-  });
+  // 渠道配置读取自证件夹自己的 reminder_channels 表；读取异常时按「全部未启用」展示，页面不渲染失败。
+  const channels0 = summarizeReminderChannels(db);
+  const channels: ChannelLine[] = [
+    { name: "Bark", enabled: channels0.bark.enabled, configured: channels0.bark.configured, host: channels0.bark.host },
+    { name: "飞书", enabled: channels0.feishu.enabled, configured: channels0.feishu.configured },
+    { name: "Telegram", enabled: channels0.telegram.enabled, configured: channels0.telegram.configured },
+  ];
   const anyUsable = channels.some((c) => c.enabled && c.configured);
   const schedulerDisabled = process.env.DISABLE_SCHEDULER === "1";
   const hourText = `${String(settings.hour).padStart(2, "0")}:00`;
@@ -97,12 +91,13 @@ export default async function ReminderSettingsPage() {
         </p>
       ) : null}
 
-      <RemindersSettings initialSettings={settings} />
+      <RemindersSettings initialSettings={settings} initialChannels={channels0} />
 
       <section style={cardStyle} aria-label="推送渠道说明">
-        <h2 style={cardTitleStyle}>推送渠道：复用行情设置的三个渠道</h2>
+        <h2 style={cardTitleStyle}>推送渠道：在证件夹独立配置</h2>
         <p style={cardTextStyle}>
-          推送渠道复用行情设置的三个渠道及其启用开关；哪个渠道开了就用哪个，可多渠道同时推送。
+          Bark / 飞书 / Telegram 在本页直接配置（保存在证件夹数据库，与行情设置互相独立）；
+          哪个渠道开了就用哪个，可多渠道同时推送。
         </p>
         <ul style={previewListStyle}>
           {channels.map((c) => (
@@ -110,20 +105,19 @@ export default async function ReminderSettingsPage() {
           ))}
         </ul>
         <p style={cardTextStyle}>
-          本功能不单独保存任何渠道地址或机密：推送直接使用
-          <Link href="/stocks/settings">「行情与通知设置（TickerSentry）」</Link>
-          中已保存的 Bark 地址与设备 Key、飞书 Webhook、Telegram Token。这些信息只保存在服务端数据库，
-          页面不显示、不下发（Bark 仅展示主机名）。
+          渠道地址、Key、Webhook、Token 等机密只保存在服务端数据库，页面不显示、不下发
+          （Bark 仅展示主机名）；表单里留空的字段保存时保持现有值。如需迁移，可用上方
+          「从行情设置导入」一次性覆盖当前渠道配置（可选的手动操作，平时不读取行情设置）。
+          升级前使用行情渠道的用户，需要在本页配置或手动导入一次后才会继续接收证件提醒。
         </p>
         {anyUsable ? (
           <p style={cardTextStyle}>
-            未收到推送时，请先用上方「发送测试推送」核对各启用渠道是否送达，再到行情设置里检查对应渠道配置。
+            未收到推送时，请先用对应渠道的「测试」按钮或「发送测试推送」核对是否送达，再检查渠道配置。
           </p>
         ) : (
           <p style={cardTextStyle}>
-            尚未启用任何渠道：请先到
-            <Link href="/stocks/settings">行情与通知设置 → 通知渠道</Link>
-            启用并配置 Bark / 飞书 / Telegram 至少一个渠道，再回到本页「发送测试推送」核对送达。
+            尚未启用任何渠道：请在上方「推送渠道」中启用并配置 Bark / 飞书 / Telegram 至少一个渠道，
+            保存后用「发送测试推送」核对送达。
           </p>
         )}
       </section>
@@ -136,7 +130,7 @@ export default async function ReminderSettingsPage() {
         <ul style={{ ...previewListStyle, paddingLeft: 18 }}>
           <li>每天在设定的小时（Asia/Shanghai 北京时间，整点）检查一次；30 天内到期的证件合并为一条推送。</li>
           <li>每天最多推送一次：确认送达后记录当日标记（存于证件夹数据库），重启或重复检查都不会重发。</li>
-          <li>推送失败或未确认送达时不记录标记，下一次检查（最长约 10 分钟后）当天内自动重试。</li>
+          <li>所有渠道都明确失败时不记录标记，下一次检查（最长约 10 分钟后）当天内自动重试；部分成功或结果不确定时不重发，以免重复通知。</li>
           <li>当天没有 30 天内到期的证件时不推送；已过期证件不属于「30 天内到期」，不包含在推送里。</li>
           <li>调度器随应用启动（next start）运行；环境变量 DISABLE_SCHEDULER=1 会停用它和行情自动查询。</li>
         </ul>

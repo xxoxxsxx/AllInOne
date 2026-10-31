@@ -1,22 +1,31 @@
 "use client";
 
-// 证件到期提醒设置面板：开关 + 每日提醒时刻（Asia/Shanghai 0–23 点）+ 渠道状态 + 测试推送 + 立即检查。
-// 全部变更走 Server Actions（../reminders-actions），自带状态展示（上次推送日期、跳过原因、各渠道结果）。
-// 推送渠道复用行情设置的三个渠道（Bark / 飞书 / Telegram）及其启用开关，本面板不保存任何机密：
-// 渠道摘要由服务端动作返回，Bark 仅显示主机名，飞书/Telegram 不显示任何配置内容。
+// 证件到期提醒设置面板：提醒开关/时刻 + 独立的推送渠道配置表单（Bark / 飞书 / Telegram + 共享代理）
+// + 渠道状态 + 测试推送（单渠道/全部）+ 从行情设置一次性导入 + 立即检查。
+// 渠道配置保存在证件夹数据库（reminder_channels），与行情（TickerSentry）设置相互独立；
+// 服务端动作从不回传机密，因此表单文本字段一律「留空 = 保持现有值」，占位符仅显示是否已配置
+// （Bark 显示主机名），保存走合并语义（saveReminderChannelsAction）。
 
-import { useEffect, useState, useTransition, type CSSProperties } from "react";
+import { useState, useTransition, type CSSProperties } from "react";
 
 import {
-  getReminderSettingsAction,
+  clearReminderChannelAction,
+  importChannelsFromStocksAction,
   runReminderNowAction,
+  saveReminderChannelsAction,
   saveReminderSettingsAction,
   testReminderAction,
+  testReminderChannelAction,
 } from "../reminders-actions";
 
 type SettingsView = { enabled: boolean; hour: number; lastSentDate: string | null };
 
-type ChannelSummaryView = { name: string; enabled: boolean; configured: boolean; host: string };
+type ChannelsSummaryView = {
+  bark: { enabled: boolean; local: boolean; configured: boolean; host: string; useProxy: boolean };
+  feishu: { enabled: boolean; configured: boolean; useProxy: boolean };
+  telegram: { enabled: boolean; configured: boolean; useProxy: boolean };
+  proxy: { configured: boolean };
+};
 
 type ChannelResultView = { name: string; status: string; error: string };
 
@@ -36,11 +45,48 @@ type RunView = {
   lastSentDate: string | null;
 };
 
+/** 表单状态：布尔项由服务端摘要初始化；文本项一律从空开始（留空 = 保持现有值）。 */
+type ChannelsFormState = {
+  barkEnabled: boolean;
+  barkUrl: string;
+  barkKey: string;
+  barkLocal: boolean;
+  barkProxy: boolean;
+  feishuEnabled: boolean;
+  feishuWebhook: string;
+  feishuSecret: string;
+  feishuProxy: boolean;
+  tgEnabled: boolean;
+  tgToken: string;
+  tgChatId: string;
+  tgProxy: boolean;
+  proxyUrl: string;
+};
+
+function formFromSummary(s: ChannelsSummaryView): ChannelsFormState {
+  return {
+    barkEnabled: s.bark.enabled,
+    barkUrl: "",
+    barkKey: "",
+    barkLocal: s.bark.local,
+    barkProxy: s.bark.useProxy,
+    feishuEnabled: s.feishu.enabled,
+    feishuWebhook: "",
+    feishuSecret: "",
+    feishuProxy: s.feishu.useProxy,
+    tgEnabled: s.telegram.enabled,
+    tgToken: "",
+    tgChatId: "",
+    tgProxy: s.telegram.useProxy,
+    proxyUrl: "",
+  };
+}
+
 const SKIP_REASONS: Record<string, string> = {
   disabled: "提醒未开启",
   hour_mismatch: "未到提醒时刻（北京时间）",
   already_sent_today: "今日已推送",
-  channels_unavailable: "未配置推送渠道（请在「行情与通知设置」启用 Bark / 飞书 / Telegram 至少一个）",
+  channels_unavailable: "未配置推送渠道（请在下方启用并配置 Bark / 飞书 / Telegram 至少一个）",
   no_due_documents: "没有 30 天内到期的证件",
   due: "已到提醒时刻",
 };
@@ -53,9 +99,27 @@ const panelStyle: CSSProperties = {
   padding: 16,
   display: "grid",
   gap: 12,
-  maxWidth: 560,
+  maxWidth: 640,
 };
 const rowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" };
+const fieldStyle: CSSProperties = { display: "grid", gap: 2, minWidth: 240, flex: "1 1 240px" };
+const inputStyle: CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "6px 8px",
+  borderRadius: 8,
+  border: "1px solid rgba(127,127,127,.4)",
+  background: "transparent",
+  color: "inherit",
+  fontSize: 13,
+};
+const sectionStyle: CSSProperties = {
+  borderTop: "1px dashed rgba(0,0,0,.15)",
+  paddingTop: 10,
+  display: "grid",
+  gap: 8,
+};
+const channelHeadStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" };
 const bannerStyle = (tone: "ok" | "error"): CSSProperties => ({
   padding: "8px 10px",
   borderRadius: 8,
@@ -68,9 +132,9 @@ function hourLabel(hour: number): string {
   return `每天 ${String(hour).padStart(2, "0")}:00（北京时间）`;
 }
 
-function channelStateText(channel: ChannelSummaryView): string {
-  if (channel.enabled && channel.configured) return "已启用 · 已配置";
-  if (channel.enabled) return "已启用但未配置";
+function stateText(enabled: boolean, configured: boolean): string {
+  if (enabled && configured) return "已启用 · 已配置";
+  if (enabled) return "已启用但未配置";
   return "未启用";
 }
 
@@ -78,35 +142,24 @@ function channelLines(channels: ChannelResultView[]): string {
   return channels.map((c) => `${c.name}：${c.status}${c.error ? `（${c.error}）` : ""}`).join("\n");
 }
 
-export function RemindersSettings({ initialSettings }: { initialSettings?: SettingsView }) {
-  const [settings, setSettings] = useState<SettingsView>(initialSettings ?? { enabled: false, hour: 9, lastSentDate: null });
-  const [channels, setChannels] = useState<ChannelSummaryView[]>([]);
-  const [loaded, setLoaded] = useState(initialSettings !== undefined);
+export function RemindersSettings({ initialSettings, initialChannels }: { initialSettings: SettingsView; initialChannels: ChannelsSummaryView }) {
+  const [settings, setSettings] = useState<SettingsView>(initialSettings);
+  const [summary, setSummary] = useState<ChannelsSummaryView>(initialChannels);
+  const [form, setForm] = useState<ChannelsFormState>(() => formFromSummary(initialChannels));
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [channelMessage, setChannelMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [lastRun, setLastRun] = useState<RunView | null>(null);
   const [saving, startSave] = useTransition();
+  const [savingChannels, startSaveChannels] = useTransition();
   const [testing, startTest] = useTransition();
+  const [testingName, setTestingName] = useState<string | null>(null);
+  const [importing, startImport] = useTransition();
   const [running, startRun] = useTransition();
 
-  useEffect(() => {
-    if (initialSettings !== undefined) return;
-    let cancelled = false;
-    getReminderSettingsAction().then((res) => {
-      if (cancelled) return;
-      if (res.ok) {
-        setSettings(res.settings);
-        setChannels(res.channels);
-      } else {
-        setMessage({ tone: "error", text: res.error });
-      }
-      setLoaded(true);
-    }).catch(() => {
-      if (!cancelled) setMessage({ tone: "error", text: "读取提醒设置失败" });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [initialSettings]);
+  const applySummary = (next: ChannelsSummaryView): void => {
+    setSummary(next);
+    setForm(formFromSummary(next));
+  };
 
   const save = (): void => {
     setMessage(null);
@@ -114,7 +167,7 @@ export function RemindersSettings({ initialSettings }: { initialSettings?: Setti
       const res = await saveReminderSettingsAction(settings.enabled, settings.hour);
       if (res.ok) {
         setSettings(res.settings);
-        setChannels(res.channels);
+        setSummary(res.channels);
         setMessage({ tone: "ok", text: `已保存：${res.settings.enabled ? "开启" : "关闭"}，${hourLabel(res.settings.hour)}` });
       } else {
         setMessage({ tone: "error", text: res.error });
@@ -122,17 +175,93 @@ export function RemindersSettings({ initialSettings }: { initialSettings?: Setti
     });
   };
 
+  /** 只提交「用户输入过」的文本字段（留空 → undefined → 服务端保持现有值）。 */
+  const saveChannels = (): void => {
+    setChannelMessage(null);
+    startSaveChannels(async () => {
+      const input: Record<string, unknown> = {
+        barkEnabled: form.barkEnabled,
+        barkLocal: form.barkLocal,
+        barkProxy: form.barkProxy,
+        feishuEnabled: form.feishuEnabled,
+        feishuProxy: form.feishuProxy,
+        tgEnabled: form.tgEnabled,
+        tgProxy: form.tgProxy,
+      };
+      if (form.barkUrl.trim() !== "") input.barkUrl = form.barkUrl;
+      if (form.barkKey.trim() !== "") input.barkKey = form.barkKey;
+      if (form.feishuWebhook.trim() !== "") input.feishuWebhook = form.feishuWebhook;
+      if (form.feishuSecret.trim() !== "") input.feishuSecret = form.feishuSecret;
+      if (form.tgToken.trim() !== "") input.tgToken = form.tgToken;
+      if (form.tgChatId.trim() !== "") input.tgChatId = form.tgChatId;
+      if (form.proxyUrl.trim() !== "") input.proxyUrl = form.proxyUrl;
+      const res = await saveReminderChannelsAction(input);
+      if (res.ok) {
+        setSummary(res.channels);
+        setForm(formFromSummary(res.channels));
+        setChannelMessage({ tone: "ok", text: "渠道配置已保存（留空字段保持原值）。" });
+      } else {
+        setSummary(res.channels);
+        setChannelMessage({ tone: "error", text: res.error });
+      }
+    });
+  };
+
   const test = (): void => {
-    setMessage(null);
+    setChannelMessage(null);
     startTest(async () => {
       const res = await testReminderAction();
       if (res.ok) {
-        setMessage({
-          tone: "ok",
-          text: `测试推送已发送（${res.status}），请在接收端确认送达。\n${channelLines(res.channels)}`,
-        });
+        setChannelMessage({ tone: res.status === "成功" ? "ok" : "error", text: `测试结果：${res.status}\n${channelLines(res.channels)}` });
       } else {
-        setMessage({ tone: "error", text: res.channels.length > 0 ? `${res.error}\n${channelLines(res.channels)}` : res.error });
+        setChannelMessage({ tone: "error", text: `${res.error}${res.channels.length ? `\n${channelLines(res.channels)}` : ""}` });
+      }
+    });
+  };
+
+  const testChannel = (name: string): void => {
+    setChannelMessage(null);
+    setTestingName(name);
+    startTest(async () => {
+      try {
+        const res = await testReminderChannelAction(name);
+        setChannelMessage(
+          res.ok
+            ? { tone: "ok", text: `${name} 测试推送已发送，请在接收端确认送达。` }
+            : { tone: "error", text: `${name}：${res.error}` },
+        );
+      } finally {
+        setTestingName(null);
+      }
+    });
+  };
+
+  const clearChannel = (name: "Bark" | "飞书" | "Telegram" | "代理"): void => {
+    if (!window.confirm(`确定清除「${name}」的证件提醒配置？此操作会删除已保存的地址和密钥。`)) return;
+    setChannelMessage(null);
+    startSaveChannels(async () => {
+      const res = await clearReminderChannelAction(name);
+      if (res.ok) {
+        applySummary(res.channels);
+        setChannelMessage({ tone: "ok", text: `已清除 ${name} 配置。` });
+      } else {
+        setChannelMessage({ tone: "error", text: res.error });
+      }
+    });
+  };
+
+  const importFromStocks = (): void => {
+    if (!window.confirm("将从「行情与通知设置」读取 Bark / 飞书 / Telegram 配置，并覆盖当前证件夹渠道配置（含清空多余的机密字段）。确定导入？")) {
+      return;
+    }
+    setChannelMessage(null);
+    startImport(async () => {
+      const res = await importChannelsFromStocksAction();
+      if (res.ok) {
+        applySummary(res.channels);
+        setChannelMessage({ tone: "ok", text: "已从行情设置导入并覆盖当前渠道配置。" });
+      } else {
+        setChannelMessage({ tone: "error", text: res.error });
       }
     });
   };
@@ -150,7 +279,7 @@ export function RemindersSettings({ initialSettings }: { initialSettings?: Setti
     });
   };
 
-  const pending = saving || testing || running;
+  const pending = saving || savingChannels || testing || importing || running;
 
   return (
     <section style={panelStyle} aria-label="证件到期提醒设置">
@@ -160,11 +289,9 @@ export function RemindersSettings({ initialSettings }: { initialSettings?: Setti
           每天在指定时刻（Asia/Shanghai）检查一次，把 30 天内到期的证件合并成一条推送；当天只推一次。
         </p>
         <p style={{ margin: "4px 0 0", color: "#666", fontSize: 13 }}>
-          推送渠道复用行情设置的三个渠道及其启用开关；哪个渠道开了就用哪个，可多渠道同时推送。
+          推送渠道在证件夹独立配置（保存在证件夹数据库）；哪个渠道开了就用哪个，可多渠道同时推送。
         </p>
       </div>
-
-      {!loaded && <p style={{ margin: 0, color: "#666" }}>正在读取设置…</p>}
 
       <label style={rowStyle}>
         <input
@@ -198,36 +325,204 @@ export function RemindersSettings({ initialSettings }: { initialSettings?: Setti
           <dt>上次推送：</dt>
           <dd style={{ margin: 0 }}>{settings.lastSentDate ?? "从未推送"}</dd>
         </div>
+        <div style={rowStyle}>
+          <dt>渠道：</dt>
+          <dd style={{ margin: 0 }}>
+            Bark {stateText(summary.bark.enabled, summary.bark.configured)} · 飞书 {stateText(summary.feishu.enabled, summary.feishu.configured)} · Telegram {stateText(summary.telegram.enabled, summary.telegram.configured)}
+          </dd>
+        </div>
       </dl>
-
-      <div style={{ borderTop: "1px dashed rgba(0,0,0,.15)", paddingTop: 10 }}>
-        <p style={{ margin: "0 0 6px", fontSize: 13, color: "#444" }}>推送渠道（复用「行情与通知设置」）</p>
-        {channels.length === 0 ? (
-          <p style={{ margin: 0, fontSize: 13, color: "#666" }}>
-            无法读取行情通知配置（stocks 库不可用）；推送会按「未配置渠道」跳过。
-          </p>
-        ) : (
-          <table style={{ width: "100%", fontSize: 13, color: "#444", borderCollapse: "collapse" }}>
-            <tbody>
-              {channels.map((c) => (
-                <tr key={c.name}>
-                  <td style={{ padding: "2px 8px 2px 0" }}>{c.name}</td>
-                  <td style={{ padding: "2px 8px" }}>{channelStateText(c)}</td>
-                  <td style={{ padding: "2px 0", color: "#666" }}>{c.name === "Bark" && c.host ? c.host : ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
 
       <div style={rowStyle}>
         <button type="button" onClick={save} disabled={pending}>保存设置</button>
-        <button type="button" onClick={test} disabled={pending || testing}>发送测试推送</button>
         <button type="button" onClick={runNow} disabled={pending || running}>立即检查</button>
       </div>
 
       {message && <p style={bannerStyle(message.tone)} role="status">{message.text}</p>}
+
+      {/* —— 推送渠道（独立配置） —— */}
+      <div style={sectionStyle}>
+        <div style={channelHeadStyle}>
+          <strong style={{ fontSize: 14 }}>推送渠道</strong>
+          <span style={{ color: "#666", fontSize: 12 }}>
+            留空 = 保持现有值；机密只保存在服务端，页面不回显
+          </span>
+        </div>
+
+        <fieldset style={{ border: "1px solid rgba(127,127,127,.3)", borderRadius: 8, padding: 10, display: "grid", gap: 8 }}>
+          <legend style={channelHeadStyle}>
+            <label style={rowStyle}>
+              <input
+                type="checkbox"
+                checked={form.barkEnabled}
+                disabled={pending}
+                onChange={(e) => setForm((f) => ({ ...f, barkEnabled: e.target.checked }))}
+              />
+              <strong>Bark</strong>
+            </label>
+            <span style={{ color: "#666", fontSize: 12 }}>{stateText(form.barkEnabled, summary.bark.configured)}{summary.bark.configured && summary.bark.host ? `（${summary.bark.host}）` : ""}</span>
+            <button type="button" onClick={() => testChannel("Bark")} disabled={pending}>测试</button>
+            <button type="button" onClick={() => clearChannel("Bark")} disabled={pending}>清除配置</button>
+          </legend>
+          <label style={fieldStyle}>
+            <span>服务地址</span>
+            <input
+              style={inputStyle}
+              type="text"
+              value={form.barkUrl}
+              placeholder={summary.bark.configured ? `已配置（${summary.bark.host || "Bark 服务"}），留空保持不变` : "https://api.day.app"}
+              disabled={pending}
+              onChange={(e) => setForm((f) => ({ ...f, barkUrl: e.target.value }))}
+            />
+          </label>
+          <label style={fieldStyle}>
+            <span>设备 Key</span>
+            <input
+              style={inputStyle}
+              type="password"
+              value={form.barkKey}
+              placeholder={summary.bark.configured ? "已配置，留空保持不变" : "Bark 设备 Key"}
+              disabled={pending}
+              onChange={(e) => setForm((f) => ({ ...f, barkKey: e.target.value }))}
+            />
+          </label>
+          <label style={rowStyle}>
+            <input
+              type="checkbox"
+              checked={form.barkLocal}
+              disabled={pending}
+              onChange={(e) => setForm((f) => ({ ...f, barkLocal: e.target.checked }))}
+            />
+            <span>允许内网 HTTP 地址</span>
+          </label>
+          <label style={rowStyle}>
+            <input
+              type="checkbox"
+              checked={form.barkProxy}
+              disabled={pending}
+              onChange={(e) => setForm((f) => ({ ...f, barkProxy: e.target.checked }))}
+            />
+            <span>使用代理</span>
+          </label>
+        </fieldset>
+
+        <fieldset style={{ border: "1px solid rgba(127,127,127,.3)", borderRadius: 8, padding: 10, display: "grid", gap: 8 }}>
+          <legend style={channelHeadStyle}>
+            <label style={rowStyle}>
+              <input
+                type="checkbox"
+                checked={form.feishuEnabled}
+                disabled={pending}
+                onChange={(e) => setForm((f) => ({ ...f, feishuEnabled: e.target.checked }))}
+              />
+              <strong>飞书</strong>
+            </label>
+            <span style={{ color: "#666", fontSize: 12 }}>{stateText(form.feishuEnabled, summary.feishu.configured)}</span>
+            <button type="button" onClick={() => testChannel("飞书")} disabled={pending}>测试</button>
+            <button type="button" onClick={() => clearChannel("飞书")} disabled={pending}>清除配置</button>
+          </legend>
+          <label style={fieldStyle}>
+            <span>群机器人 Webhook</span>
+            <input
+              style={inputStyle}
+              type="text"
+              value={form.feishuWebhook}
+              placeholder={summary.feishu.configured ? "已配置，留空保持不变" : "https://open.feishu.cn/open-apis/bot/v2/hook/…"}
+              disabled={pending}
+              onChange={(e) => setForm((f) => ({ ...f, feishuWebhook: e.target.value }))}
+            />
+          </label>
+          <label style={fieldStyle}>
+            <span>签名 Secret（可选）</span>
+            <input
+              style={inputStyle}
+              type="password"
+              value={form.feishuSecret}
+              placeholder={summary.feishu.configured ? "已配置，留空保持不变" : "开启签名校验时填写"}
+              disabled={pending}
+              onChange={(e) => setForm((f) => ({ ...f, feishuSecret: e.target.value }))}
+            />
+          </label>
+          <label style={rowStyle}>
+            <input
+              type="checkbox"
+              checked={form.feishuProxy}
+              disabled={pending}
+              onChange={(e) => setForm((f) => ({ ...f, feishuProxy: e.target.checked }))}
+            />
+            <span>使用代理</span>
+          </label>
+        </fieldset>
+
+        <fieldset style={{ border: "1px solid rgba(127,127,127,.3)", borderRadius: 8, padding: 10, display: "grid", gap: 8 }}>
+          <legend style={channelHeadStyle}>
+            <label style={rowStyle}>
+              <input
+                type="checkbox"
+                checked={form.tgEnabled}
+                disabled={pending}
+                onChange={(e) => setForm((f) => ({ ...f, tgEnabled: e.target.checked }))}
+              />
+              <strong>Telegram</strong>
+            </label>
+            <span style={{ color: "#666", fontSize: 12 }}>{stateText(form.tgEnabled, summary.telegram.configured)}</span>
+            <button type="button" onClick={() => testChannel("Telegram")} disabled={pending}>测试</button>
+            <button type="button" onClick={() => clearChannel("Telegram")} disabled={pending}>清除配置</button>
+          </legend>
+          <label style={fieldStyle}>
+            <span>Bot Token</span>
+            <input
+              style={inputStyle}
+              type="password"
+              value={form.tgToken}
+              placeholder={summary.telegram.configured ? "已配置，留空保持不变" : "1234567890:AA…"}
+              disabled={pending}
+              onChange={(e) => setForm((f) => ({ ...f, tgToken: e.target.value }))}
+            />
+          </label>
+          <label style={fieldStyle}>
+            <span>数字 Chat ID</span>
+            <input
+              style={inputStyle}
+              type="text"
+              value={form.tgChatId}
+              placeholder={summary.telegram.configured ? "已配置，留空保持不变" : "如 123456789"}
+              disabled={pending}
+              onChange={(e) => setForm((f) => ({ ...f, tgChatId: e.target.value }))}
+            />
+          </label>
+          <label style={rowStyle}>
+            <input
+              type="checkbox"
+              checked={form.tgProxy}
+              disabled={pending}
+              onChange={(e) => setForm((f) => ({ ...f, tgProxy: e.target.checked }))}
+            />
+            <span>使用代理</span>
+          </label>
+        </fieldset>
+
+        <label style={fieldStyle}>
+          <span>共享代理地址{summary.proxy.configured ? "（已配置）" : ""}</span>
+          <input
+            style={inputStyle}
+            type="text"
+            value={form.proxyUrl}
+            placeholder={summary.proxy.configured ? "已配置，留空保持不变" : "http://或 socks5:// 地址和端口"}
+            disabled={pending}
+            onChange={(e) => setForm((f) => ({ ...f, proxyUrl: e.target.value }))}
+          />
+        </label>
+
+        <div style={rowStyle}>
+          <button type="button" onClick={() => clearChannel("代理")} disabled={pending}>清除代理</button>
+          <button type="button" onClick={saveChannels} disabled={pending}>保存渠道配置</button>
+          <button type="button" onClick={test} disabled={pending || testing}>发送测试推送</button>
+          <button type="button" onClick={importFromStocks} disabled={pending}>从行情设置导入（覆盖当前渠道配置）</button>
+        </div>
+
+        {channelMessage && <p style={bannerStyle(channelMessage.tone)} role="status">{channelMessage.text}</p>}
+      </div>
 
       {lastRun && (
         <div style={{ borderTop: "1px dashed rgba(0,0,0,.15)", paddingTop: 10, fontSize: 13, color: "#444" }}>

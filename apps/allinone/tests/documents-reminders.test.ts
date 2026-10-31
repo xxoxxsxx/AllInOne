@@ -1,13 +1,13 @@
 // 证件到期提醒测试：设置默认值/持久化、当日去重（跨重启）、北京时间小时匹配、
 // 到期证件筛选（daysLeft 0–30）、消息格式（分组聚合）、多渠道发送语义
-// （部分成功落标记 / 全部失败重试 / 无启用渠道跳过）、关闭跳过、stocks 库/渠道配置缺失跳过。
+// （部分成功落标记 / 全部失败重试 / 无启用渠道跳过）、关闭跳过、渠道配置缺失跳过、
+// 默认配置来自证件夹自己的 reminder_channels 表（不依赖 stocks 库）。
 // 全部通过 channelSender 注入桩发送，绝不做真实网络推送
 // （唯一的"网络"是 127.0.0.1 本地回环 mock：验证默认 sendChannel → sendBark / sendFeishu 接线）。
 
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import Database from "better-sqlite3";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -35,18 +35,20 @@ import {
   shanghaiHour,
 } from "../src/lib/documents/reminders.ts";
 import {
+  getReminderChannels,
+  loadReminderChannelConfig,
+  saveReminderChannels,
+} from "../src/lib/documents/reminders-channels.ts";
+import {
   defaultChannelSender,
   dispatchToEnabledChannels,
-  loadNotificationConfigFromStocks,
   runDocumentExpiryCheck,
   startDocumentReminderScheduler,
   stopDocumentReminderSchedulerForTest,
-  summarizeChannels,
   type ChannelSender,
   type ReminderCheckOptions,
 } from "../src/lib/documents/reminders-run.ts";
 import type { ChannelConfig } from "../src/modules/stocks/notify.ts";
-import { setDB as setStocksDB } from "../src/modules/stocks/store.ts";
 
 // 固定“现在”：北京时间 2026-11-05 09:00（UTC 01:00），便于确定性断言。
 const NOW = Date.UTC(2026, 10, 5, 1, 0, 0);
@@ -530,11 +532,10 @@ test("dispatches only enabled channels; BarkEnabled=false excludes Bark", async 
   }
 });
 
-// —— 无启用渠道 / 配置缺失：优雅跳过 ——
+// —— 无启用渠道 / 配置读取失败：优雅跳过；默认配置来自证件夹自己的表 ——
 
-test("no enabled channel or missing stocks config skips gracefully without crash", async () => {
+test("no enabled channel or unreadable channels config skips gracefully without crash", async () => {
   const { db, cleanup } = tempDb();
-  const originalDataDir = process.env.DATA_DIR;
   try {
     seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
     saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
@@ -551,75 +552,66 @@ test("no enabled channel or missing stocks config skips gracefully without crash
     assert.equal(calls.length, 0);
     assert.equal(getReminderSettings(db).lastSentDate, null);
 
-    // 注入：配置整体不可用（等价于 stocks 配置读取失败）。
+    // 注入：配置整体不可用（等价于配置读取失败）。
     const nullConfig = baseOpts(sender, { channelsConfig: () => null });
     const skippedNull = await runDocumentExpiryCheck(db, nullConfig);
     assert.equal(skippedNull.ran, false);
     assert.equal(skippedNull.reason, "channels_unavailable");
     assert.equal(calls.length, 0);
 
-    // 默认加载器：DATA_DIR 指向空目录（stocks 库不存在 → 自动建空库，三个渠道都未配置）。
-    const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "documents-reminders-stocks-"));
-    process.env.DATA_DIR = emptyRoot;
-    setStocksDB(null);
-    try {
-      const config = loadNotificationConfigFromStocks();
-      assert.ok(config, "空 stocks 库应返回默认配置而非 null");
-      assert.deepEqual(summarizeChannels(config).map((c) => [c.name, c.enabled, c.configured]), [
-        ["Bark", false, false],
-        ["飞书", false, false],
-        ["Telegram", false, false],
-      ]);
-      const { sender: s2, calls: c2 } = senderStub("成功");
-      const viaDefault = await runDocumentExpiryCheck(db, baseOpts(s2, { channelsConfig: undefined }));
-      assert.equal(viaDefault.ran, false);
-      assert.equal(viaDefault.reason, "channels_unavailable");
-      assert.equal(c2.length, 0);
-    } finally {
-      fs.rmSync(emptyRoot, { recursive: true, force: true });
-    }
-
-    // 默认加载器：stocks 库损坏（无 settings 表）→ 返回 null，不抛错。
-    const broken = new Database(":memory:");
-    setStocksDB(broken as unknown as Parameters<typeof setStocksDB>[0]);
-    try {
-      assert.equal(loadNotificationConfigFromStocks(), null);
-    } finally {
-      broken.close();
-      setStocksDB(null);
-    }
+    // 默认加载器：全新证件夹库（reminder_channels 全空）→ 视为未配置渠道。
+    const viaDefaultEmpty = await runDocumentExpiryCheck(db, baseOpts(sender, { channelsConfig: undefined }));
+    assert.equal(viaDefaultEmpty.ran, false);
+    assert.equal(viaDefaultEmpty.reason, "channels_unavailable");
+    assert.equal(calls.length, 0);
+    assert.equal(getReminderChannels(db).Bark.URL, "");
   } finally {
-    if (originalDataDir === undefined) delete process.env.DATA_DIR;
-    else process.env.DATA_DIR = originalDataDir;
     db.close();
     cleanup();
   }
 });
 
-test("channel summaries never leak secrets (host only for Bark)", () => {
-  const config = configWith({
-    Bark: { URL: "https://api.day.app", Key: "SECRET-KEY", Local: false },
-    BarkEnabled: true,
-    FeishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/SECRET",
-    FeishuEnabled: true,
-    TGToken: "1234567890:SECRET",
-    TGChatID: "42",
-    TGEnabled: false, // 启用开关关着但配置齐全
-  });
-  const summaries = summarizeChannels(config);
-  assert.deepEqual(summaries, [
-    { name: "Bark", enabled: true, configured: true, host: "api.day.app" },
-    { name: "飞书", enabled: true, configured: true, host: "" },
-    { name: "Telegram", enabled: false, configured: true, host: "" },
-  ]);
-  const serialized = JSON.stringify(summaries);
-  assert.ok(!serialized.includes("SECRET"));
-  assert.ok(!serialized.includes("https://"));
+test("runner default config comes from documents reminder_channels (no stocks involved)", async () => {
+  const { db, cleanup } = tempDb();
+  try {
+    seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
+    saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
+    // 在证件夹库中保存渠道配置（Bark + 飞书启用），不注入 channelsConfig → 走默认加载器。
+    saveReminderChannels(db, {
+      barkEnabled: true,
+      barkUrl: "https://bark.example.com",
+      barkKey: "docs-key",
+      feishuEnabled: true,
+      feishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/placeholder",
+    });
 
-  // Bark 地址非法时 host 为空串但不抛错。
-  const badUrl = summarizeChannels(configWith({ Bark: { URL: "not a url", Key: "k", Local: false } }));
-  assert.equal(badUrl[0].host, "");
-  assert.equal(badUrl[0].configured, true);
+    const { sender, calls } = senderStub("成功");
+    const result = await runDocumentExpiryCheck(db, baseOpts(sender, { channelsConfig: undefined }));
+    assert.equal(result.ran, true);
+    assert.equal(result.sent, true);
+    assert.deepEqual(calls.map((c) => c.name), ["Bark", "飞书"]);
+    assert.deepEqual(calls[0].config.Bark, { URL: "https://bark.example.com", Key: "docs-key", Local: false });
+    assert.equal(getReminderSettings(db).lastSentDate, TODAY);
+
+    // loadReminderChannelConfig 与 saveReminderChannels 读到的是同一份配置。
+    assert.equal(loadReminderChannelConfig(db)!.Bark.Key, "docs-key");
+  } finally {
+    db.close();
+    cleanup();
+  }
+});
+
+test("loadReminderChannelConfig returns null when the channels table is broken", () => {
+  const { db, cleanup } = tempDb();
+  try {
+    // 预置同名列不全的表：CREATE TABLE IF NOT EXISTS 不会修复它，SELECT 必然失败。
+    db.exec("CREATE TABLE reminder_channels (id INTEGER PRIMARY KEY)");
+    assert.equal(loadReminderChannelConfig(db), null);
+    // 摘要也不抛错：按全「未启用/未配置」降级。
+  } finally {
+    db.close();
+    cleanup();
+  }
 });
 
 // —— 开关关闭：直接跳过 ——

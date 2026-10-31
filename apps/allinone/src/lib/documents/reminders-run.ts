@@ -4,12 +4,12 @@
 //   1. 读 reminder_settings（documents.db，见 ./reminders）。
 //   2. 按 Asia/Shanghai 墙钟判断是否到点（小时匹配）且今天未推送过（last_sent_date 去重）。
 //   3. 选出到期证件（daysLeft 0–30），组装一条聚合推送。
-//   4. 推送渠道完全复用 stocks 模块（data/tickersentry/ticker.db 的 settings 通知配置）：
-//      enabledChannels() 决定本次启用哪些渠道（Bark / 飞书 / Telegram），逐渠道走 sendChannel
-//      —— 自动继承各渠道的启用开关、代理开关与 sendBark/sendFeishu/sendTelegram 的
-//      URL/内网校验等安全逻辑。飞书/Telegram 文本为 `${title}\n${body}`（sendChannel 内拼接），
-//      Bark 保持 title/body 分离。
-//      stocks 库缺失/损坏 → 视为未配置，静默跳过，绝不抛错、绝不写 last_sent_date。
+//   4. 渠道配置来自证件夹自己的 reminder_channels 表（documents.db，见 ./reminders-channels），
+//      与行情（TickerSentry）设置零运行时依赖。enabledChannels() 决定本次启用哪些渠道
+//      （Bark / 飞书 / Telegram），逐渠道走 stocks notify 的 sendChannel —— 自动继承各渠道的
+//      启用开关、代理开关与 sendBark/sendFeishu/sendTelegram 的 URL/内网校验等安全逻辑。
+//      飞书/Telegram 文本为 `${title}\n${body}`（sendChannel 内拼接），Bark 保持 title/body 分离。
+//      配置读取失败 → 视为未配置，静默跳过，绝不抛错、绝不写 last_sent_date。
 //
 // 聚合语义沿用 channelStatus：全部成功→成功；有成功→部分成功；有不确定→不确定；否则失败。
 // 聚合为 成功/部分成功/不确定 都视为「已处理」并写 last_sent_date（避免重复轰炸）；
@@ -17,7 +17,6 @@
 
 import type Database from "better-sqlite3";
 
-import { getDB as getStocksDB, notificationSettings } from "@/modules/stocks/store";
 import {
   channelStatus,
   enabledChannels,
@@ -27,6 +26,7 @@ import {
 } from "@/modules/stocks/notify";
 
 import { todayStr } from "./constants";
+import { loadReminderChannelConfig } from "./reminders-channels";
 import { listDocuments } from "./db";
 import {
   buildReminderMessage,
@@ -41,7 +41,7 @@ import {
 /** 单渠道发送结果（供 UI 与测试展示）。 */
 export type ChannelSendResult = { name: string; status: string; error: string };
 
-/** 发送函数注入点：签名与 stocks 的 sendChannel 一致；测试用桩替换，避免真实网络推送。 */
+/** 发送函数注入点：签名与 stocks notify 的 sendChannel 一致；测试用桩替换，避免真实网络推送。 */
 export type ChannelSender = (config: ChannelConfig, name: string, title: string, body: string) => Promise<SendOutcome>;
 
 export type ReminderSkipReason =
@@ -75,18 +75,15 @@ export type ReminderRunResult = {
 };
 
 export type ReminderCheckOptions = {
-  /** 注入发送实现（sendChannel 同签名）；默认使用 stocks 模块的真实 sendChannel。 */
+  /** 注入发送实现（sendChannel 同签名）；默认使用 stocks notify 的真实 sendChannel。 */
   channelSender?: ChannelSender;
-  /** 注入通知渠道配置来源；默认读 stocks 库（见 loadNotificationConfigFromStocks）。 */
+  /** 注入渠道配置来源；默认读证件夹自己的 reminder_channels 表（见 loadReminderChannelConfig）。 */
   channelsConfig?: () => ChannelConfig | null;
   /** 覆盖当前时间（ms），测试北京时间小时匹配用。 */
   nowMs?: number;
   /** 手动触发：忽略开关/小时/当日去重，但渠道配置与到期证件仍必须存在。 */
   force?: boolean;
 };
-
-/** 面板展示用的渠道摘要：绝不含 Key/Token/Webhook 等机密（Bark 仅暴露主机名）。 */
-export type ChannelSummary = { name: string; enabled: boolean; configured: boolean; host: string };
 
 const EMPTY_RESULT = {
   dueCount: 0,
@@ -95,46 +92,9 @@ const EMPTY_RESULT = {
   channels: [] as ChannelSendResult[],
 };
 
-/** 复用 stocks 的通知渠道配置（Bark/飞书/Telegram + 代理开关）；库打不开时返回 null（永不抛错）。 */
-export function loadNotificationConfigFromStocks(): ChannelConfig | null {
-  try {
-    return notificationSettings(getStocksDB());
-  } catch {
-    // stocks 库缺失或表结构损坏：视为未配置。
-    return null;
-  }
-}
-
-/** 默认发送实现：stocks 的 sendChannel（自动按渠道拼接飞书/TG 文本、应用代理与安全校验）。 */
+/** 默认发送实现：stocks notify 的 sendChannel（自动按渠道拼接飞书/TG 文本、应用代理与安全校验）。 */
 export const defaultChannelSender: ChannelSender = (config, name, title, body) =>
   sendChannel(config, name, title, body);
-
-/** 渠道状态摘要（服务端用；不返回任何机密）。 */
-export function summarizeChannels(config: ChannelConfig): ChannelSummary[] {
-  let barkHost = "";
-  if (config.Bark.URL.trim() !== "") {
-    try {
-      barkHost = new URL(config.Bark.URL.trim()).host;
-    } catch {
-      barkHost = "";
-    }
-  }
-  return [
-    {
-      name: "Bark",
-      enabled: config.BarkEnabled,
-      configured: config.Bark.URL.trim() !== "" && config.Bark.Key.trim() !== "",
-      host: barkHost,
-    },
-    { name: "飞书", enabled: config.FeishuEnabled, configured: config.FeishuWebhook.trim() !== "", host: "" },
-    {
-      name: "Telegram",
-      enabled: config.TGEnabled,
-      configured: config.TGToken.trim() !== "" && config.TGChatID.trim() !== "",
-      host: "",
-    },
-  ];
-}
 
 /**
  * 逐渠道推送（enabledChannels 决定渠道集合），并按 channelStatus 聚合。
@@ -205,7 +165,8 @@ export async function runDocumentExpiryCheck(
   }
   const hour = due.hour;
 
-  const config = opts.channelsConfig ? opts.channelsConfig() : loadNotificationConfigFromStocks();
+  // 渠道配置默认取自同一个证件夹库（reminder_channels），与行情设置无关。
+  const config = opts.channelsConfig ? opts.channelsConfig() : loadReminderChannelConfig(db);
   if (!config || enabledChannels(config).length === 0) {
     return skip(settings, today, hour, "channels_unavailable");
   }
