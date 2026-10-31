@@ -340,6 +340,92 @@
   padding: 48px 0;
 }
 
+/* ---- 过期证件归档 ---- */
+
+.docs-archive-bar {
+  display: block;
+  width: 100%;
+  border: 1px dashed color-mix(in srgb, var(--danger) 45%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
+  color: var(--text-2);
+  font-size: 13px;
+  padding: 10px 14px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.docs-archive-bar:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+}
+
+.docs-archive {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 14px 16px;
+}
+
+.docs-archive-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.docs-archive-head h2 {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--danger);
+}
+
+.docs-archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.docs-archive-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 8px 12px;
+  font: inherit;
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.docs-archive-item:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+}
+
+.docs-archive-title {
+  font-weight: 600;
+  color: var(--text);
+  flex: none;
+}
+
+.docs-archive-meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.docs-archive-expiry {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
 /* ---- 状态徽章 ---- */
 
 .docs-status {

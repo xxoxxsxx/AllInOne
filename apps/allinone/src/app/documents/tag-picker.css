@@ -1,0 +1,165 @@
+/* 标签选择器（证件夹表单）：芯片观感对齐 documents.css 的 .docs-tag
+   （surface-2 底 + 1px 边 + 全圆角），全部交互目标 ≥ 36px、可换行，适配移动端。
+   仅使用全局设计变量（--surface/--surface-2/--border/--text/--text-2/--accent/--danger/--docs-teal）。 */
+
+.tag-picker {
+  position: relative;
+}
+
+/* 芯片 + 输入的外框，可换行 */
+.tag-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 3px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: text;
+}
+
+.tag-picker-row:focus-within {
+  border-color: color-mix(in srgb, var(--docs-teal) 40%, var(--border));
+}
+
+/* 已选芯片列表 */
+.tag-picker-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+/* 芯片：视觉延续 .docs-tag（surface-2 + border + 999px 圆角），
+   因需承载 ≥36px 的移除按钮而整体略高于 .docs-tag。 */
+.tag-picker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 42px;
+  padding: 2px 2px 2px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.tag-picker-chip-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+/* 移除按钮：36px 触控目标（≈ 移动端最小舒适尺寸） */
+.tag-picker-chip-remove {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tag-picker-chip-remove:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+/* 内嵌输入 */
+.tag-picker-input {
+  flex: 1 1 140px;
+  min-width: 120px;
+  min-height: 36px;
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.tag-picker-input:focus {
+  outline: none; /* 焦点态由外框 :focus-within 呈现 */
+}
+
+.tag-picker-input::placeholder {
+  color: var(--text-2);
+}
+
+/* 既有标签联想面板 */
+.tag-picker-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 18%);
+  max-height: 264px;
+  overflow-y: auto;
+}
+
+.tag-picker-suggestion {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.tag-picker-suggestion:hover {
+  background: var(--docs-teal-soft);
+  color: var(--docs-teal);
+}
+
+/* 校验提示（常驻占位避免布局跳动；:empty 时不可见） */
+.tag-picker-hint {
+  margin: 4px 2px 0;
+  min-height: 17px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.tag-picker-hint:empty {
+  visibility: hidden;
+}
+
+/* 错误提示着色：commit 拒绝时写入的文本即错误文案 */
+.tag-picker-hint:not(:empty) {
+  color: var(--danger);
+}
+
+.tag-picker button:focus-visible,
+.tag-picker-input:focus-visible {
+  outline: 2px solid var(--docs-teal);
+  outline-offset: 2px;
+}

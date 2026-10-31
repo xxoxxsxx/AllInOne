@@ -33,6 +33,7 @@ import {
 } from "./actions";
 
 import { useOverlayDialog } from "./use-overlay-dialog";
+import { TagPicker } from "./tag-picker";
 
 type SortMode = "custom" | "expiry" | "created";
 
@@ -50,7 +51,7 @@ type FormState = {
   durationValue: string;
   durationUnit: DurationUnit;
   note: string;
-  tags: string;
+  tags: string[];
 };
 
 const EMPTY_FORM: FormState = {
@@ -65,7 +66,7 @@ const EMPTY_FORM: FormState = {
   durationValue: "",
   durationUnit: "year",
   note: "",
-  tags: "",
+  tags: [],
 };
 
 // —— 附件客户端校验（与服务端 files.ts 的限额保持一致，不做静默截断） ——
@@ -109,12 +110,8 @@ function formFromDoc(doc: DocumentRecord): FormState {
     durationValue: doc.durationValue !== null ? String(doc.durationValue) : "",
     durationUnit: doc.durationUnit ?? "year",
     note: doc.note,
-    tags: doc.tags.map((t) => t.name).join("、"),
+    tags: doc.tags.map((t) => t.name),
   };
-}
-
-function parseTags(raw: string): string[] {
-  return raw.split(/[，,、\s]+/).map((s) => s.trim()).filter(Boolean);
 }
 
 function daysText(doc: DocumentRecord): string {
@@ -326,7 +323,7 @@ function FormModal(props: {
         durationValue: form.expiryType === "duration" ? Number(form.durationValue) : undefined,
         durationUnit: form.expiryType === "duration" ? form.durationUnit : undefined,
         note: form.note,
-        tags: parseTags(form.tags),
+        tags: form.tags,
       });
       if (!res.ok) throw new Error(res.error);
       savedIdRef.current = res.id;
@@ -482,21 +479,10 @@ function FormModal(props: {
                 </>
               )}
             </fieldset>
-            <label className="docs-field">
-              <span className="docs-label">标签（用空格或顿号分隔）</span>
-              <input
-                value={form.tags}
-                onChange={(e) => set("tags", e.target.value)}
-                maxLength={400}
-                placeholder="如：出行 常用"
-                list="docs-tag-options"
-              />
-              <datalist id="docs-tag-options">
-                {allTags.map((t) => (
-                  <option key={t.id} value={t.name} />
-                ))}
-              </datalist>
-            </label>
+            <div className="docs-field">
+              <span className="docs-label">标签（回车或逗号添加，最多 20 个）</span>
+              <TagPicker value={form.tags} options={allTags} onChange={(tags) => set("tags", tags)} />
+            </div>
             <label className="docs-field">
               <span className="docs-label">备注</span>
               <textarea value={form.note} onChange={(e) => set("note", e.target.value)} maxLength={2000} rows={3} placeholder="保管地点、注意事项等" />
@@ -963,8 +949,12 @@ export function DocumentsClient(props: {
   const [renewFrom, setRenewFrom] = useState<FormState | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // 过期证件归档：主视图默认收起（一条汇总），展开后在主列表末尾单独分组展示。
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   const selected = documents.find((d) => d.id === selectedId) ?? null;
+
+  const archivedExpired = useMemo(() => documents.filter((d) => d.status === "expired"), [documents]);
 
   const summary = useMemo(() => {
     let upcoming = 0;
@@ -1089,6 +1079,8 @@ export function DocumentsClient(props: {
         <div className="docs-actions">
           <button type="button" className="docs-btn docs-btn-primary" onClick={openNew}>＋ 新增证件</button>
           <button type="button" className="docs-btn" onClick={() => setManageOpen(true)}>管理分类 / 持有人</button>
+          <a className="docs-btn" href="/documents/settings">到期提醒设置</a>
+          <a className="docs-btn" href="/api/documents/backup" download>导出备份</a>
         </div>
         <div className="docs-stats" role="group" aria-label="证件状态统计">
           <button
@@ -1185,8 +1177,14 @@ export function DocumentsClient(props: {
             : "没有符合条件的证件，试试调整筛选条件。"}
         </p>
       ) : view === "list" ? (
+        <>
+        {!archiveOpen && archivedExpired.length > 0 ? (
+          <button type="button" className="docs-archive-bar" onClick={() => setArchiveOpen(true)} aria-expanded={false}>
+            已过期证件 {archivedExpired.length} 份已收起，点击展开
+          </button>
+        ) : null}
         <div className="docs-list" role="list">
-          {visible.map((d, index) => (
+          {(archiveOpen ? visible : visible.filter((d) => d.status !== "expired")).map((d, index) => (
             <div
               key={d.id}
               role="listitem"
@@ -1242,9 +1240,16 @@ export function DocumentsClient(props: {
             </div>
           ))}
         </div>
+        </>
       ) : (
+        <>
+        {!archiveOpen && archivedExpired.length > 0 ? (
+          <button type="button" className="docs-archive-bar" onClick={() => setArchiveOpen(true)} aria-expanded={false}>
+            已过期证件 {archivedExpired.length} 份已收起，点击展开
+          </button>
+        ) : null}
         <div className="docs-grid">
-          {visible.map((d, index) => {
+          {(archiveOpen ? visible : visible.filter((d) => d.status !== "expired")).map((d, index) => {
             const cover = d.files.find((f) => f.isImage);
             return (
               <div key={d.id} className="docs-card-wrap">
@@ -1320,7 +1325,27 @@ export function DocumentsClient(props: {
             );
           })}
         </div>
+        </>
       )}
+
+      {/* 已过期证件折叠区：展开后完整列出（含附件数量）。 */}
+      {archiveOpen && statusFilter !== "expired" && archivedExpired.length > 0 ? (
+        <section className="docs-archive" aria-label="已过期证件">
+          <div className="docs-archive-head">
+            <h2>已过期（{archivedExpired.length}）</h2>
+            <button type="button" className="docs-mini-btn" onClick={() => setArchiveOpen(false)}>收起</button>
+          </div>
+          <div className="docs-archive-list">
+            {archivedExpired.map((d) => (
+              <button key={d.id} type="button" className="docs-archive-item" onClick={() => { setSelectedId(d.id); setLightboxIndex(null); }}>
+                <span className="docs-archive-title">{d.title}</span>
+                <span className="docs-archive-meta">{[d.holderName, d.categoryName].filter(Boolean).join(" · ") || "未分类"}</span>
+                <span className="docs-archive-expiry">{d.expiryDate ? `${d.expiryDate} · 已过期 ${d.daysLeft === null ? "" : -d.daysLeft} 天` : "长期有效"}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* 主 overlay 互斥渲染：表单弹窗打开时不渲染抽屉，避免抽屉盖住弹窗。 */}
       {formOpen ? (
