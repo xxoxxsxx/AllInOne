@@ -18,7 +18,7 @@ services:
       PORT: "3000"
       DATA_DIR: /data
     volumes:
-      # 数据卷：/data/cdk/cdk.db 与 /data/tickersentry/ticker.db
+      # 数据卷：台账、股票、travel 与 documents（证件库及原始附件）；备份整个目录。
       - /volume3/docker/allinone/data:/data
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]

@@ -7,6 +7,7 @@ export const ICONS: Record<string, string> = {
   box: "M12 1 3 5.5v13L12 23l9-4.5v-13L12 1Zm0 2.24 6.5 3.25L12 9.74 5.5 6.49 12 3.24ZM5 8.24l6 3v9.02l-6-3V8.24Zm8 12.02v-9.02l6-3v9.02l-6 3Z",
   qrcode: "M3 3h8v8H3V3Zm2 2v4h4V5H5Zm1 1h2v2H6V6Zm7-3h8v8h-8V3Zm2 2v4h4V5h-4Zm1 1h2v2h-2V6ZM3 13h8v8H3v-8Zm2 2v4h4v-4H5Zm1 1h2v2H6v-2Zm7-3h2v2h-2v-2Zm4 0h2v2h-2v-2Zm-4 4h2v2h-2v-2Zm4-2h2v2h-2v-2Zm0 4h2v2h2v2h-2v2h-2v-2h2v-2Z",
   map: "M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z",
+  idcard: "M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm2 2v12h12V6H6Zm3 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM7.3 15.4c.4-1.4 1.7-2.1 2.7-2.1s2.3.7 2.7 2.1H7.3Zm5.7-6.4h4v1.6h-4V9Zm0 3.4h4V14h-4v-1.6Z",
 };
 
 export const ICON_IDS: string[] = Object.keys(ICONS);

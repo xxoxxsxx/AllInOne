@@ -52,9 +52,9 @@ function checkTool(id: string): ToolStatus {
     const p = path.join(process.cwd(), "public", id, "index.html");
     state = fs.existsSync(p) ? "ok" : "unknown";
     reason = state === "ok" ? undefined : "status";
-  } else if (id === "travel") {
-    // 首次访问 /travel 时才会建库；库未创建前视为未就绪而非故障。
-    state = sqliteOk(path.join(data, "travel", "travel.db")) ? "ok" : "unknown";
+  } else if (id === "travel" || id === "documents") {
+    // 首次访问时才会建库；库未创建前视为未就绪而非故障。
+    state = sqliteOk(path.join(data, id, `${id}.db`)) ? "ok" : "unknown";
     reason = state === "ok" ? undefined : "status";
   } else {
     state = "unmonitored";

@@ -11,6 +11,8 @@ interface HomeViewProps {
   tools: ToolConfig[];
   categories: CategoryConfig[];
   loadError: string | null;
+  documentSummary?: { total: number; expiring: number; expired: number } | null;
+  documentReminderError?: boolean;
 }
 
 const STATE_LABEL: Record<ToolStatus["state"], string> = {
@@ -37,7 +39,7 @@ function statusLine(state: ToolStatus["state"], checkedAt: string | null): strin
   return label;
 }
 
-export function HomeView({ tools, categories, loadError }: HomeViewProps) {
+export function HomeView({ tools, categories, loadError, documentSummary, documentReminderError }: HomeViewProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("all");
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -100,6 +102,16 @@ export function HomeView({ tools, categories, loadError }: HomeViewProps) {
       <p className="page-sub">业务管理、金融监控与图片创作工具的统一入口。</p>
 
       {loadError ? <div className="error-banner">工具配置加载失败：{loadError}</div> : null}
+      {documentReminderError ? <p role="status" className="error-banner">证件到期提示暂时无法读取，请打开证件夹检查。</p> : null}
+      {documentSummary && (documentSummary.expiring > 0 || documentSummary.expired > 0) ? (
+        <section className="document-reminder" aria-label="证件到期提示">
+          <div><strong>证件有效期提醒</strong><span>提前 30 天提醒，按北京时间更新</span></div>
+          <div className="document-reminder-links">
+            {documentSummary.expiring > 0 ? <Link href="/documents?status=expiring">{documentSummary.expiring} 份即将到期 →</Link> : null}
+            {documentSummary.expired > 0 ? <Link href="/documents?status=expired" className="document-reminder-expired">{documentSummary.expired} 份已过期 →</Link> : null}
+          </div>
+        </section>
+      ) : null}
 
       <label className="sr-only" htmlFor="tool-search" style={{ position: "absolute", left: -9999 }}>
         搜索工具
@@ -145,6 +157,7 @@ export function HomeView({ tools, categories, loadError }: HomeViewProps) {
               <ToolCard
                 key={tool.id}
                 tool={tool}
+                documentSummary={documentSummary}
                 categories={categories}
                 status={statuses?.[tool.id]}
                 favorite={favorites.includes(tool.id)}
@@ -164,6 +177,7 @@ export function HomeView({ tools, categories, loadError }: HomeViewProps) {
               <ToolCard
                 key={`recent-${tool.id}`}
                 tool={tool}
+                documentSummary={documentSummary}
                 categories={categories}
                 status={statuses?.[tool.id]}
                 favorite={favorites.includes(tool.id)}
@@ -198,6 +212,7 @@ export function HomeView({ tools, categories, loadError }: HomeViewProps) {
               <ToolCard
                 key={tool.id}
                 tool={tool}
+                documentSummary={documentSummary}
                 categories={categories}
                 status={statuses?.[tool.id]}
                 favorite={favorites.includes(tool.id)}
@@ -221,9 +236,12 @@ interface ToolCardProps {
   onToggleFavorite: (id: string) => void;
 }
 
-function ToolCard({ tool, categories, status, favorite, onOpen, onToggleFavorite }: ToolCardProps) {
+function ToolCard({ tool, categories, status, favorite, onOpen, onToggleFavorite, documentSummary }: ToolCardProps & { documentSummary?: { total: number; expiring: number; expired: number } | null }) {
   const categoryName = categories.find((c) => c.id === tool.category)?.name ?? tool.category;
   const external = tool.openMode === "new-tab";
+  const documentBadge = tool.id === "documents" && documentSummary && (documentSummary.expiring > 0 || documentSummary.expired > 0)
+    ? documentSummary
+    : null;
 
   return (
     <article className="tool-card">
@@ -234,6 +252,11 @@ function ToolCard({ tool, categories, status, favorite, onOpen, onToggleFavorite
             <Link href={`/tools/${tool.id}`} className="tool-name" title={tool.name}>
               {tool.name}
             </Link>
+            {documentBadge ? (
+              <Link href="/documents" className="tag-badge document-badge" aria-label={`${documentBadge.expiring + documentBadge.expired} 份证件需要处理`}>
+                {documentBadge.expiring + documentBadge.expired} 份需处理
+              </Link>
+            ) : null}
             {tool.integration === "external" ? <span className="tag-badge">外部</span> : null}
           </div>
           <p className="tool-desc">{tool.description}</p>

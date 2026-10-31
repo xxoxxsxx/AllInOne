@@ -128,5 +128,28 @@
     "visible": true,
     "lifecycle": "active",
     "integration": "path"
+  },
+  {
+    "id": "documents",
+    "name": "证件夹",
+    "description": "证件与签证有效期管理：分类、标签、扫描件附件与到期提醒",
+    "category": "life",
+    "tags": [
+      "证件",
+      "签证",
+      "有效期",
+      "到期提醒"
+    ],
+    "aliases": [
+      "Document Vault"
+    ],
+    "icon": "idcard",
+    "kind": "service",
+    "entry": "/documents",
+    "openMode": "same-tab",
+    "order": 55,
+    "visible": true,
+    "lifecycle": "active",
+    "integration": "path"
   }
 ]

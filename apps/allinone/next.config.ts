@@ -2,10 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // 旅行攻略照片上传走 Server Action（浏览器已压缩到长边 1600 的 JPEG，多张一包）。
+  // 附件批量上传最多 30MB，额外预留 multipart 开销；业务层逐文件校验。
   experimental: {
     serverActions: {
-      bodySizeLimit: "12mb",
+      bodySizeLimit: "35mb",
     },
   },
   // public/framelab 是静态目录，Next 不解析目录 index：把入口重写到 index.html。
