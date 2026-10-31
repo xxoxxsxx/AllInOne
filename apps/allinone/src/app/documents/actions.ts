@@ -15,6 +15,7 @@ import {
   deleteHolder,
   deleteTag,
   getDocumentsDB,
+  reorderDocuments,
   renameCategory,
   renameHolder,
   updateDocument,
@@ -128,6 +129,19 @@ export async function deleteFileAction(fileId: number): Promise<{ ok: true } | {
         console.error("附件文件删除失败", cleanupError);
       }
     }
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// —— 自由排序 ——
+
+export async function reorderDocumentsAction(ids: number[]): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    if (!Array.isArray(ids)) throw new Error("参数无效");
+    reorderDocuments(getDocumentsDB(), ids.map((id) => num(id)));
+    revalidate();
     return { ok: true };
   } catch (e) {
     return fail(e);

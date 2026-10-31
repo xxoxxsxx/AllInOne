@@ -22,6 +22,7 @@ import {
   listHolders,
   listTags,
   openDocumentsDB,
+  reorderDocuments,
   renameCategory,
   renameHolder,
   statusOf,
@@ -42,10 +43,10 @@ function withDb(run: (db: ReturnType<typeof openDocumentsDB>) => void): void {
   }
 }
 
-test("migrate seeds default categories and starts at schema v1", () => {
+test("migrate seeds default categories and starts at current schema version", () => {
   withDb((db) => {
     assert.deepEqual(listCategories(db).map((c) => c.name), [...DEFAULT_CATEGORIES]);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 1);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 2);
     assert.deepEqual(listHolders(db), []);
     assert.deepEqual(listTags(db), []);
   });
@@ -147,7 +148,7 @@ test("updateDocument replaces editable fields and tags; missing id rejected", ()
   });
 });
 
-test("listDocuments orders by expiry (no-expiry last) and summary counts statuses", () => {
+test("listDocuments keeps custom order, appends new docs at the end, and summary counts statuses", () => {
   withDb((db) => {
     const today = todayStr();
     const mk = (expiry: string) => createDocument(db, { title: `证件 ${expiry || "长期"}`, expiryType: "date", expiryDate: expiry });
@@ -156,9 +157,26 @@ test("listDocuments orders by expiry (no-expiry last) and summary counts statuse
     const past = mk(addDuration(today, -3, "day"));
     const forever = mk("");
     const docs = listDocuments(db, today);
-    assert.deepEqual(docs.map((d) => d.id), [past, soon, far, forever]);
+    assert.deepEqual(docs.map((d) => d.id), [far, soon, past, forever]);
     const summary = documentsSummary(db, today);
     assert.deepEqual(summary, { total: 4, expiring: 1, expired: 1 });
+  });
+});
+
+test("reorderDocuments persists an explicit permutation and rejects mismatched ids", () => {
+  withDb((db) => {
+    const a = createDocument(db, { title: "A", expiryType: "date" });
+    const b = createDocument(db, { title: "B", expiryType: "date" });
+    const c = createDocument(db, { title: "C", expiryType: "date" });
+    reorderDocuments(db, [c, a, b]);
+    assert.deepEqual(listDocuments(db).map((d) => d.id), [c, a, b]);
+    // 新证件排到末尾。
+    const d = createDocument(db, { title: "D", expiryType: "date" });
+    assert.deepEqual(listDocuments(db).map((x) => x.id), [c, a, b, d]);
+    for (const bad of [[a, b], [a, b, c, d, a], [a, b, c, 999]]) {
+      assert.throws(() => reorderDocuments(db, bad as number[]), /排序数据与证件列表不一致/);
+    }
+    assert.deepEqual(listDocuments(db).map((x) => x.id), [c, a, b, d]);
   });
 });
 
@@ -332,7 +350,7 @@ test("failed migration rolls back all DDL and the file can migrate after the obs
     // 障碍移除后重新打开：迁移完整落地。
     const db = openDocumentsDB(undefined, file);
     try {
-      assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 1);
+      assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 2);
       assert.equal(listCategories(db).length, DEFAULT_CATEGORIES.length);
     } finally {
       db.close();

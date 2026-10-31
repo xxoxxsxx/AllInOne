@@ -27,13 +27,14 @@ import {
   deleteTagAction,
   renameCategoryAction,
   renameHolderAction,
+  reorderDocumentsAction,
   saveDocumentAction,
   uploadFilesAction,
 } from "./actions";
 
 import { useOverlayDialog } from "./use-overlay-dialog";
 
-type SortMode = "expiry" | "created";
+type SortMode = "custom" | "expiry" | "created";
 
 type FormState = {
   title: string;
@@ -201,14 +202,17 @@ function DaysRing({ doc }: { doc: DocumentRecord }) {
 
 function FormModal(props: {
   doc: DocumentRecord | null;
+  /** 续签/复制预填：doc 为空但 initial 有值时按 create 保存。 */
+  initial?: FormState | null;
+  heading?: string;
   holders: Holder[];
   categories: Category[];
   allTags: DocTag[];
   onClose: () => void;
   onSaved: (id: number) => void;
 }) {
-  const { doc, holders, categories, allTags, onClose, onSaved } = props;
-  const [form, setForm] = useState<FormState>(() => (doc ? formFromDoc(doc) : EMPTY_FORM));
+  const { doc, initial, heading, holders, categories, allTags, onClose, onSaved } = props;
+  const [form, setForm] = useState<FormState>(() => initial ?? (doc ? formFromDoc(doc) : EMPTY_FORM));
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -349,13 +353,13 @@ function FormModal(props: {
       className="docs-overlay"
       role="dialog"
       aria-modal="true"
-      aria-label={doc ? "编辑证件" : "新增证件"}
+      aria-label={heading ?? (doc ? "编辑证件" : "新增证件")}
       tabIndex={-1}
       onMouseDown={onBackdropMouseDown}
     >
       <div className="docs-modal">
         <header className="docs-modal-head">
-          <h2>{doc ? "编辑证件" : "新增证件"}</h2>
+          <h2>{heading ?? (doc ? "编辑证件" : "新增证件")}</h2>
           <button type="button" className="docs-icon-btn" onClick={requestClose} aria-label="关闭" disabled={busy}>✕</button>
         </header>
         <form className="docs-form" onSubmit={onSubmit} noValidate>
@@ -530,9 +534,10 @@ function DetailDrawer(props: {
   doc: DocumentRecord;
   onClose: () => void;
   onEdit: () => void;
+  onRenew: () => void;
   onLightbox: (index: number) => void;
 }) {
-  const { doc, onClose, onEdit, onLightbox } = props;
+  const { doc, onClose, onEdit, onRenew, onLightbox } = props;
   const router = useRouter();
   const [reveal, setReveal] = useState(false);
   const [error, setError] = useState("");
@@ -733,6 +738,7 @@ function DetailDrawer(props: {
         </div>
         <footer className="docs-drawer-foot">
           <button type="button" className="docs-btn docs-btn-danger" onClick={() => void removeDoc()} disabled={busy}>删除证件</button>
+          <button type="button" className="docs-btn" onClick={onRenew} disabled={busy}>续签</button>
           <button type="button" className="docs-btn docs-btn-primary" onClick={onEdit} disabled={busy}>编辑</button>
         </footer>
       </aside>
@@ -941,10 +947,17 @@ export function DocumentsClient(props: {
   const [categoryFilter, setCategoryFilter] = useState(0);
   const [tagFilter, setTagFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | DocStatus>(initialStatus);
-  const [sort, setSort] = useState<SortMode>("expiry");
+  const [sort, setSort] = useState<SortMode>("custom");
+  // 自定义排序：拖拽/箭头调整后的本地顺序覆盖；服务端确认后随 props 回来清空。
+  const [orderOverride, setOrderOverride] = useState<number[] | null>(null);
+  const [reorderBusy, setReorderBusy] = useState(false);
+  const reorderBusyRef = useRef(false);
+  const [orderError, setOrderError] = useState("");
+  const [dragId, setDragId] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  // 编辑弹窗与详情抽屉互斥：formOpen 时只渲染 FormModal；关闭后 selectedId 不变，抽屉自动恢复。
   const [formOpen, setFormOpen] = useState(false);
+  // 「续签」预填：基于现有证件复制一份，日期清空重新录入。
+  const [renewFrom, setRenewFrom] = useState<FormState | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
@@ -964,7 +977,11 @@ export function DocumentsClient(props: {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const arr = documents.filter((d) => {
+    const byId = new Map(documents.map((d) => [d.id, d]));
+    const base = orderOverride
+      ? orderOverride.map((id) => byId.get(id)).filter((d): d is DocumentRecord => Boolean(d))
+      : documents;
+    const arr = base.filter((d) => {
       if (statusFilter !== "all" && d.status !== statusFilter) return false;
       if (holderFilter !== 0 && d.holderId !== holderFilter) return false;
       if (categoryFilter !== 0 && d.categoryId !== categoryFilter) return false;
@@ -977,15 +994,68 @@ export function DocumentsClient(props: {
     });
     if (sort === "created") {
       arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id);
-    } else {
+    } else if (sort === "expiry") {
       arr.sort((a, b) => (a.daysLeft ?? 1e9) - (b.daysLeft ?? 1e9) || a.title.localeCompare(b.title));
     }
+    // custom：保持服务端/本地覆盖顺序。
     return arr;
-  }, [documents, query, holderFilter, categoryFilter, tagFilter, statusFilter, sort]);
+  }, [documents, orderOverride, query, holderFilter, categoryFilter, tagFilter, statusFilter, sort]);
+
+  // 服务端数据更新（含排序确认）后丢弃本地覆盖。
+  useEffect(() => {
+    setOrderOverride(null);
+  }, [documents]);
+
+  // 拖拽/箭头排序仅在「自定义」且无任何筛选时开放，避免保存部分顺序。
+  const canReorder = sort === "custom" && !query.trim() && holderFilter === 0 && categoryFilter === 0 && !tagFilter && statusFilter === "all";
+
+  function moveCard(id: number, targetId: number): void {
+    if (reorderBusyRef.current) return;
+    const current = orderOverride ?? documents.map((d) => d.id);
+    const from = current.indexOf(id);
+    const to = current.indexOf(targetId);
+    if (from < 0 || to < 0 || from === to) return;
+    const next = current.slice();
+    next.splice(from, 1);
+    const insertAt = next.indexOf(targetId) + (from < to ? 1 : 0);
+    next.splice(insertAt, 0, id);
+    void commitOrder(next);
+  }
+
+  function nudgeCard(id: number, delta: -1 | 1): void {
+    if (reorderBusyRef.current) return;
+    const current = orderOverride ?? documents.map((d) => d.id);
+    const from = current.indexOf(id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= current.length) return;
+    const next = current.slice();
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    void commitOrder(next);
+  }
+
+  async function commitOrder(next: number[]): Promise<void> {
+    if (reorderBusyRef.current) return;
+    reorderBusyRef.current = true;
+    setReorderBusy(true);
+    setOrderError("");
+    setOrderOverride(next);
+    try {
+      const res = await reorderDocumentsAction(next);
+      if (!res.ok) throw new Error(res.error);
+    } catch (error) {
+      setOrderOverride(null);
+      setOrderError(`排序未保存：${error instanceof Error ? error.message : "网络错误，请重试"}`);
+      router.refresh();
+    } finally {
+      reorderBusyRef.current = false;
+      setReorderBusy(false);
+    }
+  }
 
   const drawerImages = selected?.files.filter((f) => f.isImage) ?? [];
 
   function openNew() {
+    setRenewFrom(null);
     setSelectedId(null);
     setLightboxIndex(null);
     setFormOpen(true);
@@ -1059,11 +1129,15 @@ export function DocumentsClient(props: {
             <option key={t.id} value={t.name}>{t.name}</option>
           ))}
         </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value as SortMode)} aria-label="排序">
+        <select value={sort} onChange={(e) => { setOrderOverride(null); setSort(e.target.value as SortMode); }} aria-label="排序">
+          <option value="custom">自定义排序</option>
           <option value="expiry">按到期时间</option>
           <option value="created">按添加时间</option>
         </select>
+        {sort === "custom" ? <span className="docs-hint docs-sort-hint">{canReorder ? "拖动卡片，或用箭头调整顺序；修改会自动保存。" : "筛选中无法调整顺序，清除筛选后即可排序。"}</span> : null}
       </div>
+      {orderError ? <p className="docs-error" role="alert">{orderError}</p> : null}
+      {reorderBusy ? <p className="docs-hint" role="status">正在保存顺序…</p> : null}
 
       {visible.length === 0 ? (
         <p className="docs-empty">
@@ -1073,42 +1147,79 @@ export function DocumentsClient(props: {
         </p>
       ) : (
         <div className="docs-grid">
-          {visible.map((d) => {
+          {visible.map((d, index) => {
             const cover = d.files.find((f) => f.isImage);
             return (
-              <button type="button" key={d.id} className={`docs-card docs-card-${d.status}`} onClick={() => { setSelectedId(d.id); setLightboxIndex(null); }}>
-                <span className="docs-card-strip" aria-hidden />
-                <div className="docs-card-cover">
-                  {cover ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={fileUrl(cover.file)} alt="" loading="lazy" />
-                  ) : (
-                    <span className="docs-card-emoji" aria-hidden>{categoryEmoji(d.categoryName)}</span>
-                  )}
-                </div>
-                <div className="docs-card-body">
-                  <div className="docs-card-top">
-                    <div className="docs-card-heading">
-                      <h2 className="docs-card-title">{d.title}</h2>
-                      <span className={`docs-status docs-status-${d.status}`}>{STATUS_LABELS[d.status]}</span>
-                    </div>
-                    <DaysRing doc={d} />
+              <div key={d.id} className="docs-card-wrap">
+                {canReorder ? (
+                  <span className="docs-card-arrows">
+                    <button
+                      type="button"
+                      className="docs-mini-btn"
+                      aria-label={`将「${d.title}」前移`}
+                      disabled={reorderBusy || index === 0}
+                      onClick={(e) => { e.stopPropagation(); nudgeCard(d.id, -1); }}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="docs-mini-btn"
+                      aria-label={`将「${d.title}」后移`}
+                      disabled={reorderBusy || index === visible.length - 1}
+                      onClick={(e) => { e.stopPropagation(); nudgeCard(d.id, 1); }}
+                    >
+                      ↓
+                    </button>
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  className={`docs-card docs-card-${d.status}${dragId === d.id ? " is-dragging" : ""}`}
+                  draggable={canReorder && !reorderBusy}
+                  onDragStart={(e) => { setDragId(d.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(d.id)); }}
+                  onDragEnd={() => setDragId(null)}
+                  onDragOver={(e) => { if (dragId !== null && dragId !== d.id) e.preventDefault(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragId !== null && dragId !== d.id) moveCard(dragId, d.id);
+                    setDragId(null);
+                  }}
+                  onClick={() => { setSelectedId(d.id); setLightboxIndex(null); }}
+                >
+                  <span className="docs-card-strip" aria-hidden />
+                  <div className="docs-card-cover">
+                    {cover ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={fileUrl(cover.file)} alt="" loading="lazy" />
+                    ) : (
+                      <span className="docs-card-emoji" aria-hidden>{categoryEmoji(d.categoryName)}</span>
+                    )}
                   </div>
-                  <p className="docs-card-meta">
-                    {[d.holderName, d.categoryName].filter(Boolean).join(" · ") || "未分类"}
-                  </p>
-                  <p className={`docs-card-expiry docs-card-expiry-${d.status}`}>
-                    {d.expiryDate ? `${d.expiryDate} · ${daysText(d)}` : "长期有效"}
-                  </p>
-                  {d.tags.length > 0 ? (
-                    <div className="docs-tags">
-                      {d.tags.slice(0, 4).map((t) => (
-                        <span key={t.id} className="docs-tag">{t.name}</span>
-                      ))}
+                  <div className="docs-card-body">
+                    <div className="docs-card-top">
+                      <div className="docs-card-heading">
+                        <h2 className="docs-card-title">{d.title}</h2>
+                        <span className={`docs-status docs-status-${d.status}`}>{STATUS_LABELS[d.status]}</span>
+                      </div>
+                      <DaysRing doc={d} />
                     </div>
-                  ) : null}
-                </div>
-              </button>
+                    <p className="docs-card-meta">
+                      {[d.holderName, d.categoryName].filter(Boolean).join(" · ") || "未分类"}
+                    </p>
+                    <p className={`docs-card-expiry docs-card-expiry-${d.status}`}>
+                      {d.expiryDate ? `${d.expiryDate} · ${daysText(d)}` : "长期有效"}
+                    </p>
+                    {d.tags.length > 0 ? (
+                      <div className="docs-tags">
+                        {d.tags.slice(0, 4).map((t) => (
+                          <span key={t.id} className="docs-tag">{t.name}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </button>
+              </div>
             );
           })}
         </div>
@@ -1117,14 +1228,18 @@ export function DocumentsClient(props: {
       {/* 主 overlay 互斥渲染：表单弹窗打开时不渲染抽屉，避免抽屉盖住弹窗。 */}
       {formOpen ? (
         <FormModal
-          doc={selected}
+          doc={renewFrom ? null : selected}
+          initial={renewFrom}
+          heading={renewFrom ? "续签证件" : undefined}
           holders={holders}
           categories={categories}
           allTags={tags}
-          onClose={() => setFormOpen(false)}
-          onSaved={() => {
+          onClose={() => { setFormOpen(false); setRenewFrom(null); }}
+          onSaved={(id) => {
             setFormOpen(false);
+            setRenewFrom(null);
             setLightboxIndex(null);
+            setSelectedId(id);
             router.refresh();
           }}
         />
@@ -1132,7 +1247,12 @@ export function DocumentsClient(props: {
         <DetailDrawer
           doc={selected}
           onClose={() => { setSelectedId(null); setLightboxIndex(null); router.refresh(); }}
-          onEdit={() => { setLightboxIndex(null); setFormOpen(true); }}
+          onEdit={() => { setLightboxIndex(null); setRenewFrom(null); setFormOpen(true); }}
+          onRenew={() => {
+            setLightboxIndex(null);
+            setRenewFrom({ ...formFromDoc(selected), number: "", startDate: "", expiryDate: "", durationValue: "" });
+            setFormOpen(true);
+          }}
           onLightbox={(i) => setLightboxIndex(i)}
         />
       ) : null}

@@ -13,7 +13,7 @@ export { EXPIRY_WARN_DAYS, MAX_FILES_PER_DOCUMENT } from "./constants";
 export { addDuration, statusOf, todayStr } from "./constants";
 export type { DocStatus } from "./constants";
 
-export const DOCUMENTS_SCHEMA_VERSION = 1;
+export const DOCUMENTS_SCHEMA_VERSION = 2;
 export const DEFAULT_CATEGORIES = ["护照", "签证", "身份证", "驾照", "社保", "保单", "合同", "其他"] as const;
 
 export type DurationUnit = "day" | "month" | "year";
@@ -168,6 +168,12 @@ function migrate(db: Database.Database): void {
     const insertCategory = db.prepare(`INSERT INTO categories(name,sort_order,created_at) VALUES(?,?,?)`);
     DEFAULT_CATEGORIES.forEach((name, i) => insertCategory.run(name, i, at));
   }
+  if (version < 2) {
+    // v2：自由排序。既有数据按创建顺序初始化；新建证件排到末尾。
+    db.exec(`ALTER TABLE documents ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+      UPDATE documents SET sort_order = id;
+      CREATE INDEX idx_documents_order ON documents(sort_order);`);
+  }
   db.pragma(`user_version = ${DOCUMENTS_SCHEMA_VERSION}`);
 }
 
@@ -295,7 +301,7 @@ const DOC_SELECT = `
   LEFT JOIN categories c ON c.id = d.category_id`;
 
 export function listDocuments(db: Database.Database, today: string = todayStr()): DocumentRecord[] {
-  const rows = db.prepare(`${DOC_SELECT} ORDER BY (d.expiry_date=''), d.expiry_date, d.id`).all() as Array<Parameters<typeof rowToDocument>[0]>;
+  const rows = db.prepare(`${DOC_SELECT} ORDER BY d.sort_order, d.id`).all() as Array<Parameters<typeof rowToDocument>[0]>;
   const tags = loadTags(db, rows.map((r) => r.id));
   const files = loadFiles(db, rows.map((r) => r.id));
   return rows.map((r) => rowToDocument(r, tags, files, today));
@@ -378,10 +384,13 @@ export function createDocument(db: Database.Database, input: DocumentInput): num
   const expiryDate = computeExpiry(input);
   const at = now();
   return db.transaction(() => {
+    const sortOrder = Number(
+      (db.prepare(`SELECT COALESCE(MAX(sort_order),0)+1 AS s FROM documents`).get() as { s: number }).s,
+    );
     const res = db
       .prepare(
-        `INSERT INTO documents(holder_id,category_id,title,number,issuer,start_date,expiry_date,duration_value,duration_unit,note,created_at,updated_at)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO documents(holder_id,category_id,title,number,issuer,start_date,expiry_date,duration_value,duration_unit,note,sort_order,created_at,updated_at)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         holderId, categoryId, title,
@@ -392,12 +401,13 @@ export function createDocument(db: Database.Database, input: DocumentInput): num
         input.expiryType === "duration" ? (input.durationValue as number) : null,
         input.expiryType === "duration" ? (input.durationUnit as string) : null,
         textField(input.note ?? "", "备注", 2000),
+        sortOrder,
         at, at,
       );
     const docId = Number(res.lastInsertRowid);
     if (input.tags) upsertTags(db, docId, input.tags);
     return docId;
-  })();
+  }).immediate();
 }
 
 export function updateDocument(db: Database.Database, docId: number, input: DocumentInput): void {
@@ -434,6 +444,22 @@ export function deleteDocument(db: Database.Database, docId: number): string[] {
     db.prepare(`DELETE FROM documents WHERE id=?`).run(docId);
     return files.map((f) => f.file);
   })();
+}
+
+// —— 自由排序 ——
+
+/** 持有写锁时校验完整排列，避免排序和新增/删除交错。 */
+export function reorderDocuments(db: Database.Database, orderedIds: number[]): void {
+  db.transaction(() => {
+    const current = db.prepare(`SELECT id FROM documents`).all() as Array<{ id: number }>;
+    const currentIds = new Set(current.map((r) => r.id));
+    const orderedSet = new Set(orderedIds);
+    if (orderedIds.length !== currentIds.size || orderedSet.size !== currentIds.size || !orderedIds.every((id) => currentIds.has(id))) {
+      throw new Error("排序数据与证件列表不一致，请刷新后重试");
+    }
+    const stmt = db.prepare(`UPDATE documents SET sort_order=? WHERE id=?`);
+    orderedIds.forEach((id, i) => stmt.run(i, id));
+  }).immediate();
 }
 
 // —— 持有人 ——
