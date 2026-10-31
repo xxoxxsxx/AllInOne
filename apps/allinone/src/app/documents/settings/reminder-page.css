@@ -1,0 +1,280 @@
+/* 到期提醒设置 · 页面壳样式（./page.tsx 专用，类名前缀 rpg-）。
+   范围：返回链接、hero、调度器警告、提醒速览卡（工作方式说明）、今日到期预览。
+   设置面板本体（./reminders-settings.tsx）的视觉由 reminder-panel.css 负责，本文件不干涉。
+   页面壳不展示设置/渠道的服务端状态快照（保存后会过期），状态一律由面板实时呈现。
+   配色只取全局变量（--surface/--surface-2/--border/--text/--text-2/--ok/--warn/--danger）
+   与证件夹 hero 的柔和青绿 --docs-teal / --docs-teal-soft（documents.css 定义，深浅色各取一档）。 */
+
+/* 页面节奏：比 .docs-page 默认的 8px 间距更透气。 */
+.docs-page.rpg-page {
+  gap: 16px;
+}
+
+/* ---- 返回：胶囊按钮式，明确可点 ---- */
+
+.rpg-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 5px 14px 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.rpg-back:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--docs-teal) 40%, var(--border));
+  background: var(--surface-2);
+}
+
+.rpg-back:focus-visible {
+  outline: 2px solid var(--docs-teal);
+  outline-offset: 2px;
+}
+
+.rpg-back-arrow {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* ---- Hero：沿用证件夹 .docs-hero 青绿渐变，只在移动端收紧内边距 ---- */
+
+.rpg-page .docs-hero {
+  padding: 26px 24px 22px;
+}
+
+/* ---- 调度器禁用警告：琥珀色提示条 ---- */
+
+.rpg-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+.rpg-callout-icon {
+  flex: none;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.rpg-callout p {
+  margin: 0;
+}
+
+/* ---- 卡片：速览 / 到期预览共用 ---- */
+
+.rpg-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.rpg-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rpg-card-head h2 {
+  margin: 0;
+  font-size: 15.5px;
+}
+
+.rpg-card-note {
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.rpg-count {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--docs-teal-soft);
+  color: var(--docs-teal);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rpg-hint {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+/* ---- 工作方式：速览事实卡 ---- */
+
+.rpg-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.rpg-fact {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.rpg-fact-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--docs-teal);
+}
+
+.rpg-fact-k {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--docs-teal);
+}
+
+.rpg-fact p {
+  margin: 0;
+  font-size: 12.8px;
+  color: var(--text-2);
+  line-height: 1.7;
+}
+
+/* ---- 今日到期预览 ---- */
+
+.rpg-due-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rpg-due-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px 9px 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--docs-teal);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.rpg-due-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rpg-due-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.rpg-badge {
+  flex: none;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rpg-badge-soon {
+  color: var(--docs-teal);
+  background: var(--docs-teal-soft);
+}
+
+.rpg-badge-today {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+.rpg-due-more {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+/* 空状态：柔和青绿虚线框，平静地说明「今天没有要提醒的」。 */
+.rpg-empty {
+  margin: 0;
+  padding: 20px 16px;
+  border: 1px dashed color-mix(in srgb, var(--docs-teal) 35%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--docs-teal) 5%, var(--surface));
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ---- 响应式：320px 起可用，640px 以下收紧行内布局 ---- */
+
+@media (max-width: 640px) {
+  .rpg-page .docs-hero {
+    padding: 20px 16px 18px;
+  }
+
+  .rpg-page .docs-title {
+    font-size: 24px;
+  }
+
+  .rpg-card {
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .rpg-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .rpg-due-item {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 360px) {
+  .rpg-back {
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rpg-back {
+    transition: none;
+  }
+}
