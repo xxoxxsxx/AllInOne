@@ -4,15 +4,27 @@
 //   1. 读 reminder_settings（documents.db，见 ./reminders）。
 //   2. 按 Asia/Shanghai 墙钟判断是否到点（小时匹配）且今天未推送过（last_sent_date 去重）。
 //   3. 选出到期证件（daysLeft 0–30），组装一条聚合推送。
-//   4. Bark 复用 stocks 模块的配置（data/tickersentry/ticker.db 的 settings.bark_*）与 sendBark。
-//      stocks 库缺失/未配置/配置无效时静默跳过，绝不抛错、绝不写 last_sent_date。
+//   4. 推送渠道完全复用 stocks 模块（data/tickersentry/ticker.db 的 settings 通知配置）：
+//      enabledChannels() 决定本次启用哪些渠道（Bark / 飞书 / Telegram），逐渠道走 sendChannel
+//      —— 自动继承各渠道的启用开关、代理开关与 sendBark/sendFeishu/sendTelegram 的
+//      URL/内网校验等安全逻辑。飞书/Telegram 文本为 `${title}\n${body}`（sendChannel 内拼接），
+//      Bark 保持 title/body 分离。
+//      stocks 库缺失/损坏 → 视为未配置，静默跳过，绝不抛错、绝不写 last_sent_date。
 //
-// 推送失败（含不确定送达之外的失败）不落 last_sent_date，下一轮 tick 会自动重试。
+// 聚合语义沿用 channelStatus：全部成功→成功；有成功→部分成功；有不确定→不确定；否则失败。
+// 聚合为 成功/部分成功/不确定 都视为「已处理」并写 last_sent_date（避免重复轰炸）；
+// 仅 失败（没有任何渠道成功）不写标记，下一轮 tick 自动重试。
 
 import type Database from "better-sqlite3";
 
-import { barkSettings, getDB as getStocksDB } from "@/modules/stocks/store";
-import { checkBarkURL, sendBark, type BarkConfig, type SendOutcome } from "@/modules/stocks/notify";
+import { getDB as getStocksDB, notificationSettings } from "@/modules/stocks/store";
+import {
+  channelStatus,
+  enabledChannels,
+  sendChannel,
+  type ChannelConfig,
+  type SendOutcome,
+} from "@/modules/stocks/notify";
 
 import { todayStr } from "./constants";
 import { listDocuments } from "./db";
@@ -26,18 +38,21 @@ import {
   type ReminderSettings,
 } from "./reminders";
 
-/** 发送函数注入点：测试用桩替换，避免真实网络推送。 */
-export type BarkSender = (config: BarkConfig, title: string, body: string) => Promise<SendOutcome>;
+/** 单渠道发送结果（供 UI 与测试展示）。 */
+export type ChannelSendResult = { name: string; status: string; error: string };
+
+/** 发送函数注入点：签名与 stocks 的 sendChannel 一致；测试用桩替换，避免真实网络推送。 */
+export type ChannelSender = (config: ChannelConfig, name: string, title: string, body: string) => Promise<SendOutcome>;
 
 export type ReminderSkipReason =
   | ReminderDueReason
-  | "bark_unavailable"
+  | "channels_unavailable"
   | "no_due_documents";
 
 export type ReminderRunResult = {
   /** 是否执行到了「选证件 + 推送」阶段（到点且通过去重）。 */
   ran: boolean;
-  /** Bark 返回「成功」时为 true（「不确定」视为已送达以免重复轰炸，但 sent 仍为 false）。 */
+  /** 聚合结果为「成功」时为 true（部分成功/不确定视为已处理但 sent=false）。 */
   sent: boolean;
   /** ran=false 时的跳过原因；ran=true 时为空串。 */
   reason: ReminderSkipReason | "";
@@ -49,46 +64,101 @@ export type ReminderRunResult = {
   alreadySentToday: boolean;
   /** 选出的到期证件数。 */
   dueCount: number;
-  /** Bark 发送结果（成功/失败/不确定）。 */
+  /** 渠道聚合结果（channelStatus 语义：成功/部分成功/不确定/失败）。 */
   sendStatus: string;
+  /** 未成功渠道的错误摘要（“渠道：错误”，成功渠道不列入）。 */
   sendError: string;
-  /** 运行后的 last_sent_date（失败时不更新）。 */
+  /** 各渠道发送明细。 */
+  channels: ChannelSendResult[];
+  /** 运行后的 last_sent_date（仅 失败 时不更新）。 */
   lastSentDate: string | null;
 };
 
 export type ReminderCheckOptions = {
-  /** 注入发送实现；默认使用 stocks 模块的真实 sendBark（不带代理）。 */
-  barkSender?: BarkSender;
-  /** 注入 Bark 配置来源；默认读 stocks 库（见 loadBarkConfigFromStocks）。 */
-  barkConfig?: () => BarkConfig | null;
+  /** 注入发送实现（sendChannel 同签名）；默认使用 stocks 模块的真实 sendChannel。 */
+  channelSender?: ChannelSender;
+  /** 注入通知渠道配置来源；默认读 stocks 库（见 loadNotificationConfigFromStocks）。 */
+  channelsConfig?: () => ChannelConfig | null;
   /** 覆盖当前时间（ms），测试北京时间小时匹配用。 */
   nowMs?: number;
-  /** 手动触发：忽略开关/小时/当日去重，但 bark 配置与到期证件仍必须存在。 */
+  /** 手动触发：忽略开关/小时/当日去重，但渠道配置与到期证件仍必须存在。 */
   force?: boolean;
 };
+
+/** 面板展示用的渠道摘要：绝不含 Key/Token/Webhook 等机密（Bark 仅暴露主机名）。 */
+export type ChannelSummary = { name: string; enabled: boolean; configured: boolean; host: string };
 
 const EMPTY_RESULT = {
   dueCount: 0,
   sendStatus: "",
   sendError: "",
+  channels: [] as ChannelSendResult[],
 };
 
-/** 复用 stocks 的 Bark 配置：库打不开/未配置/URL 无效一律返回 null（永不抛错）。 */
-export function loadBarkConfigFromStocks(): BarkConfig | null {
+/** 复用 stocks 的通知渠道配置（Bark/飞书/Telegram + 代理开关）；库打不开时返回 null（永不抛错）。 */
+export function loadNotificationConfigFromStocks(): ChannelConfig | null {
   try {
-    const stocksDB = getStocksDB();
-    const raw = barkSettings(stocksDB);
-    if (!raw || raw.URL.trim() === "" || raw.Key.trim() === "") return null;
-    const url = checkBarkURL(raw.URL, raw.Local);
-    return { URL: url, Key: raw.Key, Local: raw.Local };
+    return notificationSettings(getStocksDB());
   } catch {
-    // stocks 库缺失、表结构损坏或 URL 校验失败：视为未配置 Bark。
+    // stocks 库缺失或表结构损坏：视为未配置。
     return null;
   }
 }
 
-/** 默认发送实现：直连 stocks 的 sendBark（证件提醒不使用行情代理）。 */
-export const defaultBarkSender: BarkSender = (config, title, body) => sendBark(config, title, body, "");
+/** 默认发送实现：stocks 的 sendChannel（自动按渠道拼接飞书/TG 文本、应用代理与安全校验）。 */
+export const defaultChannelSender: ChannelSender = (config, name, title, body) =>
+  sendChannel(config, name, title, body);
+
+/** 渠道状态摘要（服务端用；不返回任何机密）。 */
+export function summarizeChannels(config: ChannelConfig): ChannelSummary[] {
+  let barkHost = "";
+  if (config.Bark.URL.trim() !== "") {
+    try {
+      barkHost = new URL(config.Bark.URL.trim()).host;
+    } catch {
+      barkHost = "";
+    }
+  }
+  return [
+    {
+      name: "Bark",
+      enabled: config.BarkEnabled,
+      configured: config.Bark.URL.trim() !== "" && config.Bark.Key.trim() !== "",
+      host: barkHost,
+    },
+    { name: "飞书", enabled: config.FeishuEnabled, configured: config.FeishuWebhook.trim() !== "", host: "" },
+    {
+      name: "Telegram",
+      enabled: config.TGEnabled,
+      configured: config.TGToken.trim() !== "" && config.TGChatID.trim() !== "",
+      host: "",
+    },
+  ];
+}
+
+/**
+ * 逐渠道推送（enabledChannels 决定渠道集合），并按 channelStatus 聚合。
+ * 单渠道发送实现抛错按该渠道「失败」处理，不影响其他渠道。
+ */
+export async function dispatchToEnabledChannels(
+  config: ChannelConfig,
+  title: string,
+  body: string,
+  sender: ChannelSender = defaultChannelSender,
+): Promise<{ aggregate: string; channels: ChannelSendResult[] }> {
+  const channels: ChannelSendResult[] = [];
+  for (const name of enabledChannels(config)) {
+    let outcome: SendOutcome;
+    try {
+      outcome = await sender(config, name, title, body);
+    } catch (error) {
+      outcome = { status: "失败", error: error instanceof Error ? error.message : "发送异常" };
+    }
+    channels.push({ name, status: outcome.status, error: outcome.error });
+  }
+  const aggregate = channelStatus(channels.map((c) => ({ Name: c.name, Status: c.status, Error: c.error })));
+  return { aggregate, channels };
+}
 
 function skip(
   settings: ReminderSettings,
@@ -106,15 +176,20 @@ function skip(
     settingsHour: settings.hour,
     enabled: settings.enabled,
     alreadySentToday: settings.lastSentDate === today && today !== "",
-    sendStatus: "",
-    sendError: "",
     lastSentDate: settings.lastSentDate,
   };
 }
 
+function sendErrorSummary(channels: ChannelSendResult[]): string {
+  return channels
+    .filter((c) => c.status !== "成功")
+    .map((c) => `${c.name}：${c.error || c.status}`)
+    .join("；");
+}
+
 /**
  * 执行一次证件到期检查。除非 force，只有「开关开启 + 北京时间小时匹配 + 今日未推送」
- * 且选出到期证件时才真正推送；推送确认送达后才写 last_sent_date（当日去重，跨重启仍有效）。
+ * 且选出到期证件时才真正推送；聚合结果非「失败」才写 last_sent_date（当日去重，跨重启仍有效）。
  */
 export async function runDocumentExpiryCheck(
   db: Database.Database,
@@ -130,32 +205,27 @@ export async function runDocumentExpiryCheck(
   }
   const hour = due.hour;
 
-  const barkConfig = opts.barkConfig ? opts.barkConfig() : loadBarkConfigFromStocks();
-  if (!barkConfig) return skip(settings, today, hour, "bark_unavailable");
+  const config = opts.channelsConfig ? opts.channelsConfig() : loadNotificationConfigFromStocks();
+  if (!config || enabledChannels(config).length === 0) {
+    return skip(settings, today, hour, "channels_unavailable");
+  }
 
   const dueDocs = selectExpiringDocuments(listDocuments(db, today));
   if (dueDocs.length === 0) return skip(settings, today, hour, "no_due_documents");
 
   const { title, body } = buildReminderMessage(dueDocs);
-  const sender = opts.barkSender ?? defaultBarkSender;
-  let outcome: SendOutcome;
-  try {
-    outcome = await sender(barkConfig, title, body);
-  } catch (error) {
-    // 发送实现抛错不向上传播：按失败处理，下一轮重试。
-    outcome = { status: "失败", error: error instanceof Error ? error.message : "Bark 发送异常" };
-  }
+  const { aggregate, channels } = await dispatchToEnabledChannels(config, title, body, opts.channelSender);
 
-  // 「成功」或「不确定」都不再重试当日推送（不确定 = 送达未知，重发可能造成重复通知）；
-  // 真失败则不写 last_sent_date，下一轮 tick 重试。
-  const delivered = outcome.status === "成功" || outcome.status === "不确定";
+  // 成功/部分成功/不确定 都视为已处理（不确定 = 送达未知，重发可能造成重复通知）；
+  // 仅 失败（没有任何渠道成功）不写 last_sent_date，下一轮 tick 重试。
+  const delivered = aggregate !== "失败";
   const lastSentDate = settings.lastSentDate;
   if (delivered) {
     markReminderSent(db, today);
   }
   return {
     ran: true,
-    sent: outcome.status === "成功",
+    sent: aggregate === "成功",
     reason: "",
     today,
     hour,
@@ -163,8 +233,9 @@ export async function runDocumentExpiryCheck(
     enabled: settings.enabled,
     alreadySentToday: delivered ? true : lastSentDate === today,
     dueCount: dueDocs.length,
-    sendStatus: outcome.status,
-    sendError: outcome.error,
+    sendStatus: aggregate,
+    sendError: sendErrorSummary(channels),
+    channels,
     lastSentDate: delivered ? today : lastSentDate,
   };
 }

@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { todayStr } from "@/lib/documents/constants";
 import { getDocumentsDB, listDocuments } from "@/lib/documents/db";
 import { getReminderSettings, selectExpiringDocuments } from "@/lib/documents/reminders";
+import { loadNotificationConfigFromStocks, summarizeChannels, type ChannelSummary } from "@/lib/documents/reminders-run";
 
 import { RemindersSettings } from "./reminders-settings";
 
@@ -11,9 +12,9 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "到期提醒设置 · 证件夹" };
 
-// /documents/settings 路由页：服务端读取提醒设置与 Bark 配置状态后挂载设置面板。
-// Bark 的服务地址与设备 Key 复用行情（TickerSentry）设置，只在服务端读取；
-// 页面仅展示「是否已配置 + 主机名」，绝不把 Key 下发给客户端。
+// /documents/settings 路由页：服务端读取提醒设置与推送渠道（Bark/飞书/Telegram）状态后挂载设置面板。
+// 渠道地址/Key/Webhook 复用行情（TickerSentry）设置，只在服务端读取；
+// 页面仅展示「启用开关 + 是否已配置（Bark 另加主机名）」，绝不把机密下发给客户端。
 // 面板本体在 ./reminders-settings.tsx，动作在 ../reminders-actions.ts。
 
 const PREVIEW_LIMIT = 10;
@@ -50,31 +51,34 @@ const previewListStyle: CSSProperties = {
   color: "var(--text-2, #666)",
 };
 
-async function barkStatus(): Promise<{ configured: boolean; host: string }> {
-  // 行情库不可用 / 未配置 / URL 异常时一律按「未配置」展示，页面不因 stocks 缺失而渲染失败。
-  try {
-    const { getDB, barkSettings } = await import("@/modules/stocks/store");
-    const target = barkSettings(getDB());
-    const configured = target.URL.trim() !== "" && target.Key.trim() !== "";
-    let host = "";
-    if (configured) {
-      try {
-        host = new URL(target.URL.trim()).host;
-      } catch {
-        host = "";
-      }
-    }
-    return { configured, host };
-  } catch {
-    return { configured: false, host: "" };
+function channelStateText(channel: ChannelSummary): string {
+  if (channel.enabled && channel.configured) {
+    return channel.name === "Bark" && channel.host ? `已启用 · 已配置（${channel.host}）` : "已启用 · 已配置";
   }
+  if (channel.enabled) return "已启用但未配置（到行情设置补全后才会推送）";
+  return "未启用";
 }
 
 export default async function ReminderSettingsPage() {
   const db = getDocumentsDB();
   const settings = getReminderSettings(db);
   const dueDocs = selectExpiringDocuments(listDocuments(db, todayStr()));
-  const bark = await barkStatus();
+  // stocks 库不可用时按「全部未启用」展示，页面不因 stocks 缺失而渲染失败。
+  const channels = summarizeChannels(loadNotificationConfigFromStocks() ?? {
+    Bark: { URL: "", Key: "", Local: false },
+    BarkEnabled: false,
+    FeishuWebhook: "",
+    FeishuSecret: "",
+    FeishuEnabled: false,
+    TGToken: "",
+    TGChatID: "",
+    TGEnabled: false,
+    Proxy: "",
+    BarkProxy: false,
+    FeishuProxy: false,
+    TGProxy: false,
+  });
+  const anyUsable = channels.some((c) => c.enabled && c.configured);
   const schedulerDisabled = process.env.DISABLE_SCHEDULER === "1";
   const hourText = `${String(settings.hour).padStart(2, "0")}:00`;
 
@@ -84,7 +88,7 @@ export default async function ReminderSettingsPage() {
       <header className="docs-hero">
         <p className="docs-kicker">Document Vault</p>
         <h1 className="docs-title">到期提醒</h1>
-        <p className="docs-sub">每天早上把 30 天内到期的证件合并成一条 Bark 推送，每天最多一次。</p>
+        <p className="docs-sub">每天把 30 天内到期的证件合并成一条推送（Bark / 飞书 / Telegram），每天最多一次。</p>
       </header>
 
       {schedulerDisabled ? (
@@ -96,24 +100,30 @@ export default async function ReminderSettingsPage() {
       <RemindersSettings initialSettings={settings} />
 
       <section style={cardStyle} aria-label="推送渠道说明">
-        <h2 style={cardTitleStyle}>推送渠道：复用行情 Bark 配置</h2>
+        <h2 style={cardTitleStyle}>推送渠道：复用行情设置的三个渠道</h2>
         <p style={cardTextStyle}>
-          当前状态：{bark.configured ? `已配置（${bark.host || "Bark 服务"}）` : "未配置"}
+          推送渠道复用行情设置的三个渠道及其启用开关；哪个渠道开了就用哪个，可多渠道同时推送。
         </p>
+        <ul style={previewListStyle}>
+          {channels.map((c) => (
+            <li key={c.name}>{c.name}：{channelStateText(c)}</li>
+          ))}
+        </ul>
         <p style={cardTextStyle}>
-          本功能不单独保存任何 Bark 地址或设备 Key：推送直接使用
+          本功能不单独保存任何渠道地址或机密：推送直接使用
           <Link href="/stocks/settings">「行情与通知设置（TickerSentry）」</Link>
-          中已保存的 Bark 服务地址与设备 Key。设备 Key 只保存在服务端数据库，页面不显示、不下发。
+          中已保存的 Bark 地址与设备 Key、飞书 Webhook、Telegram Token。这些信息只保存在服务端数据库，
+          页面不显示、不下发（Bark 仅展示主机名）。
         </p>
-        {bark.configured ? (
+        {anyUsable ? (
           <p style={cardTextStyle}>
-            未收到推送时，请先用上方「发送测试推送」核对 Bark 是否送达，再到行情设置里检查地址与 Key。
+            未收到推送时，请先用上方「发送测试推送」核对各启用渠道是否送达，再到行情设置里检查对应渠道配置。
           </p>
         ) : (
           <p style={cardTextStyle}>
-            尚未配置 Bark：请先到
-            <Link href="/stocks/settings">行情与通知设置 → Bark</Link>
-            填写服务地址和设备 Key 并保存，再回到本页「发送测试推送」核对送达。
+            尚未启用任何渠道：请先到
+            <Link href="/stocks/settings">行情与通知设置 → 通知渠道</Link>
+            启用并配置 Bark / 飞书 / Telegram 至少一个渠道，再回到本页「发送测试推送」核对送达。
           </p>
         )}
       </section>

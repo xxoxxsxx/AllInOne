@@ -1,7 +1,8 @@
 // 证件到期提醒测试：设置默认值/持久化、当日去重（跨重启）、北京时间小时匹配、
-// 到期证件筛选（daysLeft 0–30）、消息格式（分组聚合）、Bark 失败重试语义、
-// 关闭跳过、stocks 库/Bark 配置缺失跳过。
-// 全部通过 barkSender 注入桩发送，绝不做真实网络推送（唯一的"网络"是 127.0.0.1 本地回环 mock）。
+// 到期证件筛选（daysLeft 0–30）、消息格式（分组聚合）、多渠道发送语义
+// （部分成功落标记 / 全部失败重试 / 无启用渠道跳过）、关闭跳过、stocks 库/渠道配置缺失跳过。
+// 全部通过 channelSender 注入桩发送，绝不做真实网络推送
+// （唯一的"网络"是 127.0.0.1 本地回环 mock：验证默认 sendChannel → sendBark / sendFeishu 接线）。
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -34,15 +35,17 @@ import {
   shanghaiHour,
 } from "../src/lib/documents/reminders.ts";
 import {
-  defaultBarkSender,
-  loadBarkConfigFromStocks,
+  defaultChannelSender,
+  dispatchToEnabledChannels,
+  loadNotificationConfigFromStocks,
   runDocumentExpiryCheck,
   startDocumentReminderScheduler,
   stopDocumentReminderSchedulerForTest,
-  type BarkSender,
+  summarizeChannels,
+  type ChannelSender,
   type ReminderCheckOptions,
 } from "../src/lib/documents/reminders-run.ts";
-import type { BarkConfig } from "../src/modules/stocks/notify.ts";
+import type { ChannelConfig } from "../src/modules/stocks/notify.ts";
 import { setDB as setStocksDB } from "../src/modules/stocks/store.ts";
 
 // 固定“现在”：北京时间 2026-11-05 09:00（UTC 01:00），便于确定性断言。
@@ -50,22 +53,53 @@ const NOW = Date.UTC(2026, 10, 5, 1, 0, 0);
 const TODAY = "2026-11-05";
 const HOUR_AT_NOW = 9;
 
-const FAKE_BARK: BarkConfig = { URL: "https://bark.example.com", Key: "test-key", Local: false };
+/** 仅 Bark 启用的基础配置（大多数测试只关心单渠道路径）。 */
+const FAKE_CONFIG: ChannelConfig = {
+  Bark: { URL: "https://bark.example.com", Key: "test-key", Local: false },
+  BarkEnabled: true,
+  FeishuWebhook: "",
+  FeishuSecret: "",
+  FeishuEnabled: false,
+  TGToken: "",
+  TGChatID: "",
+  TGEnabled: false,
+  Proxy: "",
+  BarkProxy: false,
+  FeishuProxy: false,
+  TGProxy: false,
+};
 
-type SenderCall = { config: BarkConfig; title: string; body: string };
+function configWith(overrides: Partial<ChannelConfig>): ChannelConfig {
+  return { ...FAKE_CONFIG, ...overrides };
+}
+
+type SenderCall = { config: ChannelConfig; name: string; title: string; body: string };
 type BarkStatus = "成功" | "失败" | "不确定";
 
-function senderStub(status: BarkStatus, error = ""): { sender: BarkSender; calls: SenderCall[] } {
+function senderStub(status: BarkStatus, error = ""): { sender: ChannelSender; calls: SenderCall[] } {
   const calls: SenderCall[] = [];
-  const sender: BarkSender = async (config, title, body) => {
-    calls.push({ config, title, body });
+  const sender: ChannelSender = async (config, name, title, body) => {
+    calls.push({ config, name, title, body });
     return { status, error };
   };
   return { sender, calls };
 }
 
-function baseOpts(sender: BarkSender, overrides: ReminderCheckOptions = {}): ReminderCheckOptions {
-  return { barkSender: sender, barkConfig: () => FAKE_BARK, nowMs: NOW, ...overrides };
+/** 按渠道名返回不同结果的桩；未列出的渠道名返回 { status: "成功" }。 */
+function namedSender(
+  byName: Record<string, { status: BarkStatus; error?: string }>,
+): { sender: ChannelSender; calls: SenderCall[] } {
+  const calls: SenderCall[] = [];
+  const sender: ChannelSender = async (config, name, title, body) => {
+    calls.push({ config, name, title, body });
+    const hit = byName[name];
+    return hit ? { status: hit.status, error: hit.error ?? "" } : { status: "成功", error: "" };
+  };
+  return { sender, calls };
+}
+
+function baseOpts(sender: ChannelSender, overrides: ReminderCheckOptions = {}): ReminderCheckOptions {
+  return { channelSender: sender, channelsConfig: () => FAKE_CONFIG, nowMs: NOW, ...overrides };
 }
 
 function tempDb(): { db: ReturnType<typeof openDocumentsDB>; cleanup: () => void } {
@@ -149,6 +183,11 @@ test("once-per-day dedup by last_sent_date survives restart", async () => {
     assert.equal(r1.hour, HOUR_AT_NOW);
     assert.equal(r1.dueCount, 1);
     assert.equal(first.calls.length, 1);
+    assert.deepEqual(first.calls[0].name, "Bark");
+    assert.deepEqual(
+      r1.channels,
+      [{ name: "Bark", status: "成功", error: "" }],
+    );
     assert.deepEqual(getReminderSettings(db), { enabled: true, hour: HOUR_AT_NOW, lastSentDate: TODAY });
 
     // 同一天同一时刻再跑：去重，不再发送。
@@ -290,7 +329,8 @@ test("message format: fixed title, per-holder groups, title+expiry lines", async
 
     // 推送侧使用同一消息（聚合为一条，而非每份证件一条）。
     saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
-    const result = await runDocumentExpiryCheck(db, baseOpts(async (config, t, b) => {
+    const result = await runDocumentExpiryCheck(db, baseOpts(async (config, name, t, b) => {
+      assert.equal(name, "Bark");
       assert.equal(t, REMINDER_TITLE);
       assert.equal(b, body);
       return { status: "成功", error: "" };
@@ -303,9 +343,9 @@ test("message format: fixed title, per-holder groups, title+expiry lines", async
   }
 });
 
-// —— Bark 失败：不崩溃、不写当日标记、下一轮自动重试 ——
+// —— 全部渠道失败：不崩溃、不写当日标记、下一轮自动重试 ——
 
-test("bark failure keeps last_sent_date unset so the next tick retries", async () => {
+test("all-channel failure keeps last_sent_date unset so the next tick retries", async () => {
   const { db, cleanup } = tempDb();
   try {
     seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
@@ -316,7 +356,8 @@ test("bark failure keeps last_sent_date unset so the next tick retries", async (
     assert.equal(r1.ran, true);
     assert.equal(r1.sent, false);
     assert.equal(r1.sendStatus, "失败");
-    assert.equal(r1.sendError, "Bark HTTP 500");
+    assert.equal(r1.sendError, "Bark：Bark HTTP 500");
+    assert.deepEqual(r1.channels, [{ name: "Bark", status: "失败", error: "Bark HTTP 500" }]);
     assert.equal(r1.lastSentDate, null);
     assert.equal(getReminderSettings(db).lastSentDate, null);
 
@@ -328,16 +369,16 @@ test("bark failure keeps last_sent_date unset so the next tick retries", async (
     assert.equal(retry.calls.length, 1);
     assert.equal(getReminderSettings(db).lastSentDate, TODAY);
 
-    // 发送实现抛异常同样被吞掉，不向上传播。
-    const throwing: BarkSender = async () => {
+    // 单渠道发送实现抛异常被吞掉（按该渠道失败计），不向上传播。
+    const throwing: ChannelSender = async () => {
       throw new Error("socket exploded");
     };
     markReminderSent(db, null);
     const r3 = await runDocumentExpiryCheck(db, baseOpts(throwing));
-    assert.doesNotThrow(() => Promise.resolve(r3));
     assert.equal(r3.sent, false);
     assert.equal(r3.sendStatus, "失败");
-    assert.match(r3.sendError, /socket exploded/);
+    assert.match(r3.sendError, /Bark：socket exploded/);
+    assert.deepEqual(r3.channels, [{ name: "Bark", status: "失败", error: "socket exploded" }]);
     assert.equal(getReminderSettings(db).lastSentDate, null);
 
     // 「不确定」送达视为已处理（避免重复轰炸），落当日标记但 sent=false。
@@ -351,6 +392,234 @@ test("bark failure keeps last_sent_date unset so the next tick retries", async (
     db.close();
     cleanup();
   }
+});
+
+// —— 多渠道：部分成功 → 落当日标记；全部失败 → 不落标记 ——
+
+test("multi-channel partial success (部分成功) marks last_sent_date and records per-channel results", async () => {
+  const { db, cleanup } = tempDb();
+  try {
+    seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
+    saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
+    const multiConfig = configWith({
+      FeishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/placeholder",
+      FeishuEnabled: true,
+    });
+
+    const { sender, calls } = namedSender({ 飞书: { status: "失败", error: "飞书 HTTP 500" } });
+    const r1 = await runDocumentExpiryCheck(db, baseOpts(sender, { channelsConfig: () => multiConfig }));
+    assert.equal(r1.ran, true);
+    assert.equal(r1.sent, false); // 非全成功
+    assert.equal(r1.sendStatus, "部分成功");
+    assert.deepEqual(r1.channels.map((c) => [c.name, c.status]), [
+      ["Bark", "成功"],
+      ["飞书", "失败"],
+    ]);
+    assert.match(r1.sendError, /飞书：飞书 HTTP 500/);
+    assert.ok(!r1.sendError.includes("Bark")); // 成功渠道不进错误摘要
+    assert.equal(getReminderSettings(db).lastSentDate, TODAY); // 有渠道成功 → 视为已处理
+    assert.equal(calls.length, 2);
+
+    // 部分成功也算当日已处理：再跑不再发送。
+    const second = senderStub("成功");
+    const r2 = await runDocumentExpiryCheck(db, baseOpts(second.sender, { channelsConfig: () => multiConfig }));
+    assert.equal(r2.ran, false);
+    assert.equal(r2.reason, "already_sent_today");
+    assert.equal(second.calls.length, 0);
+  } finally {
+    db.close();
+    cleanup();
+  }
+});
+
+test("multi-channel total failure is retried on the next tick", async () => {
+  const { db, cleanup } = tempDb();
+  try {
+    seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
+    saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
+    const multiConfig = configWith({
+      FeishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/placeholder",
+      FeishuEnabled: true,
+      TGToken: "1234567890:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      TGChatID: "123456",
+      TGEnabled: true,
+    });
+
+    const { sender, calls } = namedSender({
+      Bark: { status: "失败", error: "Bark HTTP 500" },
+      飞书: { status: "失败", error: "飞书 HTTP 502" },
+      Telegram: { status: "失败", error: "Telegram 拒绝请求 (HTTP 401)" },
+    });
+    const r1 = await runDocumentExpiryCheck(db, baseOpts(sender, { channelsConfig: () => multiConfig }));
+    assert.equal(r1.ran, true);
+    assert.equal(r1.sent, false);
+    // 没有任何渠道成功 → 聚合失败 → 不落标记，等待重试。
+    assert.equal(r1.sendStatus, "失败");
+    assert.deepEqual(r1.channels.map((c) => [c.name, c.status]), [
+      ["Bark", "失败"],
+      ["飞书", "失败"],
+      ["Telegram", "失败"],
+    ]);
+    assert.match(r1.sendError, /Bark：Bark HTTP 500/);
+    assert.match(r1.sendError, /飞书：飞书 HTTP 502/);
+    assert.match(r1.sendError, /Telegram：Telegram 拒绝请求/);
+    assert.equal(getReminderSettings(db).lastSentDate, null);
+    assert.equal(calls.length, 3);
+
+    // 下一轮 tick 重试：这次全成功。
+    const retry = senderStub("成功");
+    const r2 = await runDocumentExpiryCheck(db, baseOpts(retry.sender, { channelsConfig: () => multiConfig }));
+    assert.equal(r2.sent, true);
+    assert.equal(r2.sendStatus, "成功");
+    assert.equal(retry.calls.length, 3);
+    assert.equal(getReminderSettings(db).lastSentDate, TODAY);
+
+    // 失败 + 不确定（无成功）→ 聚合「不确定」：按已处理落标记（防重复轰炸），但 sent=false。
+    markReminderSent(db, null);
+    const mixedUncertain = namedSender({
+      Bark: { status: "失败", error: "Bark HTTP 500" },
+      飞书: { status: "不确定", error: "飞书响应无法确认" },
+      Telegram: { status: "失败", error: "Telegram 拒绝请求 (HTTP 401)" },
+    });
+    const r3 = await runDocumentExpiryCheck(db, baseOpts(mixedUncertain.sender, { channelsConfig: () => multiConfig }));
+    assert.equal(r3.sent, false);
+    assert.equal(r3.sendStatus, "不确定");
+    assert.equal(getReminderSettings(db).lastSentDate, TODAY);
+  } finally {
+    db.close();
+    cleanup();
+  }
+});
+
+// —— 渠道选择：只发启用的渠道；飞书/TG 收到原始 title/body（拼接由 sendChannel 完成） ——
+
+test("dispatches only enabled channels; BarkEnabled=false excludes Bark", async () => {
+  const { db, cleanup } = tempDb();
+  try {
+    seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
+    saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
+    // Bark 未启用：即使地址/Key 都在也不应发送；飞书 + Telegram 启用。
+    const tgOnly = configWith({
+      BarkEnabled: false,
+      FeishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/placeholder",
+      FeishuEnabled: true,
+      TGToken: "1234567890:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      TGChatID: "123456",
+      TGEnabled: true,
+    });
+
+    const { sender, calls } = senderStub("成功");
+    const result = await runDocumentExpiryCheck(db, baseOpts(sender, { channelsConfig: () => tgOnly }));
+    assert.equal(result.ran, true);
+    assert.equal(result.sent, true);
+    // 注入的 sender 与 sendChannel 同签名：收到原始 title/body；
+    // 飞书/TG 的 `${title}\n${body}` 拼接发生在真实 sendChannel 内（由回环 Feishu 测试端到端验证）。
+    assert.deepEqual(calls.map((c) => c.name), ["飞书", "Telegram"]);
+    for (const call of calls) {
+      assert.equal(call.title, REMINDER_TITLE);
+      assert.match(call.body, /护照/);
+      assert.doesNotMatch(call.body, /^证件到期提醒/); // body 不含标题，标题单独传递
+    }
+    assert.deepEqual(result.channels.map((c) => [c.name, c.status]), [
+      ["飞书", "成功"],
+      ["Telegram", "成功"],
+    ]);
+  } finally {
+    db.close();
+    cleanup();
+  }
+});
+
+// —— 无启用渠道 / 配置缺失：优雅跳过 ——
+
+test("no enabled channel or missing stocks config skips gracefully without crash", async () => {
+  const { db, cleanup } = tempDb();
+  const originalDataDir = process.env.DATA_DIR;
+  try {
+    seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
+    saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
+
+    // 注入：三个渠道都未启用（enabledChannels 为空）。
+    const { sender, calls } = senderStub("成功");
+    const nothingEnabled = baseOpts(sender, {
+      channelsConfig: () => configWith({ BarkEnabled: false, FeishuEnabled: false, TGEnabled: false }),
+    });
+    const skipped = await runDocumentExpiryCheck(db, nothingEnabled);
+    assert.equal(skipped.ran, false);
+    assert.equal(skipped.reason, "channels_unavailable");
+    assert.deepEqual(skipped.channels, []);
+    assert.equal(calls.length, 0);
+    assert.equal(getReminderSettings(db).lastSentDate, null);
+
+    // 注入：配置整体不可用（等价于 stocks 配置读取失败）。
+    const nullConfig = baseOpts(sender, { channelsConfig: () => null });
+    const skippedNull = await runDocumentExpiryCheck(db, nullConfig);
+    assert.equal(skippedNull.ran, false);
+    assert.equal(skippedNull.reason, "channels_unavailable");
+    assert.equal(calls.length, 0);
+
+    // 默认加载器：DATA_DIR 指向空目录（stocks 库不存在 → 自动建空库，三个渠道都未配置）。
+    const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "documents-reminders-stocks-"));
+    process.env.DATA_DIR = emptyRoot;
+    setStocksDB(null);
+    try {
+      const config = loadNotificationConfigFromStocks();
+      assert.ok(config, "空 stocks 库应返回默认配置而非 null");
+      assert.deepEqual(summarizeChannels(config).map((c) => [c.name, c.enabled, c.configured]), [
+        ["Bark", false, false],
+        ["飞书", false, false],
+        ["Telegram", false, false],
+      ]);
+      const { sender: s2, calls: c2 } = senderStub("成功");
+      const viaDefault = await runDocumentExpiryCheck(db, baseOpts(s2, { channelsConfig: undefined }));
+      assert.equal(viaDefault.ran, false);
+      assert.equal(viaDefault.reason, "channels_unavailable");
+      assert.equal(c2.length, 0);
+    } finally {
+      fs.rmSync(emptyRoot, { recursive: true, force: true });
+    }
+
+    // 默认加载器：stocks 库损坏（无 settings 表）→ 返回 null，不抛错。
+    const broken = new Database(":memory:");
+    setStocksDB(broken as unknown as Parameters<typeof setStocksDB>[0]);
+    try {
+      assert.equal(loadNotificationConfigFromStocks(), null);
+    } finally {
+      broken.close();
+      setStocksDB(null);
+    }
+  } finally {
+    if (originalDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = originalDataDir;
+    db.close();
+    cleanup();
+  }
+});
+
+test("channel summaries never leak secrets (host only for Bark)", () => {
+  const config = configWith({
+    Bark: { URL: "https://api.day.app", Key: "SECRET-KEY", Local: false },
+    BarkEnabled: true,
+    FeishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/SECRET",
+    FeishuEnabled: true,
+    TGToken: "1234567890:SECRET",
+    TGChatID: "42",
+    TGEnabled: false, // 启用开关关着但配置齐全
+  });
+  const summaries = summarizeChannels(config);
+  assert.deepEqual(summaries, [
+    { name: "Bark", enabled: true, configured: true, host: "api.day.app" },
+    { name: "飞书", enabled: true, configured: true, host: "" },
+    { name: "Telegram", enabled: false, configured: true, host: "" },
+  ]);
+  const serialized = JSON.stringify(summaries);
+  assert.ok(!serialized.includes("SECRET"));
+  assert.ok(!serialized.includes("https://"));
+
+  // Bark 地址非法时 host 为空串但不抛错。
+  const badUrl = summarizeChannels(configWith({ Bark: { URL: "not a url", Key: "k", Local: false } }));
+  assert.equal(badUrl[0].host, "");
+  assert.equal(badUrl[0].configured, true);
 });
 
 // —— 开关关闭：直接跳过 ——
@@ -381,58 +650,9 @@ test("enabled=false skips the check entirely unless forced", async () => {
   }
 });
 
-// —— stocks 库 / Bark 配置缺失：优雅跳过 ——
+// —— 默认发送实现 = stocks sendChannel（仅打本地回环 mock，无真实网络推送） ——
 
-test("missing bark config or stocks db skips gracefully without crash", async () => {
-  const { db, cleanup } = tempDb();
-  const originalDataDir = process.env.DATA_DIR;
-  try {
-    seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
-    saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
-
-    // 注入：Bark 配置不可用（等价于未配置/无效）。
-    const { sender, calls } = senderStub("成功");
-    const skipped = await runDocumentExpiryCheck(db, baseOpts(sender, { barkConfig: () => null }));
-    assert.equal(skipped.ran, false);
-    assert.equal(skipped.reason, "bark_unavailable");
-    assert.equal(calls.length, 0);
-    assert.equal(getReminderSettings(db).lastSentDate, null);
-
-    // 默认加载器：DATA_DIR 指向空目录（stocks 库不存在 → 自动建空库，Bark 未配置）。
-    const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "documents-reminders-stocks-"));
-    process.env.DATA_DIR = emptyRoot;
-    setStocksDB(null);
-    try {
-      assert.equal(loadBarkConfigFromStocks(), null);
-      const { sender: s2, calls: c2 } = senderStub("成功");
-      const viaDefault = await runDocumentExpiryCheck(db, baseOpts(s2, { barkConfig: undefined }));
-      assert.equal(viaDefault.ran, false);
-      assert.equal(viaDefault.reason, "bark_unavailable");
-      assert.equal(c2.length, 0);
-    } finally {
-      fs.rmSync(emptyRoot, { recursive: true, force: true });
-    }
-
-    // 默认加载器：stocks 库损坏（无 settings 表）→ 同样返回 null，不抛错。
-    const broken = new Database(":memory:");
-    setStocksDB(broken as unknown as Parameters<typeof setStocksDB>[0]);
-    try {
-      assert.equal(loadBarkConfigFromStocks(), null);
-    } finally {
-      broken.close();
-      setStocksDB(null);
-    }
-  } finally {
-    if (originalDataDir === undefined) delete process.env.DATA_DIR;
-    else process.env.DATA_DIR = originalDataDir;
-    db.close();
-    cleanup();
-  }
-});
-
-// —— 默认发送实现 = stocks sendBark（仅打本地回环 mock，无真实网络推送） ——
-
-test("default barkSender wires to stocks sendBark against a loopback mock", async () => {
+test("default channelSender wires Bark through stocks sendChannel against a loopback mock", async () => {
   const { db, cleanup } = tempDb();
   const bodies: string[] = [];
   const server = http.createServer((req, res) => {
@@ -452,24 +672,104 @@ test("default barkSender wires to stocks sendBark against a loopback mock", asyn
     seedDoc(db, "回环护照", addDuration(TODAY, 9, "day"));
     saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
     const address = server.address() as { address: string; port: number };
-    const localBark: BarkConfig = { URL: `http://127.0.0.1:${address.port}`, Key: "loopback-test", Local: true };
+    const localConfig = configWith({
+      Bark: { URL: `http://127.0.0.1:${address.port}`, Key: "loopback-test", Local: true },
+    });
     const result = await runDocumentExpiryCheck(db, {
-      barkConfig: () => localBark, // 不注入 barkSender → 走默认 sendBark
+      channelsConfig: () => localConfig, // 不注入 channelSender → 走默认 sendChannel
       nowMs: NOW,
     });
     assert.equal(result.ran, true);
     assert.equal(result.sent, true);
     assert.equal(result.sendStatus, "成功");
+    assert.deepEqual(result.channels, [{ name: "Bark", status: "成功", error: "" }]);
     assert.equal(bodies.length, 1);
     const payload = JSON.parse(bodies[0]) as { device_key: string; title: string; body: string; group: string };
     assert.equal(payload.device_key, "loopback-test");
     assert.equal(payload.title, REMINDER_TITLE);
     assert.match(payload.body, /回环护照/);
+    assert.ok(!payload.title.includes("\n")); // Bark 保持 title/body 分离
   } finally {
     await new Promise<void>((resolve, reject) => server.close((e) => (e ? reject(e) : resolve())));
     db.close();
     cleanup();
   }
+});
+
+test("default channelSender sends Feishu the joined `${title}\\n${body}` text (loopback)", async () => {
+  const { db, cleanup } = tempDb();
+  const texts: string[] = [];
+  const server = http.createServer((req, res) => {
+    let raw = "";
+    req.on("data", (c: Buffer) => {
+      raw += c.toString("utf8");
+    });
+    req.on("end", () => {
+      try {
+        const payload = JSON.parse(raw) as { msg_type: string; content: { text: string } };
+        texts.push(payload.content.text);
+      } catch {
+        texts.push(raw);
+      }
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ code: 0, msg: "success" }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    seedDoc(db, "回环签证", addDuration(TODAY, 4, "day"));
+    saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
+    const address = server.address() as { address: string; port: number };
+    const feishuOnly = configWith({
+      BarkEnabled: false,
+      FeishuWebhook: `http://127.0.0.1:${address.port}/open-apis/bot/v2/hook/loopback`,
+      FeishuSecret: "",
+      FeishuEnabled: true,
+    });
+    const result = await runDocumentExpiryCheck(db, {
+      channelsConfig: () => feishuOnly, // 不注入 channelSender → 真实 sendChannel → sendFeishu
+      nowMs: NOW,
+    });
+    assert.equal(result.ran, true);
+    assert.equal(result.sent, true);
+    assert.deepEqual(result.channels, [{ name: "飞书", status: "成功", error: "" }]);
+    assert.equal(texts.length, 1);
+    const expectedBody = buildReminderMessage(selectExpiringDocuments(listDocuments(db, TODAY))).body;
+    assert.equal(texts[0], `${REMINDER_TITLE}\n${expectedBody}`); // 拼接格式与 stocks sendChannel 一致
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((e) => (e ? reject(e) : resolve())));
+    db.close();
+    cleanup();
+  }
+});
+
+test("dispatchToEnabledChannels skips disabled channels and aggregates with channelStatus semantics", async () => {
+  const allOff = configWith({ BarkEnabled: false, FeishuEnabled: false, TGEnabled: false });
+  const empty = await dispatchToEnabledChannels(allOff, "t", "b", senderStub("成功").sender);
+  // channelStatus 对空数组的语义是 0===0 → “成功”；但 runner/testAction 都会在派发前
+  // 先检查 enabledChannels 为空并返回 channels_unavailable，因此空集合不会走到这里。
+  assert.equal(empty.aggregate, "成功");
+  assert.deepEqual(empty.channels, []);
+
+  const { sender } = namedSender({ Telegram: { status: "不确定", error: "超时" } });
+  const mixed = await dispatchToEnabledChannels(
+    configWith({
+      BarkEnabled: false,
+      FeishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/x",
+      FeishuEnabled: true,
+      TGToken: "1:2",
+      TGChatID: "3",
+      TGEnabled: true,
+    }),
+    "t",
+    "b",
+    sender,
+  );
+  assert.equal(mixed.aggregate, "部分成功"); // 飞书成功 + TG 不确定 → 有成功即部分成功
+  assert.deepEqual(mixed.channels.map((c) => [c.name, c.status]), [
+    ["飞书", "成功"],
+    ["Telegram", "不确定"],
+  ]);
 });
 
 // —— 调度器：DISABLE_SCHEDULER 守卫 + 重复调用安全 ——
