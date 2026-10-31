@@ -36,6 +36,8 @@ import { useOverlayDialog } from "./use-overlay-dialog";
 
 type SortMode = "custom" | "expiry" | "created";
 
+type ViewMode = "card" | "list";
+
 type FormState = {
   title: string;
   holderId: number | null;
@@ -948,6 +950,7 @@ export function DocumentsClient(props: {
   const [tagFilter, setTagFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | DocStatus>(initialStatus);
   const [sort, setSort] = useState<SortMode>("custom");
+  const [view, setView] = useState<ViewMode>("card");
   // 自定义排序：拖拽/箭头调整后的本地顺序覆盖；服务端确认后随 props 回来清空。
   const [orderOverride, setOrderOverride] = useState<number[] | null>(null);
   const [reorderBusy, setReorderBusy] = useState(false);
@@ -1006,9 +1009,25 @@ export function DocumentsClient(props: {
     setOrderOverride(null);
   }, [documents]);
 
+  // 记住视图（卡片/列表）与排序方式。
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("allinone:documents:ui");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { view?: ViewMode; sort?: SortMode };
+        if (parsed.view === "card" || parsed.view === "list") setView(parsed.view);
+        if (parsed.sort === "custom" || parsed.sort === "expiry" || parsed.sort === "created") setSort(parsed.sort);
+      }
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("allinone:documents:ui", JSON.stringify({ view, sort }));
+    } catch {}
+  }, [view, sort]);
+
   // 拖拽/箭头排序仅在「自定义」且无任何筛选时开放，避免保存部分顺序。
   const canReorder = sort === "custom" && !query.trim() && holderFilter === 0 && categoryFilter === 0 && !tagFilter && statusFilter === "all";
-
   function moveCard(id: number, targetId: number): void {
     if (reorderBusyRef.current) return;
     const current = orderOverride ?? documents.map((d) => d.id);
@@ -1135,6 +1154,26 @@ export function DocumentsClient(props: {
           <option value="created">按添加时间</option>
         </select>
         {sort === "custom" ? <span className="docs-hint docs-sort-hint">{canReorder ? "拖动卡片，或用箭头调整顺序；修改会自动保存。" : "筛选中无法调整顺序，清除筛选后即可排序。"}</span> : null}
+        <div className="docs-view-toggle" role="group" aria-label="视图切换">
+          <button
+            type="button"
+            className={`docs-view-btn${view === "card" ? " is-active" : ""}`}
+            aria-pressed={view === "card"}
+            title="卡片视图"
+            onClick={() => setView("card")}
+          >
+            ▦
+          </button>
+          <button
+            type="button"
+            className={`docs-view-btn${view === "list" ? " is-active" : ""}`}
+            aria-pressed={view === "list"}
+            title="列表视图"
+            onClick={() => setView("list")}
+          >
+            ☰
+          </button>
+        </div>
       </div>
       {orderError ? <p className="docs-error" role="alert">{orderError}</p> : null}
       {reorderBusy ? <p className="docs-hint" role="status">正在保存顺序…</p> : null}
@@ -1145,6 +1184,64 @@ export function DocumentsClient(props: {
             ? "还没有证件。点击「新增证件」录入第一份吧。"
             : "没有符合条件的证件，试试调整筛选条件。"}
         </p>
+      ) : view === "list" ? (
+        <div className="docs-list" role="list">
+          {visible.map((d, index) => (
+            <div
+              key={d.id}
+              role="listitem"
+              className={`docs-row docs-row-${d.status}${dragId === d.id ? " is-dragging" : ""}`}
+              draggable={canReorder && !reorderBusy}
+              onDragStart={(e) => { setDragId(d.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(d.id)); }}
+              onDragEnd={() => setDragId(null)}
+              onDragOver={(e) => { if (dragId !== null && dragId !== d.id) e.preventDefault(); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragId !== null && dragId !== d.id) moveCard(dragId, d.id);
+                setDragId(null);
+              }}
+            >
+              <span className="docs-row-strip" aria-hidden />
+              {canReorder ? (
+                <span className="docs-row-arrows">
+                  <button
+                    type="button"
+                    className="docs-mini-btn"
+                    aria-label={`将「${d.title}」前移`}
+                    disabled={reorderBusy || index === 0}
+                    onClick={() => nudgeCard(d.id, -1)}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="docs-mini-btn"
+                    aria-label={`将「${d.title}」后移`}
+                    disabled={reorderBusy || index === visible.length - 1}
+                    onClick={() => nudgeCard(d.id, 1)}
+                  >
+                    ↓
+                  </button>
+                </span>
+              ) : null}
+              <button type="button" className="docs-row-main" onClick={() => { setSelectedId(d.id); setLightboxIndex(null); }}>
+                <span className={`docs-status docs-status-${d.status}`}>{STATUS_LABELS[d.status]}</span>
+                <span className="docs-row-title">{d.title}</span>
+                <span className="docs-row-meta">{[d.holderName, d.categoryName].filter(Boolean).join(" · ") || "未分类"}</span>
+                <span className={`docs-row-expiry docs-row-expiry-${d.status}`}>
+                  {d.expiryDate ? `${d.expiryDate} · ${daysText(d)}` : "长期有效"}
+                </span>
+                {d.tags.length > 0 ? (
+                  <span className="docs-tags docs-row-tags">
+                    {d.tags.slice(0, 3).map((t) => (
+                      <span key={t.id} className="docs-tag">{t.name}</span>
+                    ))}
+                  </span>
+                ) : <span className="docs-row-tags" />}
+              </button>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="docs-grid">
           {visible.map((d, index) => {
