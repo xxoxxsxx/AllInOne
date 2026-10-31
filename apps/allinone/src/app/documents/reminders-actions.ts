@@ -4,7 +4,7 @@
 // 与 documents/actions.ts 分离，避免改动既有证件动作；全部返回 { ok, ... }，不向客户端抛异常。
 // 渠道配置保存在证件夹自己的 reminder_channels 表（documents.db），独立于行情设置；
 // 与 stocks 的唯一交集是「从行情设置导入」这一次性显式动作（内部动态加载，见 reminders-channels）。
-// 任何动作都不向客户端回传机密：渠道状态只含布尔摘要 + Bark 主机名。
+// 设置页需要明文显示渠道配置；保存/清除/导入成功时返回最新配置以同步表单。
 
 import { revalidatePath } from "next/cache";
 
@@ -15,7 +15,7 @@ import {
   saveReminderSettings,
   type ReminderSettings,
 } from "@/lib/documents/reminders";
-import { enabledChannels, sendChannel } from "@/modules/stocks/notify";
+import { enabledChannels, sendChannel, type ChannelConfig } from "@/modules/stocks/notify";
 import {
   clearReminderChannel,
   importChannelsFromStocks,
@@ -38,7 +38,7 @@ export type ReminderActionResult =
   | { ok: false; error: string; channels: ReminderChannelsSummary };
 
 export type ChannelsSaveResult =
-  | { ok: true; channels: ReminderChannelsSummary }
+  | { ok: true; channels: ReminderChannelsSummary; config: ChannelConfig }
   | { ok: false; error: string; channels: ReminderChannelsSummary };
 
 export type ReminderTestResult =
@@ -54,7 +54,7 @@ export type ReminderRunActionResult =
   | { ok: false; error: string };
 
 export type ChannelsImportResult =
-  | { ok: true; channels: ReminderChannelsSummary }
+  | { ok: true; channels: ReminderChannelsSummary; config: ChannelConfig }
   | { ok: false; error: string };
 
 const NO_CHANNELS_ERROR =
@@ -99,15 +99,15 @@ export async function saveReminderSettingsAction(enabled: boolean, hour: number)
 }
 
 /**
- * 保存推送渠道配置（合并语义）：文本字段留空/缺省 = 保持现有值（机密不回传客户端），
+ * 保存推送渠道配置（合并语义）：文本字段留空/缺省 = 保持现有值，
  * 开关按提交值应用；非空值经 stocks notify 校验，失败时原配置不变。
  */
 export async function saveReminderChannelsAction(input: ReminderChannelsInput): Promise<ChannelsSaveResult> {
   try {
     const db = getDocumentsDB();
-    saveReminderChannels(db, input ?? {});
+    const config = saveReminderChannels(db, input ?? {});
     revalidatePath("/documents/settings");
-    return { ok: true, channels: summarizeReminderChannels(db) };
+    return { ok: true, channels: summarizeChannels(config), config };
   } catch (e) {
     return failChannels(e);
   }
@@ -119,7 +119,7 @@ export async function clearReminderChannelAction(name: string): Promise<Channels
     if (name !== "Bark" && name !== "飞书" && name !== "Telegram" && name !== "代理") throw new Error("渠道无效");
     const config = clearReminderChannel(getDocumentsDB(), name);
     revalidatePath("/documents/settings");
-    return { ok: true, channels: summarizeChannels(config) };
+    return { ok: true, channels: summarizeChannels(config), config };
   } catch (e) {
     return failChannels(e);
   }
@@ -182,7 +182,7 @@ export async function importChannelsFromStocksAction(): Promise<ChannelsImportRe
     const result = await importChannelsFromStocks(db);
     if (!result.ok) return { ok: false, error: `从行情设置导入失败：${result.error}` };
     revalidatePath("/documents/settings");
-    return { ok: true, channels: summarizeChannels(result.config) };
+    return { ok: true, channels: summarizeChannels(result.config), config: result.config };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "操作失败" };
   }

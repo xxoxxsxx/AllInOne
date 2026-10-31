@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import { todayStr } from "@/lib/documents/constants";
 import { getDocumentsDB, listDocuments } from "@/lib/documents/db";
 import { getReminderSettings, selectExpiringDocuments } from "@/lib/documents/reminders";
-import { summarizeReminderChannels } from "@/lib/documents/reminders-channels";
+import { getReminderChannels, summarizeChannels } from "@/lib/documents/reminders-channels";
 
 import { RemindersSettings } from "./reminders-settings";
 
@@ -14,8 +14,7 @@ export const metadata = { title: "到期提醒设置 · 证件夹" };
 
 // /documents/settings 路由页：服务端读取提醒设置与推送渠道（Bark/飞书/Telegram）状态后挂载设置面板。
 // 渠道配置保存在证件夹自己的 reminder_channels 表（documents.db），独立于行情设置；
-// 「从行情设置导入」是一次性手动覆盖操作。页面仅展示「启用开关 + 是否已配置（Bark 另加主机名）」，
-// 绝不把机密下发给客户端。面板本体在 ./reminders-settings.tsx，动作在 ../reminders-actions.ts。
+// 页面展示完整渠道配置，供查看和编辑。面板本体在 ./reminders-settings.tsx。
 
 const PREVIEW_LIMIT = 10;
 
@@ -65,8 +64,9 @@ export default async function ReminderSettingsPage() {
   const db = getDocumentsDB();
   const settings = getReminderSettings(db);
   const dueDocs = selectExpiringDocuments(listDocuments(db, todayStr()));
-  // 渠道配置读取自证件夹自己的 reminder_channels 表；读取异常时按「全部未启用」展示，页面不渲染失败。
-  const channels0 = summarizeReminderChannels(db);
+  // 渠道配置读取自证件夹自己的 reminder_channels 表，回显已保存的完整配置。
+  const channelConfig = getReminderChannels(db);
+  const channels0 = summarizeChannels(channelConfig);
   const channels: ChannelLine[] = [
     { name: "Bark", enabled: channels0.bark.enabled, configured: channels0.bark.configured, host: channels0.bark.host },
     { name: "飞书", enabled: channels0.feishu.enabled, configured: channels0.feishu.configured },
@@ -91,7 +91,7 @@ export default async function ReminderSettingsPage() {
         </p>
       ) : null}
 
-      <RemindersSettings initialSettings={settings} initialChannels={channels0} />
+      <RemindersSettings initialSettings={settings} initialChannels={channels0} initialConfig={channelConfig} />
 
       <section style={cardStyle} aria-label="推送渠道说明">
         <h2 style={cardTitleStyle}>推送渠道：在证件夹独立配置</h2>
@@ -105,8 +105,7 @@ export default async function ReminderSettingsPage() {
           ))}
         </ul>
         <p style={cardTextStyle}>
-          渠道地址、Key、Webhook、Token 等机密只保存在服务端数据库，页面不显示、不下发
-          （Bark 仅展示主机名）；表单里留空的字段保存时保持现有值。如需迁移，可用上方
+          渠道地址、Key、Webhook、Token 等会在设置页完整显示；表单里留空的字段保存时保持现有值。如需迁移，可用上方
           「从行情设置导入」一次性覆盖当前渠道配置（可选的手动操作，平时不读取行情设置）。
           升级前使用行情渠道的用户，需要在本页配置或手动导入一次后才会继续接收证件提醒。
         </p>

@@ -3,10 +3,10 @@
 // 证件到期提醒设置面板：提醒开关/时刻 + 独立的推送渠道配置表单（Bark / 飞书 / Telegram + 共享代理）
 // + 渠道状态 + 测试推送（单渠道/全部）+ 从行情设置一次性导入 + 立即检查。
 // 渠道配置保存在证件夹数据库（reminder_channels），与行情（TickerSentry）设置相互独立；
-// 服务端动作从不回传机密，因此表单文本字段一律「留空 = 保持现有值」，占位符仅显示是否已配置
-// （Bark 显示主机名），保存走合并语义（saveReminderChannelsAction）。
+// 表单显示已保存的完整配置。保存时只提交发生变化且非空的文本，留空仍表示保持现有值。
 
-import { useState, useTransition, type CSSProperties } from "react";
+import { useRef, useState, useTransition, type CSSProperties } from "react";
+import type { ChannelConfig } from "@/modules/stocks/notify";
 
 import {
   clearReminderChannelAction,
@@ -45,7 +45,7 @@ type RunView = {
   lastSentDate: string | null;
 };
 
-/** 表单状态：布尔项由服务端摘要初始化；文本项一律从空开始（留空 = 保持现有值）。 */
+/** 表单状态直接展示证件夹渠道配置。 */
 type ChannelsFormState = {
   barkEnabled: boolean;
   barkUrl: string;
@@ -63,22 +63,22 @@ type ChannelsFormState = {
   proxyUrl: string;
 };
 
-function formFromSummary(s: ChannelsSummaryView): ChannelsFormState {
+function formFromConfig(config: ChannelConfig): ChannelsFormState {
   return {
-    barkEnabled: s.bark.enabled,
-    barkUrl: "",
-    barkKey: "",
-    barkLocal: s.bark.local,
-    barkProxy: s.bark.useProxy,
-    feishuEnabled: s.feishu.enabled,
-    feishuWebhook: "",
-    feishuSecret: "",
-    feishuProxy: s.feishu.useProxy,
-    tgEnabled: s.telegram.enabled,
-    tgToken: "",
-    tgChatId: "",
-    tgProxy: s.telegram.useProxy,
-    proxyUrl: "",
+    barkEnabled: config.BarkEnabled,
+    barkUrl: config.Bark.URL,
+    barkKey: config.Bark.Key,
+    barkLocal: config.Bark.Local,
+    barkProxy: config.BarkProxy,
+    feishuEnabled: config.FeishuEnabled,
+    feishuWebhook: config.FeishuWebhook,
+    feishuSecret: config.FeishuSecret,
+    feishuProxy: config.FeishuProxy,
+    tgEnabled: config.TGEnabled,
+    tgToken: config.TGToken,
+    tgChatId: config.TGChatID,
+    tgProxy: config.TGProxy,
+    proxyUrl: config.Proxy,
   };
 }
 
@@ -142,10 +142,11 @@ function channelLines(channels: ChannelResultView[]): string {
   return channels.map((c) => `${c.name}：${c.status}${c.error ? `（${c.error}）` : ""}`).join("\n");
 }
 
-export function RemindersSettings({ initialSettings, initialChannels }: { initialSettings: SettingsView; initialChannels: ChannelsSummaryView }) {
+export function RemindersSettings({ initialSettings, initialChannels, initialConfig }: { initialSettings: SettingsView; initialChannels: ChannelsSummaryView; initialConfig: ChannelConfig }) {
   const [settings, setSettings] = useState<SettingsView>(initialSettings);
   const [summary, setSummary] = useState<ChannelsSummaryView>(initialChannels);
-  const [form, setForm] = useState<ChannelsFormState>(() => formFromSummary(initialChannels));
+  const [form, setForm] = useState<ChannelsFormState>(() => formFromConfig(initialConfig));
+  const savedForm = useRef<ChannelsFormState>(formFromConfig(initialConfig));
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [channelMessage, setChannelMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [lastRun, setLastRun] = useState<RunView | null>(null);
@@ -156,9 +157,11 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
   const [importing, startImport] = useTransition();
   const [running, startRun] = useTransition();
 
-  const applySummary = (next: ChannelsSummaryView): void => {
+  const applySaved = (next: ChannelsSummaryView, config: ChannelConfig): void => {
+    const saved = formFromConfig(config);
+    savedForm.current = saved;
     setSummary(next);
-    setForm(formFromSummary(next));
+    setForm(saved);
   };
 
   const save = (): void => {
@@ -175,7 +178,7 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
     });
   };
 
-  /** 只提交「用户输入过」的文本字段（留空 → undefined → 服务端保持现有值）。 */
+  /** 仅提交改动且非空的文本字段，未改动的配置由服务端保留。 */
   const saveChannels = (): void => {
     setChannelMessage(null);
     startSaveChannels(async () => {
@@ -188,17 +191,13 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
         tgEnabled: form.tgEnabled,
         tgProxy: form.tgProxy,
       };
-      if (form.barkUrl.trim() !== "") input.barkUrl = form.barkUrl;
-      if (form.barkKey.trim() !== "") input.barkKey = form.barkKey;
-      if (form.feishuWebhook.trim() !== "") input.feishuWebhook = form.feishuWebhook;
-      if (form.feishuSecret.trim() !== "") input.feishuSecret = form.feishuSecret;
-      if (form.tgToken.trim() !== "") input.tgToken = form.tgToken;
-      if (form.tgChatId.trim() !== "") input.tgChatId = form.tgChatId;
-      if (form.proxyUrl.trim() !== "") input.proxyUrl = form.proxyUrl;
+      const textKeys = ["barkUrl", "barkKey", "feishuWebhook", "feishuSecret", "tgToken", "tgChatId", "proxyUrl"] as const;
+      for (const key of textKeys) {
+        if (form[key].trim() !== "" && form[key] !== savedForm.current[key]) input[key] = form[key];
+      }
       const res = await saveReminderChannelsAction(input);
       if (res.ok) {
-        setSummary(res.channels);
-        setForm(formFromSummary(res.channels));
+        applySaved(res.channels, res.config);
         setChannelMessage({ tone: "ok", text: "渠道配置已保存（留空字段保持原值）。" });
       } else {
         setSummary(res.channels);
@@ -242,7 +241,7 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
     startSaveChannels(async () => {
       const res = await clearReminderChannelAction(name);
       if (res.ok) {
-        applySummary(res.channels);
+        applySaved(res.channels, res.config);
         setChannelMessage({ tone: "ok", text: `已清除 ${name} 配置。` });
       } else {
         setChannelMessage({ tone: "error", text: res.error });
@@ -258,7 +257,7 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
     startImport(async () => {
       const res = await importChannelsFromStocksAction();
       if (res.ok) {
-        applySummary(res.channels);
+        applySaved(res.channels, res.config);
         setChannelMessage({ tone: "ok", text: "已从行情设置导入并覆盖当前渠道配置。" });
       } else {
         setChannelMessage({ tone: "error", text: res.error });
@@ -345,7 +344,7 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
         <div style={channelHeadStyle}>
           <strong style={{ fontSize: 14 }}>推送渠道</strong>
           <span style={{ color: "#666", fontSize: 12 }}>
-            留空 = 保持现有值；机密只保存在服务端，页面不回显
+            已保存的配置完整显示；留空保存时保持原值，清除请使用对应按钮
           </span>
         </div>
 
@@ -379,7 +378,7 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
             <span>设备 Key</span>
             <input
               style={inputStyle}
-              type="password"
+              type="text"
               value={form.barkKey}
               placeholder={summary.bark.configured ? "已配置，留空保持不变" : "Bark 设备 Key"}
               disabled={pending}
@@ -436,7 +435,7 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
             <span>签名 Secret（可选）</span>
             <input
               style={inputStyle}
-              type="password"
+              type="text"
               value={form.feishuSecret}
               placeholder={summary.feishu.configured ? "已配置，留空保持不变" : "开启签名校验时填写"}
               disabled={pending}
@@ -473,7 +472,7 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
             <span>Bot Token</span>
             <input
               style={inputStyle}
-              type="password"
+              type="text"
               value={form.tgToken}
               placeholder={summary.telegram.configured ? "已配置，留空保持不变" : "1234567890:AA…"}
               disabled={pending}

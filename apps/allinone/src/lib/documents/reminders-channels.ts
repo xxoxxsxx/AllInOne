@@ -5,7 +5,7 @@
 //
 // 表通过 CREATE TABLE IF NOT EXISTS 惰性创建（不动 documents 迁移链 / user_version）。
 // 保存采用「合并语义」：文本字段（URL/Key/Webhook/Secret/Token/ChatID/代理）缺省或留空
-// 表示「保持现有值」（服务端永远不把机密回传客户端，客户端表单里未重填即保持）；
+// 表示「保持现有值」（设置页展示现有配置，仅提交非空的修改）；
 // 开关类布尔字段总是按提交值应用。非空值经 stocks notify 的 check* 校验（中文报错）。
 // 「从行情设置导入」是一次性显式操作（importChannelsFromStocks）：动态加载 stocks store
 // 读取 notificationSettings 并整行覆盖（含空值清空），失败（库缺失/损坏）返回 ok:false。
@@ -142,7 +142,7 @@ function writeChannelsRow(db: Database.Database, config: ChannelConfig): void {
   );
 }
 
-/** 文本合并：undefined / 留空 → 保持现有值（机密不回传客户端，留空即「不修改」）。 */
+/** 文本合并：undefined / 留空 → 保持现有值。 */
 function mergeText(value: string | undefined, current: string): string {
   if (value === undefined || value === null) return current;
   const trimmed = String(value).trim();
