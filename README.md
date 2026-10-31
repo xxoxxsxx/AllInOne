@@ -1,17 +1,27 @@
-# AllInOne · 个人工具网站（v2 单镜像）
+# AllInOne · 个人工具网站
 
-一个 Next.js 16 应用聚合个人工具：门户 + CDK 台账 + 股票提醒 + Frame Lab 相机拼图。
-架构与验收标准见 [PRD.md](PRD.md)（v2 单镜像统一架构；v1 多镜像方案存档于 docs/）。
+一个 Next.js 16 应用聚合个人工具：门户 + CDK 台账 + 股票提醒 + 旅行攻略 + 证件夹 + Frame Lab 相机拼图。
+架构与验收标准见 [PRD.md](PRD.md)。
 
-## 部署（NAS，只拉取不构建）
+## 功能一览
+
+| 工具 | 说明 |
+|---|---|
+| CDK 台账 | CDK 发货、代发、作废与换新记录 |
+| 股票提醒 | 档位触价监控，支持 Bark / 飞书 / Telegram 推送 |
+| 旅行攻略 | 按天安排地点、地图标注、收集照片与链接 |
+| 证件夹 | 证件有效期管理、扫描件附件、到期提醒推送、备份导出 |
+| Frame Lab | 浏览器本地相机拼图导出 |
+| 其他 | 二维码工具、摄影拼图等静态小工具 |
+
+## 部署（拉取镜像即可）
 
 ```bash
-cd deploy && cp .env.example .env   # 填 ALLINONE_DATA_DIR 等
+cd deploy && cp .env.example .env   # 按注释填写
 docker compose pull && docker compose up -d
 ```
 
-数据卷 `/data`：`cdk/cdk.db`（自 PostgreSQL 一次性迁移，脚本见 apps/allinone/scripts/migrate-pg-to-sqlite.ts）
-与 `tickersentry/ticker.db`（直接沿用原文件）。
+数据保存在 `/data` 数据卷（SQLite）。推送到 main 后 Actions 自动构建 linux/amd64 + arm64 镜像并发布 GHCR。
 
 ## 开发
 
@@ -23,9 +33,7 @@ pnpm test       # node --test 单元测试
 pnpm build      # 类型检查 + 构建
 ```
 
-工具目录：`config/tools.json`。推送到 main 后 Actions 自动构建 linux/amd64+arm64 镜像并发布 GHCR。
-
 ## 约定
 
-- `cdk-ledger-app`、`GrBorder`、`TickerSentry` 原始仓库只读；AllInOne 内是副本。
-- 添加新工具：`src/modules/<id>/`（或纯静态 `public/<id>/`）+ `config/tools.json` 登记（PRD §5.1）。
+- 添加新工具：`src/app/<id>/`（或纯静态 `public/<id>/`）+ 在 `config/tools.json` 登记。
+- 模块文档见 [docs/documents.md](docs/documents.md) 等对应说明。
