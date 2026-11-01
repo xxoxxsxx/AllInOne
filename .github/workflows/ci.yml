@@ -3,13 +3,32 @@ name: CI
 on:
   push:
     branches: [main]
+    # 文档类提交不跑 CI（Release 同样过滤，main 上的代码提交仍每次完整执行）。
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "**.txt"
+      - "LICENSE*"
+      - ".gitignore"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "**.txt"
+      - "LICENSE*"
+      - ".gitignore"
+
+concurrency:
+  # 同分支连推时只保留最新一次运行；main 的发版检查每个提交都完整跑完，不取消。
+  group: ci-${{ github.workflow_ref }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref != 'refs/heads/main' }}
 
 jobs:
   validate-config:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # 纯 Node 单文件校验：无第三方依赖，跳过 pnpm 安装与缓存恢复。
       - uses: actions/setup-node@v4
         with:
           node-version: 22

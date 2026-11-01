@@ -6,11 +6,24 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    # 文档类提交不改变镜像内容，跳过构建，省下排队与构建的约 2 分钟。
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "**.txt"
+      - "LICENSE*"
+      - ".gitignore"
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   OWNER: xxoxxsxx
+
+# main 上连推多个提交时只构建最新一个：GHCR 每个提交都有 sha- 标签，
+# 被取消的中间提交不会发布镜像，latest/branch 标签始终指向最新提交。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   allinone:
@@ -42,5 +55,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # GHA 缓存上限 10GB/仓库；锁文件不变时 deps 层直接命中，省去 pnpm install。
           cache-from: type=gha
           cache-to: type=gha,mode=max
