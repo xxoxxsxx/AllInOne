@@ -5,14 +5,19 @@
 # ---- 依赖（构建平台，快速）：next build 所需的纯 JS 依赖 ----
 FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS deps
 WORKDIR /app
+# 先拷 package.json 固定 corepack 解析出的 pnpm 版本，层缓存随锁文件而不是整仓变化。
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile
+# pnpm store 走 cache 挂载：锁文件不变时跳过下载，变化时也只增量拉包。
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    corepack enable && pnpm install --frozen-lockfile
 
 # ---- better-sqlite3（目标平台）：正确架构的原生二进制 ----
 FROM node:22-bookworm-slim AS sqlite
 WORKDIR /sqlite
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
-RUN npm init -y >/dev/null 2>&1 \
+# npm 缓存挂载：better-sqlite3 版本不变时二次构建直接走本地缓存。
+RUN --mount=type=cache,target=/root/.npm \
+    npm init -y >/dev/null 2>&1 \
  && npm install --no-audit --no-fund better-sqlite3@12.11.1 \
  && node -e "const db=require('better-sqlite3')(':memory:'); db.exec('select 1'); console.log('sqlite stage ok')"
 
@@ -32,7 +37,8 @@ COPY public ./public
 COPY config ./config
 COPY src ./src
 COPY scripts ./scripts
-RUN corepack enable && pnpm run build
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    corepack enable && pnpm run build
 
 # ---- 运行（目标平台）----
 FROM node:22-bookworm-slim AS runner
