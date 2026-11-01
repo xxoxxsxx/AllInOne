@@ -219,16 +219,60 @@ function sync() {
   render(ctx, canvas.width, canvas.height);
 }
 function reset() { zoom = 1; focusX = focusY = .5; sync(); }
+const {EXIF_FIELDS, buildExifFields, buildExifCaption} = window.FrameLabExifFormat;
+const exifButtons = [...$('exif-chips').querySelectorAll('button[data-exif-field]')];
+let exifFields = buildExifFields(null), selectedExif = new Set();
+function showExif(exif, loading = false) {
+  exifFields = buildExifFields(exif);
+  selectedExif = new Set(EXIF_FIELDS.filter(key => exifFields[key]));
+  for (const button of exifButtons) {
+    const key = button.dataset.exifField, value = exifFields[key];
+    button.hidden = !value;
+    button.textContent = value;
+    button.setAttribute('aria-label', `${button.dataset.label} ${value}`);
+    button.setAttribute('aria-pressed', String(selectedExif.has(key)));
+  }
+  const hasInfo = selectedExif.size > 0;
+  $('exif-chips').hidden = !hasInfo;
+  $('exif-status').hidden = hasInfo;
+  $('exif-status').textContent = loading ? '正在检测拍摄信息…' : '未检测到拍摄信息（或图片不含 EXIF）';
+  $('exif-apply').disabled = !hasInfo;
+}
+async function readExif(file) {
+  try {
+    if (typeof exifr === 'undefined' || typeof exifr.parse !== 'function') return null;
+    return await exifr.parse(file, {pick:['FNumber','ExposureTime','ISO','FocalLength','FocalLengthIn35mmFormat','FocalLengthIn35mmFilm','LensModel','Make','Model']});
+  } catch { return null; }
+}
+for (const button of exifButtons) {
+  button.addEventListener('click', () => {
+    const key = button.dataset.exifField;
+    if (selectedExif.has(key)) selectedExif.delete(key); else selectedExif.add(key);
+    button.setAttribute('aria-pressed', String(selectedExif.has(key)));
+    $('exif-apply').disabled = selectedExif.size === 0;
+  });
+}
+$('exif-apply').addEventListener('click', () => {
+  const caption = buildExifCaption(exifFields, [...selectedExif]);
+  if (!caption) return;
+  $('watermark-text').value = caption;
+  $('watermark-on').checked = true;
+  $('watermark-text').dispatchEvent(new Event('input', {bubbles:true}));
+  notify('拍摄信息已填入水印。');
+});
 async function selectFile(file) {
   if (!file) return;
   const version = ++loadVersion;
+  showExif(null, true);
+  const exifPromise = readExif(file);
   const url = URL.createObjectURL(file);
   try {
     const image = await loadImage(url);
     if (version !== loadVersion) return;
     photo = image; $('filename').textContent = `${file.name} · ${image.naturalWidth} × ${image.naturalHeight}`; reset();
-  } catch(error) { if (version === loadVersion) notify(error.message); }
-  finally { URL.revokeObjectURL(url); $('file').value = ''; }
+    exifPromise.then(exif => { if (version === loadVersion) showExif(exif); });
+  } catch(error) { if (version === loadVersion) { showExif(null); notify(error.message); } }
+  finally { URL.revokeObjectURL(url); if (version === loadVersion) $('file').value = ''; }
 }
 $('file').addEventListener('change',e => selectFile(e.target.files[0]));
 const dropzone = $('dropzone');
@@ -245,6 +289,7 @@ settingIds.forEach(id => $(id).addEventListener('input',()=>{setPreviewSize();sy
 function toggleWatermarkDefaults() {$('watermark-defaults').hidden=!$('watermark-on').checked;}
 $('sample').addEventListener('click', async () => {
   const version = ++loadVersion;
+  showExif(null);
   const image = await loadImage(window.TEMPLATE_ASSETS.sample);
   if (version !== loadVersion) return;
   photo = image; $('filename').textContent = '月牙与夜航 · 示例照片'; reset();
@@ -308,7 +353,9 @@ $('share-result').addEventListener('click',async()=>{
 (async()=>{
   restoreSettings();toggleWatermarkDefaults();setPreviewSize();
   try {
-    [template,photo]=await Promise.all([loadImage(window.TEMPLATE_ASSETS.template),loadImage(window.TEMPLATE_ASSETS.sample)]);
+    const [loadedTemplate,samplePhoto]=await Promise.all([loadImage(window.TEMPLATE_ASSETS.template),loadImage(window.TEMPLATE_ASSETS.sample)]);
+    template=loadedTemplate;
+    if (!photo) photo=samplePhoto;
     prepareCameraOverlay();sync();$('download').disabled=$('open-result').disabled=false;
   } catch(error) {notify(error.message);}
 })();
