@@ -55,6 +55,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # GHA 缓存上限 10GB/仓库；锁文件不变时 deps 层直接命中，省去 pnpm install。
+          # GHA 缓存上限 10GB/仓库。默认 min 只缓存最终镜像层：runner 层稳定命中；
+          # mode=max 会把 node_modules(~175MB) 等中间层每轮全量上传，反而多花 80-100s。
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha
