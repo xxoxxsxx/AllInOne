@@ -23,6 +23,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # 构建期禁用调度器：register() 在 build 阶段也会执行，不应建库/起任务。
 ENV DISABLE_SCHEDULER=1
 COPY --from=deps /app/node_modules ./node_modules
+# builder 阶段没有 package.json 时 pnpm 报 NO_IMPORTER_MANIFEST_FOUND，从 deps 带过来。
+COPY --from=deps /app/package.json ./package.json
 # 先只拷贝源码与配置（.dockerignore 已排除 .next/out/data），源码不变时
 # buildx 的层缓存直接复用整层，无需重复执行 next build。
 COPY next.config.ts tsconfig.json next-env.d.ts postcss.config.mjs ./
