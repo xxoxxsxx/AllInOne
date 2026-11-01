@@ -2,7 +2,7 @@
   {
     "id": "cdk-ledger",
     "name": "CDK 台账",
-    "description": "CDK 发货、代发、作废与换新的台账管理 ",
+    "description": "CDK 发货、代发、作废与换新的台账管理",
     "category": "business",
     "tags": [
       "cdk",
