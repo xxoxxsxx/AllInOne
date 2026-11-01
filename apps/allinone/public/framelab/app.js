@@ -60,7 +60,19 @@ function prepareCameraOverlay() {
   roundedScreenPath(overlay); overlay.fill(); overlay.restore();
 }
 const presets = {'3:4':[1080,1440], '9:16':[1080,1920], '1:1':[1080,1080], '4:3':[1440,1080], '16:9':[1920,1080]};
-const settingIds = ['ratio','quality','layout','format','blur','camera-size','watermark-on','watermark-text','watermark-size','watermark-opacity','watermark-position','text-color'];
+// 继续使用原有设置键，保留已有自定义水印的文字、开关和位置。
+const settingIds = ['ratio','quality','layout','format','blur','camera-size','watermark-on','watermark-text','watermark-size','watermark-opacity','watermark-position','text-color',
+  'watermark-font','watermark-x','watermark-y','exif-watermark-on','exif-watermark-font','exif-watermark-position','exif-watermark-size','exif-watermark-opacity','exif-text-color','exif-watermark-x','exif-watermark-y'];
+const {computePlacement, moveToNormalized} = window.FrameLabWatermarkGeometry;
+const WATERMARK_FONTS = {
+  sans:'-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif',
+  serif:'"Songti SC","STSong","SimSun","Noto Serif CJK SC",serif',
+  mono:'ui-monospace,"SFMono-Regular",Menlo,Consolas,"PingFang SC",monospace',
+  hand:'"FrameLab Hand","Kaiti SC",STKaiti,KaiTi,cursive',
+};
+let activeWatermark = 'custom', showWatermarkSelection = false;
+const {EXIF_FIELDS, buildExifFields, buildExifCaption} = window.FrameLabExifFormat;
+let exifFields = buildExifFields(null), selectedExif = new Set();
 function dimensions() {
   const factor = $('quality').value === 'high' ? 2 : 1;
   return presets[$('ratio').value].map(n => n*factor);
@@ -167,39 +179,46 @@ function render(target,W,H) {
   target.fillStyle=shade;target.fillRect(screen.left,screen.top,384,4);target.restore();
   target.drawImage(cameraOverlay,0,0,1080,720);target.restore();
   target.drawImage(photo,crop.x,crop.y,crop.width,crop.height,p.x,p.y,p.w,p.h);
-  drawWatermark(target,W,H);
+  drawWatermark(target,W,H,'custom');
+  drawWatermark(target,W,H,'exif');
 }
-// Text is composited last so it spans the seam in either layout.
-function watermarkLayout(W,H) {
-  const text=$('watermark-text').value.trim();
-  if(!$('watermark-on').checked || !text) return null;
-  return {text,size:W*Number($('watermark-size').value)/1000,
-    alpha:Number($('watermark-opacity').value)/100,position:$('watermark-position').value};
+// 两种水印各自读取控件，所有画布共用同一几何与绘制方式。
+function watermarkDetails(kind) {
+  const exif = kind === 'exif', prefix = exif ? 'exif-watermark' : 'watermark';
+  const text = exif ? buildExifCaption(exifFields, [...selectedExif]) : $('watermark-text').value.trim();
+  if (!$(prefix+'-on').checked || !text) return null;
+  const fontId=$(prefix+'-font').value;
+  return {kind, text, prefix, fontId, font: WATERMARK_FONTS[fontId] || WATERMARK_FONTS.sans,
+    weight: fontId==='hand' ? '400' : '600',
+    size: Number($(prefix+'-size').value), alpha: Number($(prefix+'-opacity').value)/100,
+    color: $(exif ? 'exif-text-color' : 'text-color').value,
+    position: $(prefix+'-position').value, customX: Number($(prefix+'-x').value)/100,
+    customY: Number($(prefix+'-y').value)/100};
 }
-function drawWatermark(target,W,H) {
-  const mark=watermarkLayout(W,H);
+function watermarkLayout(target,W,H,kind) {
+  const mark=watermarkDetails(kind);
+  if(!mark) return null;
+  const size=W*mark.size/1000, p=panels(W,H), inset=Math.min(W,H)*.028;
+  target.save();
+  target.font=`${mark.weight} ${size}px ${mark.font}`;
+  const metrics=target.measureText(mark.text);
+  // fillText(maxWidth) 会压缩宽字串；包围盒使用压缩后的宽度。
+  const placement=computePlacement({width:W,height:H,textWidth:metrics.width,
+    ascent:metrics.actualBoundingBoxAscent || size*.8, descent:metrics.actualBoundingBoxDescent || size*.2,
+    position:mark.position,customX:mark.customX,customY:mark.customY,panelX:p.x,panelY:p.y,inset});
+  target.restore();
+  return {...mark,...placement,size};
+}
+function drawWatermark(target,W,H,kind) {
+  const mark=watermarkLayout(target,W,H,kind);
   if(!mark) return;
   const inset=Math.min(W,H)*.028;
   target.save();
-  target.font=`600 ${mark.size}px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif`;
-  const metrics=target.measureText(mark.text);
-  const width=Math.min(metrics.width,W-2*inset);
-  let x=inset;
-  if(mark.position.includes('right')) x=W-inset-width;
-  else if(!mark.position.includes('left')) x=(W-width)/2;
-  const ascent=metrics.actualBoundingBoxAscent ?? mark.size*.8;
-  const descent=metrics.actualBoundingBoxDescent ?? mark.size*.2;
-  let y=H/2+(ascent-descent)/2;
-  if(mark.position.startsWith('top')) y=inset+ascent;
-  else if(mark.position.startsWith('bottom')) y=H-inset-descent;
-  if(mark.position==='seam') {
-    const p=panels(W,H), cx=p.x>0?p.x:W/2, cy=p.y>0?p.y:H/2;
-    x=cx-width/2;y=cy+(ascent-descent)/2;
-  }
+  target.font=`${mark.weight} ${mark.size}px ${mark.font}`;
   target.globalAlpha=mark.alpha;
   target.shadowColor='rgba(0,0,0,.45)';target.shadowBlur=mark.size*.14;target.shadowOffsetY=mark.size*.04;
-  target.fillStyle=$('text-color').value;
-  target.fillText(mark.text,x,y,W-2*inset);
+  target.fillStyle=mark.color;
+  target.fillText(mark.text,mark.x,mark.y,W-2*inset);
   target.restore();
 }
 function setPreviewSize() {
@@ -211,17 +230,28 @@ function setPreviewSize() {
   $('camera-value').textContent=$('camera-size').value+'%';
   $('watermark-size-value').textContent=Math.round(Number($('watermark-size').value)/10*100)/100+'%';
   $('watermark-opacity-value').textContent=$('watermark-opacity').value+'%';
+  $('exif-watermark-size-value').textContent=Math.round(Number($('exif-watermark-size').value)/10*100)/100+'%';
+  $('exif-watermark-opacity-value').textContent=$('exif-watermark-opacity').value+'%';
   toggleWatermarkDefaults();
 }
 function sync() {
   $('zoom').value = zoom; $('zoom-value').textContent = `${Math.round(zoom*100)}%`;
   $('horizontal').value = focusX*100; $('vertical').value = focusY*100;
   render(ctx, canvas.width, canvas.height);
+  if (showWatermarkSelection) {
+    const mark=watermarkLayout(ctx,canvas.width,canvas.height,activeWatermark);
+    if(mark) {
+      const pad=canvas.width*.009;
+      ctx.save(); ctx.strokeStyle='#6fddbc'; ctx.lineWidth=Math.max(2,canvas.width*.002);
+      ctx.setLineDash([pad*.8,pad*.5]);
+      ctx.strokeRect(Math.max(0,mark.x-pad),Math.max(0,mark.y-mark.ascent-pad),
+        Math.min(canvas.width,mark.width+pad*2),Math.min(canvas.height,mark.ascent+mark.descent+pad*2));
+      ctx.restore();
+    }
+  }
 }
 function reset() { zoom = 1; focusX = focusY = .5; sync(); }
-const {EXIF_FIELDS, buildExifFields, buildExifCaption} = window.FrameLabExifFormat;
 const exifButtons = [...$('exif-chips').querySelectorAll('button[data-exif-field]')];
-let exifFields = buildExifFields(null), selectedExif = new Set();
 function showExif(exif, loading = false) {
   exifFields = buildExifFields(exif);
   selectedExif = new Set(EXIF_FIELDS.filter(key => exifFields[key]));
@@ -236,7 +266,8 @@ function showExif(exif, loading = false) {
   $('exif-chips').hidden = !hasInfo;
   $('exif-status').hidden = hasInfo;
   $('exif-status').textContent = loading ? '正在检测拍摄信息…' : '未检测到拍摄信息（或图片不含 EXIF）';
-  $('exif-apply').disabled = !hasInfo;
+  syncWatermarkEditor();
+  if (template && photo) { sync(); refreshWatermarkFonts(); }
 }
 async function readExif(file) {
   try {
@@ -249,17 +280,11 @@ for (const button of exifButtons) {
     const key = button.dataset.exifField;
     if (selectedExif.has(key)) selectedExif.delete(key); else selectedExif.add(key);
     button.setAttribute('aria-pressed', String(selectedExif.has(key)));
-    $('exif-apply').disabled = selectedExif.size === 0;
+    syncWatermarkEditor();
+    sync();
+    refreshWatermarkFonts();
   });
 }
-$('exif-apply').addEventListener('click', () => {
-  const caption = buildExifCaption(exifFields, [...selectedExif]);
-  if (!caption) return;
-  $('watermark-text').value = caption;
-  $('watermark-on').checked = true;
-  $('watermark-text').dispatchEvent(new Event('input', {bubbles:true}));
-  notify('拍摄信息已填入水印。');
-});
 async function selectFile(file) {
   if (!file) return;
   const version = ++loadVersion;
@@ -285,8 +310,32 @@ $('zoom').addEventListener('input',e => {zoom = Number(e.target.value);sync();})
 $('horizontal').addEventListener('input',e => {focusX = Number(e.target.value)/100;sync();});
 $('vertical').addEventListener('input',e => {focusY = Number(e.target.value)/100;sync();});
 $('reset').addEventListener('click',reset);
-settingIds.forEach(id => $(id).addEventListener('input',()=>{setPreviewSize();sync();saveSettings();}));
-function toggleWatermarkDefaults() {$('watermark-defaults').hidden=!$('watermark-on').checked;}
+settingIds.forEach(id => $(id).addEventListener('input',()=>{
+  if (id === 'watermark-x' || id === 'watermark-y') { $('watermark-position').value='custom'; activeWatermark='custom'; }
+  if (id === 'exif-watermark-x' || id === 'exif-watermark-y') { $('exif-watermark-position').value='custom'; activeWatermark='exif'; }
+  if (id === 'watermark-on' && $('watermark-on').checked) activeWatermark='custom';
+  if (id === 'exif-watermark-on' && $('exif-watermark-on').checked) activeWatermark='exif';
+  setPreviewSize(); sync(); saveSettings();
+  if (['watermark-font','watermark-text','watermark-on','exif-watermark-font','exif-watermark-on'].includes(id)) refreshWatermarkFonts();
+}));
+function syncWatermarkEditor() {
+  showWatermarkSelection = ['custom','exif'].some(kind => watermarkDetails(kind));
+  for (const kind of ['custom','exif']) {
+    const button=$('edit-'+kind), mark=watermarkDetails(kind), prefix=kind==='exif'?'exif-watermark':'watermark';
+    button.disabled=!mark;
+    button.setAttribute('aria-pressed', String(activeWatermark===kind && !!mark));
+    for (const axis of ['x','y']) $(prefix+'-'+axis+'-value').textContent=$(prefix+'-'+axis).value+'%';
+  }
+}
+function toggleWatermarkDefaults() {
+  $('watermark-defaults').hidden=!$('watermark-on').checked;
+  $('exif-watermark-defaults').hidden=!$('exif-watermark-on').checked;
+  syncWatermarkEditor();
+}
+for(const kind of ['custom','exif']) $('edit-'+kind).addEventListener('click',()=>{
+  if (!watermarkDetails(kind)) return;
+  activeWatermark=kind; syncWatermarkEditor(); canvas.focus();
+});
 $('sample').addEventListener('click', async () => {
   const version = ++loadVersion;
   showExif(null);
@@ -294,29 +343,73 @@ $('sample').addEventListener('click', async () => {
   if (version !== loadVersion) return;
   photo = image; $('filename').textContent = '月牙与夜航 · 示例照片'; reset();
 });
+// 本地手写字体按需加载；预览与导出都等字体就绪后重绘。
+async function ensureWatermarkFonts() {
+  if (!document.fonts || typeof document.fonts.load !== 'function') return;
+  const used=['custom','exif'].map(watermarkDetails).filter(Boolean);
+  await Promise.all(used.map(mark => document.fonts.load(`${mark.weight} 32px ${mark.font}`, mark.text)));
+}
+let fontLoadVersion=0;
+function refreshWatermarkFonts() {
+  const version=++fontLoadVersion;
+  ensureWatermarkFonts().then(()=>{if(version===fontLoadVersion && template && photo) sync();}).catch(()=>{});
+}
+function canvasPoint(e) {
+  const bounds=canvas.getBoundingClientRect();
+  return {x:(e.clientX-bounds.left)*canvas.width/bounds.width,
+    y:(e.clientY-bounds.top)*canvas.height/bounds.height, bounds};
+}
+function watermarkAt(point) {
+  const tolerance=18*canvas.width/point.bounds.width;
+  const hits=['exif','custom'].map(kind=>watermarkLayout(ctx,canvas.width,canvas.height,kind)).filter(mark=>mark &&
+    point.x>=mark.x-tolerance && point.x<=mark.x+mark.width+tolerance &&
+    point.y>=mark.y-mark.ascent-tolerance && point.y<=mark.y+mark.descent+tolerance);
+  if (hits.length===1) return hits[0];
+  // 水印重叠时优先选择当前编辑目标；按钮可以切换目标，确保两层都可拖动。
+  return hits.find(mark=>mark.kind===activeWatermark) || hits[0] || null;
+}
 canvas.addEventListener('pointerdown',e => {
-  if (!photo) return;
-  const bounds = canvas.getBoundingClientRect();
-  const p=panels(canvas.width,canvas.height);
-  const x=(e.clientX-bounds.left)*canvas.width/bounds.width, y=(e.clientY-bounds.top)*canvas.height/bounds.height;
-  if(x<p.x || y<p.y) return;
-  const crop = cropFor(photo,p.w,p.h);
-  drag = {x:e.clientX,y:e.clientY,px:focusX,py:focusY,crop,displayScale:bounds.width/canvas.width,panelWidth:p.w};
+  if (!photo || drag || (e.pointerType==='mouse' && e.button!==0)) return;
+  const point=canvasPoint(e), mark=watermarkAt(point);
+  if (mark) {
+    activeWatermark=mark.kind; syncWatermarkEditor();
+    drag={kind:mark.kind,pointerId:e.pointerId,startX:point.x,startY:point.y,centerX:mark.centerX,centerY:mark.centerY};
+  } else {
+    const p=panels(canvas.width,canvas.height);
+    if(point.x<p.x || point.y<p.y) return;
+    const crop=cropFor(photo,p.w,p.h);
+    drag={kind:'photo',pointerId:e.pointerId,x:e.clientX,y:e.clientY,px:focusX,py:focusY,crop,displayScale:point.bounds.width/canvas.width,panelWidth:p.w};
+  }
   canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener('pointermove',e => {
-  if (!drag) return;
-  const imagePerClient = drag.crop.width/(drag.displayScale*drag.panelWidth);
-  const freeX = photo.naturalWidth-drag.crop.width, freeY = photo.naturalHeight-drag.crop.height;
-  const clamp = x => Math.min(1,Math.max(0,x));
-  if (freeX > .001) focusX = clamp(drag.px-(e.clientX-drag.x)*imagePerClient/freeX);
-  if (freeY > .001) focusY = clamp(drag.py-(e.clientY-drag.y)*imagePerClient/freeY);
+  if (!drag || e.pointerId!==drag.pointerId) return;
+  const clamp=x=>Math.min(1,Math.max(0,x));
+  if (drag.kind==='photo') {
+    const imagePerClient=drag.crop.width/(drag.displayScale*drag.panelWidth);
+    const freeX=photo.naturalWidth-drag.crop.width, freeY=photo.naturalHeight-drag.crop.height;
+    if(freeX>.001) focusX=clamp(drag.px-(e.clientX-drag.x)*imagePerClient/freeX);
+    if(freeY>.001) focusY=clamp(drag.py-(e.clientY-drag.y)*imagePerClient/freeY);
+  } else {
+    const point=canvasPoint(e), prefix=drag.kind==='exif'?'exif-watermark':'watermark';
+    const pos=moveToNormalized({width:canvas.width,height:canvas.height,
+      x:drag.centerX+point.x-drag.startX,y:drag.centerY+point.y-drag.startY});
+    $(prefix+'-position').value='custom';
+    $(prefix+'-x').value=String(Math.round(pos.x*1000)/10);
+    $(prefix+'-y').value=String(Math.round(pos.y*1000)/10);
+  }
   sync();
 });
-['pointerup','pointercancel','lostpointercapture'].forEach(type => canvas.addEventListener(type,() => {drag = null;}));
+['pointerup','pointercancel','lostpointercapture'].forEach(type => canvas.addEventListener(type,e => {
+  if (!drag || e.pointerId!==drag.pointerId) return;
+  const wasWatermark=drag.kind!=='photo';
+  drag=null;
+  if (wasWatermark) saveSettings();
+}));
 let resultURL, resultFile;
 async function exportBlob() {
   if(!photo || !template) throw Error('照片尚未加载完成');
+  try { await ensureWatermarkFonts(); } catch { throw Error('水印字体加载失败，请重试'); }
   const [w,h]=dimensions(), output=document.createElement('canvas');output.width=w;output.height=h;
   render(output.getContext('2d'),w,h);
   const type=$('format').value;
@@ -352,6 +445,7 @@ $('share-result').addEventListener('click',async()=>{
 });
 (async()=>{
   restoreSettings();toggleWatermarkDefaults();setPreviewSize();
+  refreshWatermarkFonts();
   try {
     const [loadedTemplate,samplePhoto]=await Promise.all([loadImage(window.TEMPLATE_ASSETS.template),loadImage(window.TEMPLATE_ASSETS.sample)]);
     template=loadedTemplate;

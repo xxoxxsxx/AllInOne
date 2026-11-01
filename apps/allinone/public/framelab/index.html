@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <meta name="theme-color" content="#12364d">
 <link rel="stylesheet" href="style.css">
-<script src="assets/moon-images.js" defer></script><script src="assets/exifr.umd.js" defer></script><script src="exif-format.js" defer></script><script src="app.js" defer></script>
+<script src="assets/moon-images.js" defer></script><script src="assets/exifr.umd.js" defer></script><script src="exif-format.js" defer></script><script src="watermark-geometry.js" defer></script><script src="app.js" defer></script>
 </head>
 <body>
 <header><a class="brand" href="./index.html"><img src="assets/logo.svg" width="34" height="34" alt="" class="brand-icon"> FRAME LAB <small>相机拼图工作室</small></a><a class="privacy toolbox-link" href="/" style="text-decoration:none">◂ 返回工具箱</a><span class="privacy"><i></i> 照片仅在本机处理</span></header>
@@ -22,14 +22,24 @@
 <label class="upload" id="dropzone"><input id="file" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif"><span class="upload-icon">＋</span><strong>点击上传，或拖入照片</strong><span>支持 JPG、PNG、WebP 等浏览器可读格式</span></label>
 <p id="filename" class="filename">月牙与夜航 · 示例照片</p>
 <section class="exif-info" aria-labelledby="exif-title">
-<div class="exif-heading"><h3 id="exif-title">拍摄信息</h3><button id="exif-apply" class="exif-apply" type="button" disabled>一键填入水印</button></div>
+<div class="exif-heading"><h3 id="exif-title">拍摄信息</h3><button id="edit-exif" class="edit-target" type="button" aria-pressed="false">选中拍摄信息</button></div>
+<label class="switch"><input id="exif-watermark-on" type="checkbox"><span>添加拍摄信息</span></label>
 <p id="exif-status" class="exif-status" role="status">未检测到拍摄信息（或图片不含 EXIF）</p>
 <div id="exif-chips" class="exif-chips" role="group" aria-label="选择要填入水印的拍摄信息" hidden>
 <button type="button" data-exif-field="aperture" data-label="光圈" aria-label="光圈" aria-pressed="false" hidden></button>
 <button type="button" data-exif-field="shutter" data-label="快门" aria-label="快门" aria-pressed="false" hidden></button>
 <button type="button" data-exif-field="iso" data-label="感光度" aria-label="感光度" aria-pressed="false" hidden></button>
 <button type="button" data-exif-field="focal" data-label="焦距" aria-label="焦距" aria-pressed="false" hidden></button>
-</div></section>
+</div>
+<div id="exif-watermark-defaults" hidden>
+<div class="export-options"><label>位置<select id="exif-watermark-position"><option value="seam">交界线正中</option><option value="bottom-right">右下角</option><option value="bottom-left">左下角</option><option value="top-right">右上角</option><option value="top-left">左上角</option><option value="bottom-center" selected>底部居中（默认）</option><option value="top-center">顶部居中</option><option value="center-left">左侧居中</option><option value="center-right">右侧居中</option><option value="center">画面中央</option><option value="custom">自由位置</option></select></label><label>字体<select id="exif-watermark-font"><option value="sans" selected>简洁无衬线</option><option value="serif">经典衬线</option><option value="mono">等宽</option><option value="hand">手写风格</option></select></label></div>
+<p class="select-note">手写字体内置，其余字体随设备可能略有不同。</p>
+<label class="slider-label" for="exif-text-color">文字颜色<input id="exif-text-color" type="color" value="#ffffff" aria-label="拍摄信息颜色"></label>
+<label class="slider-label" for="exif-watermark-size">文字大小 <output id="exif-watermark-size-value">3.2%</output></label><input id="exif-watermark-size" type="range" min="6" max="180" value="32">
+<label class="slider-label" for="exif-watermark-opacity">不透明度 <output id="exif-watermark-opacity-value">100%</output></label><input id="exif-watermark-opacity" type="range" min="10" max="100" value="100">
+<fieldset class="free-position"><legend>自由定位</legend><p class="free-position-hint">位置选「自由位置」时，拖动滑块微调水印坐标。</p><div class="positions"><label>水平 <output id="exif-watermark-x-value">50%</output><input id="exif-watermark-x" type="range" min="0" max="100" step="0.1" value="50"></label><label>垂直 <output id="exif-watermark-y-value">50%</output><input id="exif-watermark-y" type="range" min="0" max="100" step="0.1" value="50"></label></div></fieldset>
+</div>
+</section>
 <div class="section-title"><span>02</span><h2>调整照片构图</h2><button id="reset" class="text-button">重置</button></div>
 <p class="hint">拖动预览中的大图调整构图。屏幕完整显示同一画面，比例不同时以黑边适配。</p>
 <label class="slider-label" for="zoom">照片缩放 <output id="zoom-value">100%</output></label><input id="zoom" type="range" min="1" max="3" step="0.01" value="1">
@@ -41,21 +51,23 @@
 <label class="slider-label" for="blur">背景虚化 <output id="blur-value"></output></label><input id="blur" type="range" min="0" max="60" value="28">
 <label class="slider-label" for="camera-size">相机大小 <output id="camera-value"></output></label><input id="camera-size" type="range" min="60" max="140" value="100">
 <p class="hint">自动记住以上设置，照片与照片构图不会保存。</p>
-<div class="section-title"><span>04</span><h2>自定义文字（可选）</h2></div>
+<div class="section-title"><span>04</span><h2>自定义文字（可选）</h2><button id="edit-custom" class="edit-target" type="button" aria-pressed="false">选中文字水印</button></div>
 <label class="switch"><input id="watermark-on" type="checkbox"><span>添加文字</span></label>
 <div id="watermark-defaults" hidden>
 <label class="slider-label" for="watermark-text">文字内容</label><input id="watermark-text" class="text-input" type="text" maxlength="40" placeholder="例如：RICOH、@你的名字" value="RICOH">
-<div class="export-options"><label>位置<select id="watermark-position"><option value="seam" selected>交界线正中（默认）</option><option value="bottom-right">右下角</option><option value="bottom-left">左下角</option><option value="top-right">右上角</option><option value="top-left">左上角</option><option value="bottom-center">底部居中</option><option value="top-center">顶部居中</option><option value="center-left">左侧居中</option><option value="center-right">右侧居中</option><option value="center">画面中央</option></select></label></div>
+<div class="export-options"><label>位置<select id="watermark-position"><option value="seam" selected>交界线正中（默认）</option><option value="bottom-right">右下角</option><option value="bottom-left">左下角</option><option value="top-right">右上角</option><option value="top-left">左上角</option><option value="bottom-center">底部居中</option><option value="top-center">顶部居中</option><option value="center-left">左侧居中</option><option value="center-right">右侧居中</option><option value="center">画面中央</option><option value="custom">自由位置</option></select></label><label>字体<select id="watermark-font"><option value="sans" selected>简洁无衬线</option><option value="serif">经典衬线</option><option value="mono">等宽</option><option value="hand">手写风格</option></select></label></div>
+<p class="select-note">手写字体内置，其余字体随设备可能略有不同。</p>
 <label class="slider-label" for="text-color">文字颜色<input id="text-color" type="color" value="#ffffff" aria-label="文字颜色"></label>
-<label class="slider-label" for="watermark-size">文字大小 <output id="watermark-size-value"></output></label><input id="watermark-size" type="range" min="6" max="180" value="45">
-<label class="slider-label" for="watermark-opacity">不透明度 <output id="watermark-opacity-value"></output></label><input id="watermark-opacity" type="range" min="10" max="100" value="100">
+<label class="slider-label" for="watermark-size">文字大小 <output id="watermark-size-value">4.5%</output></label><input id="watermark-size" type="range" min="6" max="180" value="45">
+<label class="slider-label" for="watermark-opacity">不透明度 <output id="watermark-opacity-value">100%</output></label><input id="watermark-opacity" type="range" min="10" max="100" value="100">
+<fieldset class="free-position"><legend>自由定位</legend><p class="free-position-hint">位置选「自由位置」时，拖动滑块微调水印坐标。</p><div class="positions"><label>水平 <output id="watermark-x-value">50%</output><input id="watermark-x" type="range" min="0" max="100" step="0.1" value="50"></label><label>垂直 <output id="watermark-y-value">50%</output><input id="watermark-y" type="range" min="0" max="100" step="0.1" value="50"></label></div></fieldset>
 </div>
 <button id="download" class="download" disabled>下载拼图 ↗</button>
 <button id="open-result" class="download" disabled>分享 / 保存到相册</button>
 <p class="footnote">高清导出不会增加原模板细节。手机可在成品预览中分享或长按保存。</p>
 </div>
 </section>
-<section class="preview-section"><div class="preview-heading"><span><i></i> 实时预览</span><span id="ratio-label">成品比例 / 3:4</span></div><div class="canvas-wrap"><canvas id="preview" width="1080" height="1440" aria-label="相机拼图预览，上方相机屏幕和下方照片同步显示"></canvas></div><p class="preview-caption">YOUR MOMENT, IN FRAME.</p></section>
+<section class="preview-section"><div class="preview-heading"><span><i></i> 实时预览</span><span id="ratio-label">成品比例 / 3:4</span></div><div class="canvas-wrap"><canvas id="preview" width="1080" height="1440" tabindex="0" aria-label="相机拼图预览：可直接拖动水印文字，拖动其他区域调整照片"></canvas></div><p class="preview-edit-hint">点击「选中文字水印 / 选中拍摄信息」切换目标，或直接拖动水印文字；拖动其他区域调整照片。</p><p class="preview-caption">YOUR MOMENT, IN FRAME.</p></section>
 </main><div id="status" role="status" aria-live="polite"></div>
 <footer>FRAME LAB <span>让每一张照片，都有自己的故事。</span></footer>
 <dialog id="result-dialog"><button id="close-result" class="text-button">关闭 ✕</button><h2>保存你的作品</h2><p class="hint">可长按图片保存；系统分享菜单中的保存选项取决于你的设备。</p><img id="result-image" alt="导出的相机拼图"><button id="share-result" class="download">打开系统分享</button><a id="result-link" target="_blank" rel="noopener">打开原尺寸图片</a></dialog></body></html>
