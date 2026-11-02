@@ -4,8 +4,9 @@
 //   1. 读 reminder_settings（documents.db，见 ./reminders）。
 //   2. 按 Asia/Shanghai 墙钟判断是否到点（小时匹配）且今天未推送过（last_sent_date 去重）。
 //   3. 选出到期证件（daysLeft 0–30），组装一条聚合推送。
-//   4. 渠道配置来自证件夹自己的 reminder_channels 表（documents.db，见 ./reminders-channels），
-//      与行情（TickerSentry）设置零运行时依赖。enabledChannels() 决定本次启用哪些渠道
+//   4. 渠道配置来自全局推送渠道中心（DATA_DIR/channels/channels.db，见 @/lib/channels/center，
+//      经 ./reminders-channels 委托读取），与行情（TickerSentry）设置零运行时依赖。
+//      enabledChannels() 决定本次启用哪些渠道
 //      （Bark / 飞书 / Telegram），逐渠道走 stocks notify 的 sendChannel —— 自动继承各渠道的
 //      启用开关、代理开关与 sendBark/sendFeishu/sendTelegram 的 URL/内网校验等安全逻辑。
 //      飞书/Telegram 文本为 `${title}\n${body}`（sendChannel 内拼接），Bark 保持 title/body 分离。
@@ -77,7 +78,7 @@ export type ReminderRunResult = {
 export type ReminderCheckOptions = {
   /** 注入发送实现（sendChannel 同签名）；默认使用 stocks notify 的真实 sendChannel。 */
   channelSender?: ChannelSender;
-  /** 注入渠道配置来源；默认读证件夹自己的 reminder_channels 表（见 loadReminderChannelConfig）。 */
+  /** 注入渠道配置来源；默认读全局推送渠道中心（见 loadReminderChannelConfig）。 */
   channelsConfig?: () => ChannelConfig | null;
   /** 覆盖当前时间（ms），测试北京时间小时匹配用。 */
   nowMs?: number;
@@ -165,7 +166,7 @@ export async function runDocumentExpiryCheck(
   }
   const hour = due.hour;
 
-  // 渠道配置默认取自同一个证件夹库（reminder_channels），与行情设置无关。
+  // 渠道配置默认取自全局推送渠道中心（channels.db），与行情设置无关。
   const config = opts.channelsConfig ? opts.channelsConfig() : loadReminderChannelConfig(db);
   if (!config || enabledChannels(config).length === 0) {
     return skip(settings, today, hour, "channels_unavailable");

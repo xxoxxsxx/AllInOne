@@ -1,6 +1,8 @@
-// 证件到期提醒渠道配置测试（documents.db 的 reminder_channels 表，独立于行情设置）：
+// 证件到期提醒渠道配置测试（全局推送渠道中心 = DATA_DIR/channels/channels.db，
+// 经 src/lib/documents/reminders-channels 兼容委托读写，db 形参保留但忽略）：
 // 默认值/持久化（含重开文件）、合并语义（留空保持）、stocks notify 校验（中文报错、失败不落库）、
-// 摘要不含机密、从行情设置一次性导入（映射正确 + 覆盖清空 + 行情库不可用报错）。
+// 摘要不含机密、清除渠道、从行情设置一次性导入（映射正确 + 覆盖清空 + 行情库不可用报错）。
+// 隔离方式与 documents-backup.test.ts 相同：每个用例独立临时 DATA_DIR + 重置中心单例。
 // 不做任何真实网络推送。
 
 import test from "node:test";
@@ -10,7 +12,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { openDocumentsDB } from "../src/lib/documents/db.ts";
+import {
+  channelsDbPath,
+  closeChannelsDbForTest,
+  getChannelConfig,
+  getChannelsDb,
+} from "../src/lib/channels/center.ts";
 import {
   clearReminderChannel,
   getReminderChannels,
@@ -23,12 +30,6 @@ import {
 } from "../src/lib/documents/reminders-channels.ts";
 import { openDB as openStocksDB, setDB as setStocksDB } from "../src/modules/stocks/store.ts";
 
-function tempDb(): { db: ReturnType<typeof openDocumentsDB>; cleanup: () => void } {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "documents-reminder-channels-"));
-  const db = openDocumentsDB(root);
-  return { db, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
-}
-
 const EMPTY_CONFIG = {
   Bark: { URL: "", Key: "", Local: false },
   BarkEnabled: false,
@@ -37,14 +38,43 @@ const EMPTY_CONFIG = {
   Proxy: "", BarkProxy: false, FeishuProxy: false, TGProxy: false,
 };
 
-test("reminder channels default to all-off, persist to disk, and stamp updated_at", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "documents-reminder-channels-file-"));
-  const file = path.join(root, "documents.db");
+/** 独立临时 DATA_DIR + 重置中心单例；docsDb 是证件夹库句柄（委托层的 db 形参，应被忽略）。 */
+async function withChannelCenterEnv(run: (env: { root: string; docsDb: Database.Database }) => void | Promise<void>): Promise<void> {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "documents-reminder-channels-"));
+  const previous = process.env.DATA_DIR;
+  closeChannelsDbForTest();
+  process.env.DATA_DIR = root;
+  const docsDb = new Database(":memory:");
   try {
-    const db = openDocumentsDB(undefined, file);
-    assert.deepEqual(getReminderChannels(db), EMPTY_CONFIG);
+    await run({ root, docsDb });
+  } finally {
+    docsDb.close();
+    closeChannelsDbForTest();
+    if (previous === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previous;
+    assert.equal(path.dirname(path.resolve(root)), path.resolve(os.tmpdir()));
+    assert.ok(path.basename(root).startsWith("documents-reminder-channels-"));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
 
-    const saved = saveReminderChannels(db, {
+/** 把中心库的 channels 表换成缺列的坏表（CREATE IF NOT EXISTS 不会修复它）。 */
+function breakCenterChannelsTable(): void {
+  closeChannelsDbForTest();
+  const broken = new Database(channelsDbPath());
+  broken.exec("DROP TABLE channels");
+  broken.exec("CREATE TABLE channels (id INTEGER PRIMARY KEY)");
+  broken.close();
+}
+
+test("reminder channels default to all-off, persist to the center db on disk, and stamp updated_at", async () => {
+  await withChannelCenterEnv(async ({ root, docsDb }) => {
+    assert.deepEqual(getReminderChannels(docsDb), EMPTY_CONFIG);
+    // 委托层与中心读的是同一份配置；且读取不会创建 documents.db（迁移只读、绝不写）。
+    assert.deepEqual(getChannelConfig(), EMPTY_CONFIG);
+    assert.ok(!fs.existsSync(path.join(root, "documents")));
+
+    const saved = saveReminderChannels(docsDb, {
       barkEnabled: true,
       barkUrl: "https://api.day.app",
       barkKey: "key-1",
@@ -61,28 +91,24 @@ test("reminder channels default to all-off, persist to disk, and stamp updated_a
     assert.ok(saved.FeishuEnabled);
     assert.equal(saved.Proxy, "http://192.168.1.10:7890");
     assert.ok(saved.BarkProxy);
-    const at = (db.prepare(`SELECT updated_at FROM reminder_channels WHERE id=1`).get() as { updated_at: string }).updated_at;
+    const at = (getChannelsDb().prepare(`SELECT updated_at FROM channels WHERE id=1`).get() as { updated_at: string }).updated_at;
     assert.match(at, /^\d{4}-\d{2}-\d{2}T/);
-    db.close();
 
-    // 重新打开文件：渠道配置持久化（跨重启有效）。
-    const reopened = openDocumentsDB(undefined, file);
-    const config = getReminderChannels(reopened);
+    // 重新打开中心库（模拟重启）：渠道配置持久化（跨重启有效）。
+    closeChannelsDbForTest();
+    const config = getReminderChannels(docsDb);
     assert.equal(config.Bark.Key, "key-1");
     assert.equal(config.TGChatID, "987654321");
     assert.equal(config.FeishuWebhook, "https://open.feishu.cn/open-apis/bot/v2/hook/abc12345");
     assert.equal(config.FeishuSecret, "");
-    assert.equal(loadReminderChannelConfig(reopened)?.Bark.Key, "key-1");
-    reopened.close();
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+    assert.equal(loadReminderChannelConfig(docsDb)?.Bark.Key, "key-1");
+    assert.ok(fs.existsSync(channelsDbPath()));
+  });
 });
 
-test("merge semantics: blank/undefined text keeps existing values; booleans apply as submitted", () => {
-  const { db, cleanup } = tempDb();
-  try {
-    saveReminderChannels(db, {
+test("merge semantics: blank/undefined text keeps existing values; booleans apply as submitted", async () => {
+  await withChannelCenterEnv(async ({ docsDb }) => {
+    saveReminderChannels(docsDb, {
       barkEnabled: true,
       barkUrl: "https://api.day.app",
       barkKey: "secret-key",
@@ -98,7 +124,7 @@ test("merge semantics: blank/undefined text keeps existing values; booleans appl
     });
 
     // 只改开关与 Bark URL，其余文本留空 → 保持现有值（机密不回传客户端，客户端留空即「不修改」）。
-    const merged = saveReminderChannels(db, {
+    const merged = saveReminderChannels(docsDb, {
       barkEnabled: false,
       barkUrl: "https://api.day.app/",
       feishuEnabled: false,
@@ -124,23 +150,19 @@ test("merge semantics: blank/undefined text keeps existing values; booleans appl
     assert.equal(merged.BarkProxy, false); // 首次保存未提交 barkProxy，保持初值 false
 
     // undefined 等价于留空。
-    const same = saveReminderChannels(db, {} as ReminderChannelsInput);
+    const same = saveReminderChannels(docsDb, {} as ReminderChannelsInput);
     assert.deepEqual(same, merged);
-  } finally {
-    db.close();
-    cleanup();
-  }
+  });
 });
 
-test("validation rejects invalid values with stocks' Chinese errors and leaves config unchanged", () => {
-  const { db, cleanup } = tempDb();
-  try {
-    saveReminderChannels(db, {
+test("validation rejects invalid values with stocks' Chinese errors and leaves config unchanged", async () => {
+  await withChannelCenterEnv(async ({ docsDb }) => {
+    saveReminderChannels(docsDb, {
       barkUrl: "https://api.day.app",
       barkKey: "good-key",
       feishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/abc12345",
     });
-    const before = getReminderChannels(db);
+    const before = getReminderChannels(docsDb);
 
     const bad: Array<[ReminderChannelsInput, RegExp]> = [
       [{ barkUrl: "not-a-url" }, /Bark 地址须为 HTTPS/],
@@ -153,32 +175,28 @@ test("validation rejects invalid values with stocks' Chinese errors and leaves c
       [{ proxyUrl: "ftp://x" }, /代理地址须为/],
     ];
     for (const [input, re] of bad) {
-      assert.throws(() => saveReminderChannels(db, input), re, JSON.stringify(input));
+      assert.throws(() => saveReminderChannels(docsDb, input), re, JSON.stringify(input));
     }
     // 校验失败不落库：配置保持原样。
-    assert.deepEqual(getReminderChannels(db), before);
+    assert.deepEqual(getReminderChannels(docsDb), before);
 
     // 合法：内网 http 在显式允许后可用（合并语义下带 barkLocal 开关一起提交）。
-    const local = saveReminderChannels(db, { barkUrl: "http://192.168.1.5", barkLocal: true });
+    const local = saveReminderChannels(docsDb, { barkUrl: "http://192.168.1.5", barkLocal: true });
     assert.equal(local.Bark.URL, "http://192.168.1.5");
     assert.ok(local.Bark.Local);
-  } finally {
-    db.close();
-    cleanup();
-  }
+  });
 });
 
-test("summaries expose booleans and Bark host only, never secrets", () => {
-  const { db, cleanup } = tempDb();
-  try {
-    assert.deepEqual(summarizeReminderChannels(db), {
+test("summaries expose booleans and Bark host only, never secrets", async () => {
+  await withChannelCenterEnv(async ({ docsDb }) => {
+    assert.deepEqual(summarizeReminderChannels(docsDb), {
       bark: { enabled: false, local: false, configured: false, host: "", useProxy: false },
       feishu: { enabled: false, configured: false, useProxy: false },
       telegram: { enabled: false, configured: false, useProxy: false },
       proxy: { configured: false },
     });
 
-    saveReminderChannels(db, {
+    saveReminderChannels(docsDb, {
       barkEnabled: true,
       barkUrl: "https://api.day.app",
       barkKey: "SECRET-KEY",
@@ -192,7 +210,7 @@ test("summaries expose booleans and Bark host only, never secrets", () => {
       feishuProxy: true,
       tgProxy: true,
     });
-    const summary = summarizeReminderChannels(db);
+    const summary = summarizeReminderChannels(docsDb);
     assert.deepEqual(summary, {
       bark: { enabled: true, local: false, configured: true, host: "api.day.app", useProxy: true },
       feishu: { enabled: true, configured: true, useProxy: true },
@@ -205,150 +223,136 @@ test("summaries expose booleans and Bark host only, never secrets", () => {
     assert.ok(!serialized.includes("10.0.0.2"));
 
     // 非法 Bark 地址：host 降级为空串，configured 按「非空即已配置」判断（校验在保存时把关）。
-    db.exec(`UPDATE reminder_channels SET bark_url='not a url' WHERE id=1`);
-    assert.equal(summarizeReminderChannels(db).bark.host, "");
-    assert.equal(summarizeReminderChannels(db).bark.configured, true);
+    getChannelsDb().prepare(`UPDATE channels SET bark_url='not a url' WHERE id=1`).run();
+    assert.equal(summarizeReminderChannels(docsDb).bark.host, "");
+    assert.equal(summarizeReminderChannels(docsDb).bark.configured, true);
 
-    // 表损坏时摘要不抛错：全「未启用/未配置」。
-    const { db: broken, cleanup: brokenCleanup } = tempDb();
+    // 中心库 channels 表损坏时摘要不抛错：全「未启用/未配置」。
+    breakCenterChannelsTable();
+    assert.deepEqual(summarizeReminderChannels(docsDb).bark, { enabled: false, local: false, configured: false, host: "", useProxy: false });
+    assert.equal(loadReminderChannelConfig(docsDb), null);
+  });
+});
+
+test("importChannelsFromStocks maps stocks fields and fully overwrites the center config", async () => {
+  await withChannelCenterEnv(async ({ docsDb }) => {
+    const stocks = openStocksDB(undefined, ":memory:");
     try {
-      broken.exec("CREATE TABLE reminder_channels (id INTEGER PRIMARY KEY)");
-      assert.deepEqual(summarizeReminderChannels(broken).bark, { enabled: false, local: false, configured: false, host: "", useProxy: false });
+      // 预置一份 stocks 渠道配置。
+      stocks
+        .prepare(
+          `UPDATE settings SET bark_url=?,bark_key=?,bark_local=1,bark_enabled=1,
+           feishu_webhook=?,feishu_secret=?,feishu_enabled=1,
+           tg_token=?,tg_chat_id=?,tg_enabled=1,
+           proxy_url=?,bark_proxy=1,feishu_proxy=0,tg_proxy=1 WHERE id=1`,
+        )
+        .run(
+          "https://api.day.app",
+          "stocks-key",
+          "https://open.feishu.cn/open-apis/bot/v2/hook/abc12345",
+          "feishu-secret",
+          "1234567890:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "987654321",
+          "socks5://10.0.0.3:1080",
+        );
+      setStocksDB(stocks);
+
+      // 中心侧先有一份不同配置 → 导入应整行覆盖。
+      saveReminderChannels(docsDb, { barkUrl: "https://old.example.com", barkKey: "old-key" });
+      const result = await importChannelsFromStocks(docsDb);
+      assert.ok(result.ok);
+      const config = getReminderChannels(docsDb);
+      assert.deepEqual(config, {
+        Bark: { URL: "https://api.day.app", Key: "stocks-key", Local: true },
+        BarkEnabled: true,
+        FeishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/abc12345",
+        FeishuSecret: "feishu-secret",
+        FeishuEnabled: true,
+        TGToken: "1234567890:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        TGChatID: "987654321",
+        TGEnabled: true,
+        Proxy: "socks5://10.0.0.3:1080",
+        BarkProxy: true,
+        FeishuProxy: false,
+        TGProxy: true,
+      });
+      // 导入结果与读取一致（映射逐字段正确），且确实落在中心库。
+      assert.deepEqual((result as { ok: true; config: typeof config }).config, config);
+      assert.deepEqual(getChannelConfig(), config);
+
+      // 覆盖含清空：stocks 配置清空后再次导入 → 中心侧同步清空（这是整行覆盖，不是合并）。
+      stocks.prepare(`UPDATE settings SET bark_url='',bark_key='',bark_enabled=0 WHERE id=1`).run();
+      const second = await importChannelsFromStocks(docsDb);
+      assert.ok(second.ok);
+      const cleared = getReminderChannels(docsDb);
+      assert.equal(cleared.Bark.URL, "");
+      assert.equal(cleared.Bark.Key, "");
+      assert.equal(cleared.BarkEnabled, false);
+      // 其余字段仍来自 stocks。
+      assert.equal(cleared.TGChatID, "987654321");
     } finally {
-      broken.close();
-      brokenCleanup();
+      setStocksDB(null);
+      stocks.close();
     }
-  } finally {
-    db.close();
-    cleanup();
-  }
+  });
 });
 
-test("importChannelsFromStocks maps stocks fields and fully overwrites documents config", async () => {
-  const { db, cleanup } = tempDb();
-  const stocks = openStocksDB(undefined, ":memory:");
-  try {
-    // 预置一份 stocks 渠道配置。
-    stocks
-      .prepare(
-        `UPDATE settings SET bark_url=?,bark_key=?,bark_local=1,bark_enabled=1,
-         feishu_webhook=?,feishu_secret=?,feishu_enabled=1,
-         tg_token=?,tg_chat_id=?,tg_enabled=1,
-         proxy_url=?,bark_proxy=1,feishu_proxy=0,tg_proxy=1 WHERE id=1`,
-      )
-      .run(
-        "https://api.day.app",
-        "stocks-key",
-        "https://open.feishu.cn/open-apis/bot/v2/hook/abc12345",
-        "feishu-secret",
-        "1234567890:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        "987654321",
-        "socks5://10.0.0.3:1080",
-      );
-    setStocksDB(stocks);
-
-    // 证件夹侧先有一份不同配置 → 导入应整行覆盖。
-    saveReminderChannels(db, { barkUrl: "https://old.example.com", barkKey: "old-key" });
-    const result = await importChannelsFromStocks(db);
-    assert.ok(result.ok);
-    const config = getReminderChannels(db);
-    assert.deepEqual(config, {
-      Bark: { URL: "https://api.day.app", Key: "stocks-key", Local: true },
-      BarkEnabled: true,
-      FeishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/abc12345",
-      FeishuSecret: "feishu-secret",
-      FeishuEnabled: true,
-      TGToken: "1234567890:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-      TGChatID: "987654321",
-      TGEnabled: true,
-      Proxy: "socks5://10.0.0.3:1080",
-      BarkProxy: true,
-      FeishuProxy: false,
-      TGProxy: true,
-    });
-    // 导入结果与读取一致（映射逐字段正确）。
-    assert.deepEqual((result as { ok: true; config: typeof config }).config, config);
-
-    // 覆盖含清空：stocks 配置清空后再次导入 → 证件夹侧同步清空（这是整行覆盖，不是合并）。
-    stocks.prepare(`UPDATE settings SET bark_url='',bark_key='',bark_enabled=0 WHERE id=1`).run();
-    const second = await importChannelsFromStocks(db);
-    assert.ok(second.ok);
-    const cleared = getReminderChannels(db);
-    assert.equal(cleared.Bark.URL, "");
-    assert.equal(cleared.Bark.Key, "");
-    assert.equal(cleared.BarkEnabled, false);
-    // 其余字段仍来自 stocks。
-    assert.equal(cleared.TGChatID, "987654321");
-  } finally {
-    setStocksDB(null);
-    stocks.close();
-    db.close();
-    cleanup();
-  }
-});
-
-test("clear channel removes its secrets without changing other channels", () => {
-  const { db, cleanup } = tempDb();
-  try {
-    saveReminderChannels(db, {
+test("clear channel removes its secrets without changing other channels", async () => {
+  await withChannelCenterEnv(async ({ docsDb }) => {
+    saveReminderChannels(docsDb, {
       barkUrl: "https://api.day.app", barkKey: "key", barkEnabled: true,
       feishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/abc12345", feishuEnabled: true,
       proxyUrl: "http://10.0.0.2:7890", barkProxy: true, feishuProxy: true,
     });
-    clearReminderChannel(db, "Bark");
-    const after = getReminderChannels(db);
+    clearReminderChannel(docsDb, "Bark");
+    const after = getReminderChannels(docsDb);
     assert.deepEqual(after.Bark, { URL: "", Key: "", Local: false });
     assert.equal(after.BarkEnabled, false);
     assert.equal(after.BarkProxy, false);
     assert.equal(after.FeishuEnabled, true);
     assert.equal(after.FeishuProxy, true);
-    clearReminderChannel(db, "代理");
-    assert.equal(getReminderChannels(db).Proxy, "");
-    assert.equal(getReminderChannels(db).FeishuProxy, false);
-  } finally {
-    db.close();
-    cleanup();
-  }
+    clearReminderChannel(docsDb, "代理");
+    assert.equal(getReminderChannels(docsDb).Proxy, "");
+    assert.equal(getReminderChannels(docsDb).FeishuProxy, false);
+  });
 });
 
-test("empty stocks settings do not overwrite configured documents channels", async () => {
-  const { db, cleanup } = tempDb();
-  const stocks = openStocksDB(undefined, ":memory:");
-  try {
-    saveReminderChannels(db, { barkUrl: "https://keep.example.com", barkKey: "keep-key", barkEnabled: true });
-    const before = getReminderChannels(db);
-    setStocksDB(stocks);
-    const result = await importChannelsFromStocks(db);
-    assert.equal(result.ok, false);
-    assert.deepEqual(getReminderChannels(db), before);
-  } finally {
-    setStocksDB(null);
-    stocks.close();
-    db.close();
-    cleanup();
-  }
+test("empty stocks settings do not overwrite configured channels", async () => {
+  await withChannelCenterEnv(async ({ docsDb }) => {
+    const stocks = openStocksDB(undefined, ":memory:");
+    try {
+      saveReminderChannels(docsDb, { barkUrl: "https://keep.example.com", barkKey: "keep-key", barkEnabled: true });
+      const before = getReminderChannels(docsDb);
+      setStocksDB(stocks);
+      const result = await importChannelsFromStocks(docsDb);
+      assert.equal(result.ok, false);
+      assert.deepEqual(getReminderChannels(docsDb), before);
+    } finally {
+      setStocksDB(null);
+      stocks.close();
+    }
+  });
 });
 
 test("importChannelsFromStocks reports ok:false when the stocks db is unreadable", async () => {
-  const { db, cleanup } = tempDb();
-  const broken = new Database(":memory:"); // 无 settings 表 → notificationSettings 抛错
-  try {
-    // 证件夹侧先保存配置：导入失败必须保持原样。
-    saveReminderChannels(db, { barkUrl: "https://keep.example.com", barkKey: "keep-key", barkEnabled: true });
+  await withChannelCenterEnv(async ({ docsDb }) => {
+    const broken = new Database(":memory:"); // 无 settings 表 → notificationSettings 抛错
+    try {
+      // 中心侧先保存配置：导入失败必须保持原样。
+      saveReminderChannels(docsDb, { barkUrl: "https://keep.example.com", barkKey: "keep-key", barkEnabled: true });
 
-    setStocksDB(broken as unknown as Parameters<typeof setStocksDB>[0]);
-    const result = await importChannelsFromStocks(db);
-    assert.equal(result.ok, false);
-    assert.match((result as { ok: false; error: string }).error, /no such table|无法读取/);
-    // 失败不改动现有配置。
-    const config = getReminderChannels(db);
-    assert.equal(config.Bark.URL, "https://keep.example.com");
-    assert.equal(config.Bark.Key, "keep-key");
-    assert.ok(config.BarkEnabled);
-  } finally {
-    setStocksDB(null);
-    broken.close();
-    db.close();
-    cleanup();
-  }
+      setStocksDB(broken as unknown as Parameters<typeof setStocksDB>[0]);
+      const result = await importChannelsFromStocks(docsDb);
+      assert.equal(result.ok, false);
+      assert.match((result as { ok: false; error: string }).error, /no such table|无法读取/);
+      // 失败不改动现有配置。
+      const config = getReminderChannels(docsDb);
+      assert.equal(config.Bark.URL, "https://keep.example.com");
+      assert.equal(config.Bark.Key, "keep-key");
+      assert.ok(config.BarkEnabled);
+    } finally {
+      setStocksDB(null);
+      broken.close();
+    }
+  });
 });

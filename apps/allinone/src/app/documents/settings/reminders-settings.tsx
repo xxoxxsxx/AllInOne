@@ -2,7 +2,7 @@
 
 // 证件到期提醒设置面板：提醒开关/时刻 + 独立的推送渠道配置表单（Bark / 飞书 / Telegram + 共享代理）
 // + 渠道状态 + 测试推送（单渠道/全部）+ 从行情设置一次性导入 + 立即检查。
-// 渠道配置保存在证件夹数据库（reminder_channels），与行情（TickerSentry）设置相互独立；
+// 渠道配置保存在全局推送渠道中心（@/lib/channels/center），与行情（TickerSentry）设置相互独立；
 // 表单显示已保存的完整配置。保存时只提交发生变化且非空的文本，留空仍表示保持现有值。
 
 import { useRef, useState, useTransition } from "react";

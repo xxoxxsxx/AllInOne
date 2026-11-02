@@ -23,7 +23,7 @@ export default async function ReminderSettingsPage() {
   const db = getDocumentsDB();
   const settings = getReminderSettings(db);
   const dueDocs = selectExpiringDocuments(listDocuments(db, todayStr()));
-  // 渠道配置读取自证件夹自己的 reminder_channels 表；完整状态由面板（客户端）实时展示，
+  // 渠道配置读取自全局推送渠道中心（@/lib/channels/center）；完整状态由面板（客户端）实时展示，
   // 页面壳不重复渲染设置/渠道的服务端快照，避免保存后页面上的状态过期。
   const channelConfig = getReminderChannels(db);
   const channels0 = summarizeChannels(channelConfig);

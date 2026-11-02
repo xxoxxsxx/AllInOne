@@ -2,8 +2,9 @@
 
 // 证件到期提醒 Server Actions：供提醒设置面板（settings/reminders-settings.tsx）调用。
 // 与 documents/actions.ts 分离，避免改动既有证件动作；全部返回 { ok, ... }，不向客户端抛异常。
-// 渠道配置保存在证件夹自己的 reminder_channels 表（documents.db），独立于行情设置；
-// 与 stocks 的唯一交集是「从行情设置导入」这一次性显式动作（内部动态加载，见 reminders-channels）。
+// 渠道配置保存在全局推送渠道中心（@/lib/channels/center，DATA_DIR/channels/channels.db），
+// 经 reminders-channels 的兼容委托读写；与 stocks 的唯一交集是「从行情设置导入」
+// 这一次性显式动作（内部动态加载，见 reminders-channels）。
 // 设置页需要明文显示渠道配置；保存/清除/导入成功时返回最新配置以同步表单。
 
 import { revalidatePath } from "next/cache";

@@ -1,7 +1,7 @@
 // 证件到期提醒测试：设置默认值/持久化、当日去重（跨重启）、北京时间小时匹配、
 // 到期证件筛选（daysLeft 0–30）、消息格式（分组聚合）、多渠道发送语义
 // （部分成功落标记 / 全部失败重试 / 无启用渠道跳过）、关闭跳过、渠道配置缺失跳过、
-// 默认配置来自证件夹自己的 reminder_channels 表（不依赖 stocks 库）。
+// 默认配置来自全局推送渠道中心（DATA_DIR/channels/channels.db，不依赖 stocks 库）。
 // 全部通过 channelSender 注入桩发送，绝不做真实网络推送
 // （唯一的"网络"是 127.0.0.1 本地回环 mock：验证默认 sendChannel → sendBark / sendFeishu 接线）。
 
@@ -11,6 +11,12 @@ import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
+
+import {
+  channelsDbPath,
+  closeChannelsDbForTest,
+} from "../src/lib/channels/center.ts";
 
 import {
   EXPIRY_WARN_DAYS,
@@ -108,6 +114,22 @@ function tempDb(): { db: ReturnType<typeof openDocumentsDB>; cleanup: () => void
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "documents-reminders-"));
   const db = openDocumentsDB(root);
   return { db, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
+}
+
+/** 独立临时 DATA_DIR + 重置推送渠道中心单例（默认渠道加载器读 DATA_DIR/channels/channels.db）。 */
+async function withChannelCenterEnv(run: () => void | Promise<void>): Promise<void> {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "documents-reminders-center-"));
+  const previous = process.env.DATA_DIR;
+  closeChannelsDbForTest();
+  process.env.DATA_DIR = root;
+  try {
+    await run();
+  } finally {
+    closeChannelsDbForTest();
+    if (previous === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
 function seedDoc(
@@ -532,86 +554,98 @@ test("dispatches only enabled channels; BarkEnabled=false excludes Bark", async 
   }
 });
 
-// —— 无启用渠道 / 配置读取失败：优雅跳过；默认配置来自证件夹自己的表 ——
+// —— 无启用渠道 / 配置读取失败：优雅跳过；默认配置来自全局推送渠道中心 ——
 
 test("no enabled channel or unreadable channels config skips gracefully without crash", async () => {
-  const { db, cleanup } = tempDb();
-  try {
-    seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
-    saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
+  await withChannelCenterEnv(async () => {
+    const { db, cleanup } = tempDb();
+    try {
+      seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
+      saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
 
-    // 注入：三个渠道都未启用（enabledChannels 为空）。
-    const { sender, calls } = senderStub("成功");
-    const nothingEnabled = baseOpts(sender, {
-      channelsConfig: () => configWith({ BarkEnabled: false, FeishuEnabled: false, TGEnabled: false }),
-    });
-    const skipped = await runDocumentExpiryCheck(db, nothingEnabled);
-    assert.equal(skipped.ran, false);
-    assert.equal(skipped.reason, "channels_unavailable");
-    assert.deepEqual(skipped.channels, []);
-    assert.equal(calls.length, 0);
-    assert.equal(getReminderSettings(db).lastSentDate, null);
+      // 注入：三个渠道都未启用（enabledChannels 为空）。
+      const { sender, calls } = senderStub("成功");
+      const nothingEnabled = baseOpts(sender, {
+        channelsConfig: () => configWith({ BarkEnabled: false, FeishuEnabled: false, TGEnabled: false }),
+      });
+      const skipped = await runDocumentExpiryCheck(db, nothingEnabled);
+      assert.equal(skipped.ran, false);
+      assert.equal(skipped.reason, "channels_unavailable");
+      assert.deepEqual(skipped.channels, []);
+      assert.equal(calls.length, 0);
+      assert.equal(getReminderSettings(db).lastSentDate, null);
 
-    // 注入：配置整体不可用（等价于配置读取失败）。
-    const nullConfig = baseOpts(sender, { channelsConfig: () => null });
-    const skippedNull = await runDocumentExpiryCheck(db, nullConfig);
-    assert.equal(skippedNull.ran, false);
-    assert.equal(skippedNull.reason, "channels_unavailable");
-    assert.equal(calls.length, 0);
+      // 注入：配置整体不可用（等价于配置读取失败）。
+      const nullConfig = baseOpts(sender, { channelsConfig: () => null });
+      const skippedNull = await runDocumentExpiryCheck(db, nullConfig);
+      assert.equal(skippedNull.ran, false);
+      assert.equal(skippedNull.reason, "channels_unavailable");
+      assert.equal(calls.length, 0);
 
-    // 默认加载器：全新证件夹库（reminder_channels 全空）→ 视为未配置渠道。
-    const viaDefaultEmpty = await runDocumentExpiryCheck(db, baseOpts(sender, { channelsConfig: undefined }));
-    assert.equal(viaDefaultEmpty.ran, false);
-    assert.equal(viaDefaultEmpty.reason, "channels_unavailable");
-    assert.equal(calls.length, 0);
-    assert.equal(getReminderChannels(db).Bark.URL, "");
-  } finally {
-    db.close();
-    cleanup();
-  }
+      // 默认加载器：全新中心库（channels 全空）→ 视为未配置渠道。
+      const viaDefaultEmpty = await runDocumentExpiryCheck(db, baseOpts(sender, { channelsConfig: undefined }));
+      assert.equal(viaDefaultEmpty.ran, false);
+      assert.equal(viaDefaultEmpty.reason, "channels_unavailable");
+      assert.equal(calls.length, 0);
+      assert.equal(getReminderChannels(db).Bark.URL, "");
+    } finally {
+      db.close();
+      cleanup();
+    }
+  });
 });
 
-test("runner default config comes from documents reminder_channels (no stocks involved)", async () => {
-  const { db, cleanup } = tempDb();
-  try {
-    seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
-    saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
-    // 在证件夹库中保存渠道配置（Bark + 飞书启用），不注入 channelsConfig → 走默认加载器。
-    saveReminderChannels(db, {
-      barkEnabled: true,
-      barkUrl: "https://bark.example.com",
-      barkKey: "docs-key",
-      feishuEnabled: true,
-      feishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/placeholder",
-    });
+test("runner default config comes from the global channels center (no stocks involved)", async () => {
+  await withChannelCenterEnv(async () => {
+    const { db, cleanup } = tempDb();
+    try {
+      seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
+      saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
+      // 在推送渠道中心保存配置（Bark + 飞书启用），不注入 channelsConfig → 走默认加载器。
+      saveReminderChannels(db, {
+        barkEnabled: true,
+        barkUrl: "https://bark.example.com",
+        barkKey: "docs-key",
+        feishuEnabled: true,
+        feishuWebhook: "https://open.feishu.cn/open-apis/bot/v2/hook/placeholder",
+      });
 
-    const { sender, calls } = senderStub("成功");
-    const result = await runDocumentExpiryCheck(db, baseOpts(sender, { channelsConfig: undefined }));
-    assert.equal(result.ran, true);
-    assert.equal(result.sent, true);
-    assert.deepEqual(calls.map((c) => c.name), ["Bark", "飞书"]);
-    assert.deepEqual(calls[0].config.Bark, { URL: "https://bark.example.com", Key: "docs-key", Local: false });
-    assert.equal(getReminderSettings(db).lastSentDate, TODAY);
+      const { sender, calls } = senderStub("成功");
+      const result = await runDocumentExpiryCheck(db, baseOpts(sender, { channelsConfig: undefined }));
+      assert.equal(result.ran, true);
+      assert.equal(result.sent, true);
+      assert.deepEqual(calls.map((c) => c.name), ["Bark", "飞书"]);
+      assert.deepEqual(calls[0].config.Bark, { URL: "https://bark.example.com", Key: "docs-key", Local: false });
+      assert.equal(getReminderSettings(db).lastSentDate, TODAY);
 
-    // loadReminderChannelConfig 与 saveReminderChannels 读到的是同一份配置。
-    assert.equal(loadReminderChannelConfig(db)!.Bark.Key, "docs-key");
-  } finally {
-    db.close();
-    cleanup();
-  }
+      // loadReminderChannelConfig 与 saveReminderChannels 读到的是同一份配置。
+      assert.equal(loadReminderChannelConfig(db)!.Bark.Key, "docs-key");
+    } finally {
+      db.close();
+      cleanup();
+    }
+  });
 });
 
-test("loadReminderChannelConfig returns null when the channels table is broken", () => {
-  const { db, cleanup } = tempDb();
-  try {
-    // 预置同名列不全的表：CREATE TABLE IF NOT EXISTS 不会修复它，SELECT 必然失败。
-    db.exec("CREATE TABLE reminder_channels (id INTEGER PRIMARY KEY)");
-    assert.equal(loadReminderChannelConfig(db), null);
-    // 摘要也不抛错：按全「未启用/未配置」降级。
-  } finally {
-    db.close();
-    cleanup();
-  }
+test("loadReminderChannelConfig returns null when the center channels table is broken", async () => {
+  await withChannelCenterEnv(async () => {
+    const { db, cleanup } = tempDb();
+    try {
+      // 先让中心库落盘，再把 channels 表换成同名列不全的坏表：
+      // CREATE TABLE IF NOT EXISTS 不会修复它，SELECT 必然失败 → 加载器降级为 null。
+      getReminderChannels(db);
+      closeChannelsDbForTest();
+      const broken = new Database(channelsDbPath());
+      broken.exec("DROP TABLE channels");
+      broken.exec("CREATE TABLE channels (id INTEGER PRIMARY KEY)");
+      broken.close();
+      assert.equal(loadReminderChannelConfig(db), null);
+      // 摘要也不抛错：按全「未启用/未配置」降级（在 documents-reminder-channels.test.ts 覆盖）。
+    } finally {
+      db.close();
+      cleanup();
+    }
+  });
 });
 
 // —— 开关关闭：直接跳过 ——
