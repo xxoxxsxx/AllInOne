@@ -1,0 +1,578 @@
+/* 提醒事项样式：沿用全局设计变量（--surface/--border/--accent/--ok/--warn/--danger）。 */
+
+.rem-page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  --rem-amber: light-dark(#b45309, #fbbf24);
+  --rem-amber-soft: light-dark(rgb(180 83 9 / 10%), rgb(251 191 36 / 14%));
+}
+
+.rem-back {
+  color: var(--text-2);
+  font-size: 14px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.rem-back:hover {
+  color: var(--text);
+}
+
+.rem-root {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+  width: 100%;
+}
+
+/* ---- Hero ---- */
+
+.rem-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 26px 26px 22px;
+  border: 1px solid color-mix(in srgb, var(--rem-amber) 26%, var(--border));
+  border-radius: calc(var(--radius) + 6px);
+  background:
+    radial-gradient(130% 150% at 0% 0%, color-mix(in srgb, var(--rem-amber) 12%, transparent), transparent 55%),
+    var(--surface);
+  flex-wrap: wrap;
+}
+
+.rem-kicker {
+  margin: 0;
+  color: var(--rem-amber);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.rem-title {
+  margin: 6px 0;
+  font-size: 30px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.rem-sub {
+  margin: 0;
+  color: var(--text-2);
+  max-width: 56ch;
+}
+
+.rem-hero-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rem-stat {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* ---- 按钮 ---- */
+
+.rem-button {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 7px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.rem-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.rem-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.rem-button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.rem-button-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+  color: #fff;
+}
+
+.rem-button-secondary {
+  background: var(--surface);
+}
+
+.rem-button-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---- 反馈 ---- */
+
+.rem-feedback {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  white-space: pre-line;
+}
+
+.rem-feedback.is-ok {
+  border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--border));
+  background: color-mix(in srgb, var(--ok) 10%, var(--surface));
+  color: var(--ok);
+}
+
+.rem-feedback.is-error {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  color: var(--danger);
+}
+
+/* ---- 编辑器 ---- */
+
+.rem-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--surface);
+  padding: 20px;
+}
+
+.rem-editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.rem-editor-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.rem-editor-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.rem-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text-2);
+  flex: 1;
+}
+
+.rem-field-narrow {
+  flex: 0 0 auto;
+  min-width: 96px;
+}
+
+.rem-field small {
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+.rem-field input,
+.rem-field select,
+.rem-field textarea {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  min-width: 0;
+}
+
+.rem-field input:focus,
+.rem-field select:focus,
+.rem-field textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.rem-field textarea {
+  resize: vertical;
+}
+
+/* 图片 */
+
+.rem-image-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rem-image-thumb {
+  position: relative;
+  margin: 0;
+  width: 84px;
+  height: 84px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.rem-image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.rem-image-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: none;
+  background: rgb(0 0 0 / 62%);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rem-image-remove:hover {
+  background: var(--danger);
+}
+
+.rem-image-add {
+  width: 84px;
+  height: 84px;
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.rem-image-add:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.rem-image-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 时间计划 */
+
+.rem-editor-schedules {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.rem-schedule-row {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rem-schedule-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.rem-kind-radio {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rem-kind-radio label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+  background: var(--surface);
+}
+
+.rem-kind-radio label.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rem-kind-radio input {
+  accent-color: var(--accent);
+}
+
+.rem-interval-fields {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rem-row-remove {
+  font-size: 13px;
+  padding: 5px 10px;
+}
+
+.rem-cron-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rem-cron-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.rem-cron-preview {
+  font-size: 13px;
+  color: var(--text-2);
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--border));
+  background: color-mix(in srgb, var(--ok) 8%, var(--surface));
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.rem-cron-preview-label {
+  color: var(--ok);
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.rem-cron-preview ol {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.rem-editor-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rem-enabled-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.rem-enabled-toggle input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+
+.rem-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ---- 列表卡片 ---- */
+
+.rem-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.rem-empty {
+  margin: 0;
+  padding: 40px 20px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--text-2);
+  text-align: center;
+  grid-column: 1 / -1;
+}
+
+.rem-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.rem-card.is-paused {
+  opacity: 0.72;
+}
+
+.rem-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.rem-card-next {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.rem-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+
+.rem-badge.is-active {
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--border));
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 9%, var(--surface));
+}
+
+.rem-badge.is-paused {
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+
+.rem-badge.is-done {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.rem-badge.is-missed {
+  border-color: color-mix(in srgb, var(--rem-amber) 45%, var(--border));
+  color: var(--rem-amber);
+  background: var(--rem-amber-soft);
+}
+
+.rem-card-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  white-space: pre-line;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rem-card-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rem-card-images img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  display: block;
+}
+
+.rem-card-schedules {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.rem-card-schedules li {
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+}
+
+.rem-card-schedules li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.rem-card-schedules .is-disabled-schedule {
+  opacity: 0.6;
+}
+
+.rem-muted {
+  opacity: 0.7;
+}
+
+.rem-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+.rem-card-actions .rem-button {
+  font-size: 13px;
+  padding: 5px 11px;
+}
+
+@media (max-width: 640px) {
+  .rem-hero {
+    padding: 20px 16px;
+  }
+
+  .rem-list {
+    grid-template-columns: 1fr;
+  }
+}

@@ -130,6 +130,26 @@
     "integration": "path"
   },
   {
+    "id": "reminders",
+    "name": "提醒事项",
+    "description": "文字与图片提醒：多时间点、间隔重复与 cron 定时，多渠道推送",
+    "category": "life",
+    "tags": [
+      "提醒",
+      "通知",
+      "定时",
+      "cron"
+    ],
+    "icon": "bell",
+    "kind": "service",
+    "entry": "/reminders",
+    "openMode": "same-tab",
+    "order": 52,
+    "visible": true,
+    "lifecycle": "active",
+    "integration": "path"
+  },
+  {
     "id": "documents",
     "name": "证件夹",
     "description": "证件与签证有效期管理：分类、标签、扫描件附件与到期提醒",

@@ -8,6 +8,7 @@ export const ICONS: Record<string, string> = {
   qrcode: "M3 3h8v8H3V3Zm2 2v4h4V5H5Zm1 1h2v2H6V6Zm7-3h8v8h-8V3Zm2 2v4h4V5h-4Zm1 1h2v2h-2V6ZM3 13h8v8H3v-8Zm2 2v4h4v-4H5Zm1 1h2v2H6v-2Zm7-3h2v2h-2v-2Zm4 0h2v2h-2v-2Zm-4 4h2v2h-2v-2Zm4-2h2v2h-2v-2Zm0 4h2v2h2v2h-2v2h-2v-2h2v-2Z",
   map: "M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z",
   idcard: "M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm2 2v12h12V6H6Zm3 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM7.3 15.4c.4-1.4 1.7-2.1 2.7-2.1s2.3.7 2.7 2.1H7.3Zm5.7-6.4h4v1.6h-4V9Zm0 3.4h4V14h-4v-1.6Z",
+  bell: "M12 22a2.9 2.9 0 0 0 2.9-2.9H9.1A2.9 2.9 0 0 0 12 22Zm7-5.2-1.7-1.7a1.4 1.4 0 0 1-.4-1V10a5.9 5.9 0 0 0-4.4-5.7V3.5a1.5 1.5 0 1 0-3 0v.8A5.9 5.9 0 0 0 5.1 10v4.1c0 .38-.14.74-.4 1L3 16.8a1 1 0 0 0 .71 1.7h16.58a1 1 0 0 0 .71-1.7Z",
 };
 
 export const ICON_IDS: string[] = Object.keys(ICONS);
