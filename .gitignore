@@ -19,3 +19,7 @@ config/health.json
 tsconfig.tsbuildinfo
 
 apps/allinone/data/
+
+# 内部设计与规划文档（PRD / 任务清单等），仅保留在本地，不上传
+/PRD.md
+/docs/

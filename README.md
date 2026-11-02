@@ -100,8 +100,6 @@ pnpm build      # 类型检查 + 构建
 2. 在 `apps/allinone/config/tools.json` 登记名称、入口、分类与图标。
 3. 完事——门户的卡片墙、搜索、状态页会自动带上它。
 
-约定与验收标准的完整版见 [PRD.md](PRD.md)，各模块说明见 [docs/](docs/)。
-
 ---
 
 <div align="center">
