@@ -1,10 +1,13 @@
 import {TEMPLATES,RATIOS,clamp,canvasSize,layoutCells,cropImage,drawCollage} from './engine.js';
+import {WATERMARK_DEFAULTS,SIZE_LIMITS,normalizeWatermarks,watermarkFontLoadSpec,drawWatermarks,drawWatermarkSelection,watermarkResizeHandle,watermarkHitTest,pointNearHandle,moveWatermark,resizeWatermark} from './watermarks.js';
 
 const $=id=>document.getElementById(id);
 const preview=$('preview'),ctx=preview.getContext('2d');
 const photos=new Map(),cells=Array.from({length:9},()=>emptyCell());
 let template='grid4',ratio='1:1',selected=0,serial=0,generation=0,loading=false,exporting=false,raf=0,drag=null;
+let watermarks=[],activeWatermarkId=null,wmDrag=null,wmLayouts=[],fontLoadSeq=0;
 const MAX_PHOTOS=24,MAX_PIXELS=32_000_000,MAX_EDGE=2560,downloadUrls=new Set();
+const WM_STORE_KEY='collage-watermarks-v1',WM_HIT_TOLERANCE=14;
 function emptyCell(){return {photoId:'',zoom:1,focusX:.5,focusY:.5};}
 function count(){return TEMPLATES.find(t=>t.id===template).count;}
 function status(message,error=false){$('status').textContent=message;$('status').classList.toggle('error',error);}
@@ -14,6 +17,12 @@ function render(){
   const size=canvasSize(ratio,1000);
   if(preview.width!==size.width||preview.height!==size.height){preview.width=size.width;preview.height=size.height;}
   drawCollage(ctx,{...options(),...size});
+  wmLayouts=drawWatermarks(ctx,watermarks,preview.width,preview.height);
+  const activeLayout=wmLayouts.find(l=>l.mark.id===activeWatermarkId);
+  if(activeLayout){
+    const cssScale=preview.width/(preview.getBoundingClientRect().width||preview.width);
+    drawWatermarkSelection(ctx,activeLayout,watermarkResizeHandle(activeLayout,preview.width,preview.height,cssScale));
+  }
   const filled=cells.slice(0,count()).filter(c=>photos.has(c.photoId)).length;
   $('completion').textContent=filled===count()?'照片已就位，可以导出':`还需放入 ${count()-filled} 张照片`;
   $('canvas-info').textContent=`${ratio} · ${TEMPLATES.find(t=>t.id===template).name}`;
@@ -21,9 +30,11 @@ function render(){
   updateSelection();
 }
 function updateSelection(){
+  const outline=$('selection');
+  if(activeWatermarkId){outline.hidden=true;return;}
   const r=layoutCells(template,preview.width,preview.height,options().gap,options().margin)[selected];
   if(!r)return;
-  const box=preview.getBoundingClientRect(),stage=$('stage').getBoundingClientRect(),outline=$('selection');
+  const box=preview.getBoundingClientRect(),stage=$('stage').getBoundingClientRect();
   const sx=box.width/preview.width,sy=box.height/preview.height;
   outline.hidden=false;outline.style.left=`${box.left-stage.left+r.x*sx-1}px`;outline.style.top=`${box.top-stage.top+r.y*sy-1}px`;
   outline.style.width=`${r.w*sx}px`;outline.style.height=`${r.h*sy}px`;$('selection-label').textContent=`图片格 ${selected+1}`;
@@ -34,7 +45,7 @@ function updateCropUI(){
   $('zoom-val').textContent=`${c.zoom.toFixed(2)}×`;$('focus-x-val').textContent=`${Math.round(c.focusX*100)}%`;$('focus-y-val').textContent=`${Math.round(c.focusY*100)}%`;
   const disabled=!photos.has(c.photoId);for(const id of ['zoom','focus-x','focus-y','reset'])$(id).disabled=disabled;
 }
-function selectCell(i){selected=clamp(i,0,count()-1);updateCropUI();updateSelection();}
+function selectCell(i){selected=clamp(i,0,count()-1);if(activeWatermarkId){activeWatermarkId=null;syncWatermarkEditor();}updateCropUI();updateSelection();}
 function rebuildCellSelectors(){
   $('cell-select').replaceChildren();$('swap-target').replaceChildren();
   for(let i=0;i<count();i++){for(const id of ['cell-select','swap-target']){const o=document.createElement('option');o.value=String(i);o.textContent=`图片格 ${i+1}`;$(id).append(o);}}
@@ -113,19 +124,204 @@ for(const [id,key] of [['zoom','zoom'],['focus-x','focusX'],['focus-y','focusY']
 $('reset').addEventListener('click',()=>{cells[selected]={...emptyCell(),photoId:cells[selected].photoId};updateCropUI();requestRender();});
 function canvasPoint(e){const r=preview.getBoundingClientRect();return {x:(e.clientX-r.left)*preview.width/r.width,y:(e.clientY-r.top)*preview.height/r.height};}
 preview.addEventListener('pointerdown',e=>{
-  if(e.button!==0)return;const point=canvasPoint(e),rects=layoutCells(template,preview.width,preview.height,options().gap,options().margin),index=rects.findIndex(r=>point.x>=r.x&&point.y>=r.y&&point.x<=r.x+r.w&&point.y<=r.y+r.h);
-  if(index<0)return;selectCell(index);const c=cells[index],p=photos.get(c.photoId);if(!p)return;
+  if(e.button!==0)return;const point=canvasPoint(e);
+  const cssScale=preview.width/(preview.getBoundingClientRect().width||preview.width);
+  // Watermarks first: the grip resizes size-only, a text hit moves that mark,
+  // and a miss clears watermark selection so the photo crop gesture takes over.
+  if(activeWatermarkId){
+    const layout=wmLayouts.find(l=>l.mark.id===activeWatermarkId);
+    if(layout&&pointNearHandle(point,watermarkResizeHandle(layout,preview.width,preview.height,cssScale),1.8)){
+      wmDrag={mode:'resize',id:layout.mark.id,pointerId:e.pointerId,startY:e.clientY,startSize:layout.mark.size};
+      preview.setPointerCapture(e.pointerId);e.preventDefault();return;
+    }
+  }
+  const hit=watermarkHitTest(wmLayouts,point,WM_HIT_TOLERANCE*cssScale,activeWatermarkId);
+  if(hit){
+    activeWatermarkId=hit.mark.id;
+    wmDrag={mode:'move',id:hit.mark.id,pointerId:e.pointerId,startX:point.x,startY:point.y};
+    syncWatermarkEditor();updateSelection();requestRender();
+    preview.setPointerCapture(e.pointerId);e.preventDefault();return;
+  }
+  if(activeWatermarkId){activeWatermarkId=null;syncWatermarkEditor();}
+  const rects=layoutCells(template,preview.width,preview.height,options().gap,options().margin),index=rects.findIndex(r=>point.x>=r.x&&point.y>=r.y&&point.x<=r.x+r.w&&point.y<=r.y+r.h);
+  if(index<0){updateSelection();requestRender();return;}selectCell(index);const c=cells[index],p=photos.get(c.photoId);if(!p)return;
   const r=rects[index],crop=cropImage(p.width,p.height,r.w,r.h,c.zoom,c.focusX,c.focusY);
   drag={pointer:e.pointerId,index,start:point,fx:c.focusX,fy:c.focusY,r,crop,iw:p.width,ih:p.height};preview.setPointerCapture(e.pointerId);e.preventDefault();
 });
 preview.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.pointer)return;const p=canvasPoint(e),d=drag,c=cells[d.index];c.focusX=d.iw-d.crop.sw>1?clamp(d.fx-(p.x-d.start.x)*d.crop.sw/d.r.w/(d.iw-d.crop.sw),0,1):.5;c.focusY=d.ih-d.crop.sh>1?clamp(d.fy-(p.y-d.start.y)*d.crop.sh/d.r.h/(d.ih-d.crop.sh),0,1):.5;updateCropUI();requestRender();});
-for(const event of ['pointerup','pointercancel','lostpointercapture'])preview.addEventListener(event,()=>{drag=null;});
-preview.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowDown'){selectCell((selected+1)%count());e.preventDefault();}else if(e.key==='ArrowLeft'||e.key==='ArrowUp'){selectCell((selected+count()-1)%count());e.preventDefault();}});
+preview.addEventListener('pointermove',e=>{
+  if(wmDrag&&e.pointerId===wmDrag.pointerId){
+    const mark=watermarks.find(m=>m.id===wmDrag.id);
+    if(!mark){wmDrag=null;return;}
+    const point=canvasPoint(e);
+    if(wmDrag.mode==='resize'){
+      // Vertical grip motion changes size only; x/y stay frozen.
+      Object.assign(mark,resizeWatermark(mark,wmDrag.startSize,e.clientY-wmDrag.startY));
+      mark.size=Math.round(mark.size*10)/10;
+    }else{
+      Object.assign(mark,moveWatermark(mark,point.x-wmDrag.startX,point.y-wmDrag.startY,preview.width,preview.height));
+    }
+    syncWatermarkEditor();requestRender();return;
+  }
+  if(drag||wmDrag)return;
+  // Hover affordance: grip, movable text, or the plain crop cursor.
+  const point=canvasPoint(e),cssScale=preview.width/(preview.getBoundingClientRect().width||preview.width);
+  let cursor='';
+  if(activeWatermarkId){
+    const layout=wmLayouts.find(l=>l.mark.id===activeWatermarkId);
+    if(layout&&pointNearHandle(point,watermarkResizeHandle(layout,preview.width,preview.height,cssScale),1.8))cursor='nwse-resize';
+  }
+  if(!cursor&&watermarkHitTest(wmLayouts,point,WM_HIT_TOLERANCE*cssScale,activeWatermarkId))cursor='grab';
+  if(preview.style.cursor!==cursor)preview.style.cursor=cursor;
+});
+for(const event of ['pointerup','pointercancel','lostpointercapture'])preview.addEventListener(event,()=>{if(wmDrag){wmDrag=null;saveWatermarks();}drag=null;});
+preview.addEventListener('keydown',e=>{
+  if(activeWatermarkId){
+    const mark=watermarks.find(m=>m.id===activeWatermarkId);
+    if(mark){
+      const step=e.shiftKey?.05:.01;
+      let handled=true;
+      if(e.key==='ArrowLeft')mark.x=Math.max(0,mark.x-step);
+      else if(e.key==='ArrowRight')mark.x=Math.min(1,mark.x+step);
+      else if(e.key==='ArrowUp')mark.y=Math.max(0,mark.y-step);
+      else if(e.key==='ArrowDown')mark.y=Math.min(1,mark.y+step);
+      else if(e.key==='Escape'){activeWatermarkId=null;syncWatermarkEditor();updateSelection();requestRender();}
+      else if(e.key==='Delete'||e.key==='Backspace')deleteActiveWatermark();
+      else handled=false;
+      if(handled){
+        if(e.key.startsWith('Arrow')){syncWatermarkEditor();saveWatermarks();}
+        e.preventDefault();
+      }
+      if(handled){requestRender();return;}
+    }
+  }
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'){selectCell((selected+1)%count());e.preventDefault();}else if(e.key==='ArrowLeft'||e.key==='ArrowUp'){selectCell((selected+count()-1)%count());e.preventDefault();}
+});
+// ── 03 · 文字水印：列表增删复制、单选编辑、画布手势与持久化 ──
+function watermarkById(id){return watermarks.find(m=>m.id===id)||null;}
+function activeWatermark(){return watermarkById(activeWatermarkId);}
+function truncateLabel(text){const t=String(text||'').trim();return t.length>10?`${t.slice(0,10)}…`:t;}
+function saveWatermarks(){try{localStorage.setItem(WM_STORE_KEY,JSON.stringify(watermarks));}catch{}}
+function loadWatermarks(){try{watermarks=normalizeWatermarks(JSON.parse(localStorage.getItem(WM_STORE_KEY)));}catch{watermarks=[];}}
+function uniqueWatermarkId(){let n=watermarks.length+1;while(watermarks.some(m=>m.id===`wm-${n}`))n++;return `wm-${n}`;}
+function cascadePosition(index){return {x:Math.round((.5+((index%4)-1.5)*.05)*1000)/1000,y:Math.round((.42+(index%3)*.08)*1000)/1000};}
+function selectWatermark(id){activeWatermarkId=id;syncWatermarkEditor();updateSelection();requestRender();}
+function addWatermark(){
+  const index=watermarks.length,mark={...WATERMARK_DEFAULTS,...cascadePosition(index),id:uniqueWatermarkId(),text:`水印 ${index+1}`};
+  watermarks.push(mark);saveWatermarks();rebuildWatermarkList();selectWatermark(mark.id);
+  status(`已添加「${mark.text}」，可直接在画布上拖动。`);
+}
+function duplicateActiveWatermark(){
+  const mark=activeWatermark();if(!mark)return;
+  const copy={...mark,id:uniqueWatermarkId(),x:Math.min(1,Math.round((mark.x+.06)*1000)/1000),y:Math.min(1,Math.round((mark.y+.06)*1000)/1000)};
+  watermarks.push(copy);saveWatermarks();rebuildWatermarkList();selectWatermark(copy.id);
+  status(`已复制「${truncateLabel(mark.text)}」，副本位于原位右下方。`);
+}
+function deleteActiveWatermark(){
+  const index=watermarks.findIndex(m=>m.id===activeWatermarkId);if(index<0)return;
+  const [gone]=watermarks.splice(index,1);
+  activeWatermarkId=(watermarks[Math.min(index,watermarks.length-1)]||{}).id||null;
+  saveWatermarks();rebuildWatermarkList();syncWatermarkEditor();updateSelection();requestRender();
+  status(`已删除水印「${truncateLabel(gone.text)}」。`);
+}
+function toggleActiveWatermarkVisible(){
+  const mark=activeWatermark();if(!mark)return;
+  mark.visible=!mark.visible;saveWatermarks();rebuildWatermarkList();syncWatermarkEditor();refreshWatermarkFonts();requestRender();
+}
+function rebuildWatermarkList(){
+  const list=$('wm-list');list.replaceChildren();
+  for(const mark of watermarks){
+    const item=document.createElement('li');
+    item.className='wm-item'+(mark.visible?'':' muted-mark');
+    item.id=`wm-option-${mark.id}`;item.dataset.wmId=mark.id;
+    item.setAttribute('role','option');item.setAttribute('aria-selected','false');item.tabIndex=-1;
+    const swatch=document.createElement('span');swatch.className='wm-swatch';swatch.style.background=mark.color;swatch.setAttribute('aria-hidden','true');
+    const name=document.createElement('span');name.className='wm-name';name.textContent=String(mark.text).trim()||'（空）';
+    const badge=document.createElement('span');badge.className='wm-badge';badge.textContent=mark.visible?'':'已隐藏';
+    item.append(swatch,name,badge);
+    item.title=mark.visible?`选择水印 ${truncateLabel(mark.text)}`:`选择水印 ${truncateLabel(mark.text)}（当前隐藏）`;
+    item.addEventListener('click',()=>selectWatermark(mark.id));
+    item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectWatermark(mark.id);}});
+    list.append(item);
+  }
+  $('wm-count').textContent=`${watermarks.length} 条`;
+  $('wm-list').hidden=watermarks.length===0;
+  $('wm-empty').hidden=watermarks.length>0;
+}
+function syncWatermarkEditor(){
+  const mark=activeWatermark();
+  $('wm-editor').hidden=!mark;
+  for(const id of ['wm-duplicate','wm-visible','wm-delete'])$(id).disabled=!mark;
+  for(const li of document.querySelectorAll('#wm-list .wm-item')){
+    const on=li.dataset.wmId===activeWatermarkId;
+    li.setAttribute('aria-selected',String(on));li.tabIndex=on?0:-1;
+  }
+  if(!mark){$('wm-editor-title').textContent='水印';return;}
+  $('wm-editor-title').textContent=`编辑 · ${truncateLabel(mark.text)||'（空）'}`;
+  if(document.activeElement!==$('wm-text'))$('wm-text').value=mark.text;
+  $('wm-font').value=mark.font;
+  $('wm-size').value=String(mark.size);
+  if(document.activeElement!==$('wm-size-num'))$('wm-size-num').value=String(Math.round(mark.size*10)/10);
+  $('wm-size-val').textContent=`${(mark.size/10).toFixed(1)}%`;
+  $('wm-color').value=mark.color;
+  $('wm-opacity').value=String(Math.round(mark.opacity*100));
+  $('wm-opacity-val').textContent=`${Math.round(mark.opacity*100)}%`;
+  $('wm-x').value=String(Math.round(mark.x*1000)/10);
+  $('wm-x-val').textContent=`${Math.round(mark.x*100)}%`;
+  $('wm-y').value=String(Math.round(mark.y*1000)/10);
+  $('wm-y-val').textContent=`${Math.round(mark.y*100)}%`;
+  $('wm-visible').textContent=mark.visible?'隐藏':'显示';
+}
+function withActiveMark(mutate,{rebuild=false}={}){
+  const mark=activeWatermark();if(!mark)return;
+  mutate(mark);saveWatermarks();
+  if(rebuild)rebuildWatermarkList();
+  syncWatermarkEditor();requestRender();
+}
+$('wm-add').addEventListener('click',addWatermark);
+$('wm-duplicate').addEventListener('click',duplicateActiveWatermark);
+$('wm-delete').addEventListener('click',deleteActiveWatermark);
+$('wm-visible').addEventListener('click',toggleActiveWatermarkVisible);
+$('wm-text').addEventListener('input',()=>withActiveMark(mark=>{mark.text=$('wm-text').value;},{rebuild:true}));
+$('wm-font').addEventListener('change',()=>withActiveMark(mark=>{mark.font=$('wm-font').value;},{rebuild:true}));
+const syncSizeFromInput=value=>{
+  const parsed=Number(value);
+  if(value===''||!Number.isFinite(parsed))return;
+  withActiveMark(mark=>{mark.size=Math.min(SIZE_LIMITS.max,Math.max(SIZE_LIMITS.min,Math.round(parsed*10)/10));});
+};
+$('wm-size').addEventListener('input',()=>syncSizeFromInput($('wm-size').value));
+$('wm-size-num').addEventListener('input',()=>syncSizeFromInput($('wm-size-num').value));
+$('wm-color').addEventListener('input',()=>withActiveMark(mark=>{mark.color=$('wm-color').value;},{rebuild:true}));
+$('wm-opacity').addEventListener('input',()=>withActiveMark(mark=>{mark.opacity=Number($('wm-opacity').value)/100;}));
+$('wm-x').addEventListener('input',()=>withActiveMark(mark=>{mark.x=Number($('wm-x').value)/100;}));
+$('wm-y').addEventListener('input',()=>withActiveMark(mark=>{mark.y=Number($('wm-y').value)/100;}));
+// 本地手写字体按需加载；预览在字体就绪后自动重绘，导出前也会等待加载完成。
+function ensureWatermarkFonts(){
+  if(!document.fonts||typeof document.fonts.load!=='function')return Promise.resolve();
+  const groups=new Map();
+  for(const mark of watermarks){
+    if(mark.visible===false||!String(mark.text).trim())continue;
+    const spec=watermarkFontLoadSpec(mark);
+    groups.set(spec,(groups.get(spec)||'')+mark.text);
+  }
+  return Promise.all([...groups].map(([spec,text])=>document.fonts.load(spec,text)));
+}
+function refreshWatermarkFonts(){
+  const seq=++fontLoadSeq;
+  ensureWatermarkFonts().then(()=>{if(seq===fontLoadSeq)requestRender();}).catch(()=>{});
+}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>requestRender()).catch(()=>{});
 new ResizeObserver(updateSelection).observe(preview);
 $('export').addEventListener('click',async()=>{
   if(loading||exporting||cells.slice(0,count()).some(c=>!photos.has(c.photoId))){status('请先给每张图片格放入照片。',true);return;}
   exporting=true;render();$('export').textContent='正在导出…';const canvas=document.createElement('canvas');
-  try{const size=canvasSize(ratio,Number($('resolution').value));canvas.width=size.width;canvas.height=size.height;drawCollage(canvas.getContext('2d'),{...options(),...size,placeholder:false});const type=$('format').value;const blob=await new Promise(resolve=>canvas.toBlob(resolve,type,.94));if(!blob)throw new Error('浏览器无法生成图片，请尝试 2048 px');const url=URL.createObjectURL(blob);downloadUrls.add(url);const a=document.createElement('a');a.href=url;a.download=`collage-${template}-${Date.now()}.${type==='image/png'?'png':'jpg'}`;a.click();setTimeout(()=>{URL.revokeObjectURL(url);downloadUrls.delete(url);},60000);status(`已导出 ${size.width} × ${size.height} px 图片。`);}catch(e){status(`导出失败：${e.message||'请降低尺寸后重试'}`,true);}finally{canvas.width=canvas.height=1;exporting=false;$('export').textContent='导出图片 ↓';requestRender();}
+  try{
+    try{await ensureWatermarkFonts();}catch{throw new Error('水印字体加载失败，请重试');}
+    const size=canvasSize(ratio,Number($('resolution').value));canvas.width=size.width;canvas.height=size.height;
+    const out=canvas.getContext('2d');
+    drawCollage(out,{...options(),...size,placeholder:false});
+    // Export ink only: drawWatermarks never emits the selection marker.
+    drawWatermarks(out,watermarks,size.width,size.height);const type=$('format').value;const blob=await new Promise(resolve=>canvas.toBlob(resolve,type,.94));if(!blob)throw new Error('浏览器无法生成图片，请尝试 2048 px');const url=URL.createObjectURL(blob);downloadUrls.add(url);const a=document.createElement('a');a.href=url;a.download=`collage-${template}-${Date.now()}.${type==='image/png'?'png':'jpg'}`;a.click();setTimeout(()=>{URL.revokeObjectURL(url);downloadUrls.delete(url);},60000);status(`已导出 ${size.width} × ${size.height} px 图片。`);}catch(e){status(`导出失败：${e.message||'请降低尺寸后重试'}`,true);}finally{canvas.width=canvas.height=1;exporting=false;$('export').textContent='导出图片 ↓';requestRender();}
 });
 $('demo').addEventListener('click',()=>{
   if(loading){status('请等待照片读取完成。',true);return;}
@@ -134,4 +330,5 @@ $('demo').addEventListener('click',()=>{
   palettes.forEach((colors,i)=>{const c=document.createElement('canvas');c.width=720;c.height=960;const g=c.getContext('2d'),gradient=g.createLinearGradient(0,0,0,960);gradient.addColorStop(0,colors[0]);gradient.addColorStop(1,colors[1]);g.fillStyle=gradient;g.fillRect(0,0,720,960);g.fillStyle='#fdf6df';g.beginPath();g.arc(490-i*60,210+i*35,75,0,Math.PI*2);g.fill();for(let layer=0;layer<3;layer++){g.fillStyle=layer===2?colors[2]:colors[1];g.globalAlpha=.45+layer*.2;g.beginPath();g.moveTo(0,960);for(let x=0;x<=720;x+=12)g.lineTo(x,510+layer*125+Math.sin(x/150+i+layer)*65+Math.cos(x/70+i)*20);g.lineTo(720,960);g.closePath();g.fill();}g.globalAlpha=1;addPhoto({image:c,width:720,height:960,name:`示例 · 山野 ${i+1}`});});renderPhotos();status('已添加 4 张示例照片，可自由调整构图；你的原有照片仍保留在照片库。');
 });
 window.addEventListener('pagehide',e=>{if(e.persisted)return;generation++;photos.forEach(p=>p.image.close?.());downloadUrls.forEach(url=>URL.revokeObjectURL(url));});
+loadWatermarks();rebuildWatermarkList();syncWatermarkEditor();refreshWatermarkFonts();
 rebuildCellSelectors();renderPhotos();render();
