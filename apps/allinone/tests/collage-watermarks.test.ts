@@ -7,7 +7,7 @@ function context() {
   const ctx:any={font:'',save(){},restore(){},measureText(text:string){const size=Number(this.font.match(/([\d.]+)px/)[1]);return {width:text.length*size*.5,actualBoundingBoxAscent:size*.8,actualBoundingBoxDescent:size*.2};},fillText(...args:any[]){calls.push({args,font:this.font,color:this.fillStyle,alpha:this.globalAlpha});}};
   return {ctx,calls};
 }
-const mark=(id='a',extra={})=>normalizeWatermark({id,text:'Hello',x:.5,y:.5,size:40,font:'sans',color:'#ffffff',opacity:1,visible:true,...extra});
+const mark=(id='a',extra={})=>normalizeWatermark({id,text:'Hello',x:.5,y:.5,size:40,font:'sans',color:'#ffffff',opacity:1,visible:true,...extra})!;
 
 test('multiple watermarks survive normalization with distinct IDs and independent styles',()=>{
   const list=normalizeWatermarks(Array.from({length:15},(_,i)=>({...mark('same'),text:`Mark ${i}`,size:20+i})));
@@ -46,8 +46,8 @@ test('resize adjusts only selected size, respects limits and leaves location unc
 
 test('watermark geometry scales consistently between preview and export',()=>{
   const {ctx}=context();
-  const a=watermarkLayout(ctx,mark(),1000,750),b=watermarkLayout(ctx,mark(),4000,3000);
-  for(const key of ['left','top','width','height','baselineY','centerX','centerY','size'])assert.ok(Math.abs(b[key]-a[key]*4)<1e-8,key);
+  const a=watermarkLayout(ctx,mark(),1000,750)!,b=watermarkLayout(ctx,mark(),4000,3000)!;
+  for(const key of ['left','top','width','height','baselineY','centerX','centerY','size'] as const)assert.ok(Math.abs(b[key]-a[key]*4)<1e-8,key);
 });
 
 test('overlapping watermarks prefer selected layer and otherwise topmost',()=>{

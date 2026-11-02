@@ -34,7 +34,7 @@ test("lists keep any number of layers with unique ids and per-layer styles", () 
   const many = Array.from({ length: 15 }, (_, i) => ({ ...raw({ id: "same" }), text: `Mark ${i}`, size: 20 + i }));
   const list = normalizeLayers(many);
   assert.equal(list.length, 15, "no artificial count cap");
-  assert.equal(new Set(list.map(layer => layer.id)).size, 15, "ids must be unique");
+  assert.equal(new Set(list.map((layer: Layer) => layer.id)).size, 15, "ids must be unique");
   assert.equal(list[0].text, "Mark 0");
   assert.equal(list[14].text, "Mark 14");
   assert.equal(list[0].size, 20);
@@ -44,7 +44,7 @@ test("lists keep any number of layers with unique ids and per-layer styles", () 
   // Blank-text layers are valid state (cleared text stays editable after reload).
   assert.equal(normalizeLayers([null, 42, "junk", { text: "  " }]).length, 1);
   const collision = normalizeLayers([raw(), raw(), raw({ id: "b" }), raw({ id: "b" })]);
-  assert.equal(new Set(collision.map(layer => layer.id)).size, collision.length);
+  assert.equal(new Set(collision.map((layer: Layer) => layer.id)).size, collision.length);
 });
 
 test("normalizeLayer clamps values and falls back to safe defaults", () => {

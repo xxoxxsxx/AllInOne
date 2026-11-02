@@ -176,6 +176,8 @@ export function drawWatermarkSelection(ctx,layout,handle){
 // Topmost-first hit test over rendered layouts. Overlap rule: the currently
 // selected watermark wins when it also hits; otherwise the highest array index
 // (drawn last, visually on top) wins. tolerance is in canvas pixels.
+
+/** @param {string|null} [selectedId=null] prefer this watermark id when it also hits */
 export function watermarkHitTest(layouts,point,tolerance=0,selectedId=null){
   if(!point||!Array.isArray(layouts))return null;
   const t=Math.max(0,Number(tolerance)||0);
