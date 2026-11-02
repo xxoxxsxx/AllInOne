@@ -246,9 +246,22 @@ function sync() {
       ctx.setLineDash([pad*.8,pad*.5]);
       ctx.strokeRect(Math.max(0,mark.x-pad),Math.max(0,mark.y-mark.ascent-pad),
         Math.min(canvas.width,mark.width+pad*2),Math.min(canvas.height,mark.ascent+mark.descent+pad*2));
+      const handle=watermarkResizeHandle(mark);
+      ctx.setLineDash([]); ctx.fillStyle='#12364d';
+      ctx.beginPath(); ctx.arc(handle.x,handle.y,handle.radius,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(handle.x-handle.radius*.4,handle.y+handle.radius*.4);
+      ctx.lineTo(handle.x+handle.radius*.4,handle.y-handle.radius*.4); ctx.stroke();
       ctx.restore();
     }
   }
+}
+// Keep the resize grip visible and touchable even near the canvas edges.
+function watermarkResizeHandle(mark) {
+  const scale=canvas.width/(canvas.getBoundingClientRect().width || canvas.width);
+  const radius=10*scale, pad=canvas.width*.009;
+  return {x:Math.max(radius,Math.min(canvas.width-radius,mark.x+mark.width+pad)),
+    y:Math.max(radius,Math.min(canvas.height-radius,mark.y+mark.descent+pad)),radius};
 }
 function reset() { zoom = 1; focusX = focusY = .5; sync(); }
 const exifButtons = [...$('exif-chips').querySelectorAll('button[data-exif-field]')];
@@ -334,7 +347,7 @@ function toggleWatermarkDefaults() {
 }
 for(const kind of ['custom','exif']) $('edit-'+kind).addEventListener('click',()=>{
   if (!watermarkDetails(kind)) return;
-  activeWatermark=kind; syncWatermarkEditor(); canvas.focus();
+  activeWatermark=kind; syncWatermarkEditor(); sync(); canvas.focus();
 });
 $('sample').addEventListener('click', async () => {
   const version = ++loadVersion;
@@ -370,7 +383,18 @@ function watermarkAt(point) {
 }
 canvas.addEventListener('pointerdown',e => {
   if (!photo || drag || (e.pointerType==='mouse' && e.button!==0)) return;
-  const point=canvasPoint(e), mark=watermarkAt(point);
+  const point=canvasPoint(e);
+  const selected=showWatermarkSelection && watermarkLayout(ctx,canvas.width,canvas.height,activeWatermark);
+  if (selected) {
+    const handle=watermarkResizeHandle(selected);
+    if (Math.hypot(point.x-handle.x,point.y-handle.y)<=handle.radius*1.8) {
+      drag={kind:selected.kind,mode:'resize',pointerId:e.pointerId,startY:e.clientY,
+        startSize:Number($(selected.prefix+'-size').value)};
+      canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+  }
+  const mark=watermarkAt(point);
   if (mark) {
     activeWatermark=mark.kind; syncWatermarkEditor();
     drag={kind:mark.kind,pointerId:e.pointerId,startX:point.x,startY:point.y,centerX:mark.centerX,centerY:mark.centerY};
@@ -385,7 +409,13 @@ canvas.addEventListener('pointerdown',e => {
 canvas.addEventListener('pointermove',e => {
   if (!drag || e.pointerId!==drag.pointerId) return;
   const clamp=x=>Math.min(1,Math.max(0,x));
-  if (drag.kind==='photo') {
+  if (drag.mode==='resize') {
+    const prefix=drag.kind==='exif'?'exif-watermark':'watermark', input=$(prefix+'-size');
+    // Vertical motion changes size only; position and photo composition stay intact.
+    const size=drag.startSize*Math.pow(2,(e.clientY-drag.startY)/100);
+    input.value=String(Math.round(Math.max(Number(input.min),Math.min(Number(input.max),size))));
+    $(prefix+'-size-value').textContent=Number(input.value)/10+'%';
+  } else if (drag.kind==='photo') {
     const imagePerClient=drag.crop.width/(drag.displayScale*drag.panelWidth);
     const freeX=photo.naturalWidth-drag.crop.width, freeY=photo.naturalHeight-drag.crop.height;
     if(freeX>.001) focusX=clamp(drag.px-(e.clientX-drag.x)*imagePerClient/freeX);
