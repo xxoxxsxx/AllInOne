@@ -1,13 +1,14 @@
 "use server";
 
-// 设置页（settingsPage/settingsPost + level_web.go 测试通知）与调度页
+// 设置页（settingsPage/settingsPost：行情 Key / 代理 / 额度 / 备份）与调度页
 // （schedule/scheduleLoop 的 CRUD 与 windowSave/windowDefault/zonePost）的 Server Actions。
+// 渠道动作已迁至 /channels 全局推送渠道页（src/app/channels/actions.ts）。
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getDB, now as nowText, validWindow, queryWindows } from "@/modules/stocks/store";
-import { checkBarkURL, checkFeishuWebhook, checkProxy, checkTG, sendChannel, testProxy } from "@/modules/stocks/notify";
+import { checkProxy, testProxy } from "@/modules/stocks/notify";
 import { parseClock } from "@/modules/stocks/tz";
 import { activeWindow, occurrence, timezoneValue, validTimezone, windowsOverlap } from "@/modules/stocks/windows";
 
@@ -83,126 +84,7 @@ export async function saveProxyAction(fd: FormData): Promise<void> {
   goSettings({ result: "proxy_tested" });
 }
 
-// —— Bark ——
-export async function saveBarkAction(fd: FormData): Promise<void> {
-  const db = getDB();
-  const useProxy = str(fd, "use_proxy") === "1";
-  if (useProxy) {
-    const proxy = (db.prepare(`SELECT proxy_url FROM settings WHERE id=1`).get() as { proxy_url: string }).proxy_url;
-    if (proxy === "") goSettings({ error: "请先测试并保存网络代理" });
-  }
-  const raw = str(fd, "bark_url").trim();
-  const key = str(fd, "bark_key").trim();
-  if (key.length > 256) goSettings({ error: "设备 Key 过长" });
-  let url = raw;
-  if (raw !== "") {
-    try {
-      url = checkBarkURL(raw, str(fd, "allow_local") === "1");
-    } catch (e) {
-      goSettings({ error: e instanceof Error ? e.message : "Bark 地址无效" });
-    }
-  }
-  const enabled = str(fd, "enabled") === "1";
-  if (enabled) {
-    const current = db.prepare(`SELECT bark_url,bark_key FROM settings WHERE id=1`).get() as { bark_url: string; bark_key: string };
-    if (url === "" || (key === "" && current.bark_key === "")) {
-      goSettings({ error: "启用 Bark 前请填写服务地址和设备 Key" });
-    }
-  }
-  db.prepare(`UPDATE settings SET bark_url=?,bark_key=CASE WHEN ?='' THEN bark_key ELSE ? END,bark_local=?,bark_enabled=?,bark_proxy=? WHERE id=1`)
-    .run(url, key, key, str(fd, "allow_local") === "1" ? 1 : 0, enabled ? 1 : 0, useProxy ? 1 : 0);
-  goSettings({ result: "saved" });
-}
-
-export async function clearBarkAction(): Promise<void> {
-  const db = getDB();
-  db.prepare(`UPDATE settings SET bark_url='',bark_key='',bark_local=0,bark_enabled=0,bark_proxy=0 WHERE id=1`).run();
-  goSettings({ result: "cleared" });
-}
-
-// —— 飞书 ——
-export async function saveFeishuAction(fd: FormData): Promise<void> {
-  const db = getDB();
-  const useProxy = str(fd, "use_proxy") === "1";
-  if (useProxy) {
-    const proxy = (db.prepare(`SELECT proxy_url FROM settings WHERE id=1`).get() as { proxy_url: string }).proxy_url;
-    if (proxy === "") goSettings({ error: "请先测试并保存网络代理" });
-  }
-  let webhook: string;
-  try {
-    webhook = checkFeishuWebhook(str(fd, "feishu_webhook"));
-  } catch (e) {
-    goSettings({ error: e instanceof Error ? e.message : "飞书 Webhook 无效" });
-  }
-  const secret = str(fd, "feishu_secret").trim();
-  if (secret.length > 256) goSettings({ error: "飞书签名密钥过长" });
-  db.prepare(`UPDATE settings SET feishu_webhook=?,feishu_secret=?,feishu_enabled=?,feishu_proxy=? WHERE id=1`)
-    .run(webhook, secret, str(fd, "enabled") === "1" ? 1 : 0, useProxy ? 1 : 0);
-  goSettings({ result: "saved" });
-}
-
-export async function clearFeishuAction(): Promise<void> {
-  const db = getDB();
-  db.prepare(`UPDATE settings SET feishu_webhook='',feishu_secret='',feishu_enabled=0,feishu_proxy=0 WHERE id=1`).run();
-  goSettings({ result: "cleared" });
-}
-
-// —— Telegram ——
-export async function saveTGAction(fd: FormData): Promise<void> {
-  const db = getDB();
-  const useProxy = str(fd, "use_proxy") === "1";
-  if (useProxy) {
-    const proxy = (db.prepare(`SELECT proxy_url FROM settings WHERE id=1`).get() as { proxy_url: string }).proxy_url;
-    if (proxy === "") goSettings({ error: "请先测试并保存网络代理" });
-  }
-  const token = str(fd, "tg_token").trim();
-  const chat = str(fd, "tg_chat_id").trim();
-  try {
-    checkTG(token, chat);
-  } catch (e) {
-    goSettings({ error: e instanceof Error ? e.message : "Telegram 配置无效" });
-  }
-  db.prepare(`UPDATE settings SET tg_token=?,tg_chat_id=?,tg_enabled=?,tg_proxy=? WHERE id=1`)
-    .run(token, chat, str(fd, "enabled") === "1" ? 1 : 0, useProxy ? 1 : 0);
-  goSettings({ result: "saved" });
-}
-
-export async function clearTGAction(): Promise<void> {
-  const db = getDB();
-  db.prepare(`UPDATE settings SET tg_token='',tg_chat_id='',tg_enabled=0,tg_proxy=0 WHERE id=1`).run();
-  goSettings({ result: "cleared" });
-}
-
-// —— 测试通知（level_web.go barkTest/feishuTest/telegramTest）——
-export async function testBarkAction(): Promise<void> {
-  const db = getDB();
-  const c = db.prepare(`SELECT bark_url,bark_key FROM settings WHERE id=1`).get() as { bark_url: string; bark_key: string };
-  if (c.bark_url === "" || c.bark_key === "") goSettings({ error: "请先配置 Bark 地址和设备 Key" });
-  const { notificationSettings } = await import("@/modules/stocks/store");
-  const outcome = await sendChannel(notificationSettings(db), "Bark", "TickerSentry 测试通知", "测试推送，不涉及股价");
-  if (outcome.status !== "成功") goSettings({ error: `${outcome.status}：${outcome.error}` });
-  goSettings({ tested: "bark" });
-}
-
-export async function testFeishuAction(): Promise<void> {
-  const db = getDB();
-  const { notificationSettings } = await import("@/modules/stocks/store");
-  const c = notificationSettings(db);
-  if (c.FeishuWebhook === "") goSettings({ error: "请先配置飞书 Webhook" });
-  const outcome = await sendChannel(c, "飞书", "TickerSentry 测试通知", "测试推送，不涉及股价");
-  if (outcome.status !== "成功") goSettings({ error: `${outcome.status}：${outcome.error}` });
-  goSettings({ tested: "feishu" });
-}
-
-export async function testTGAction(): Promise<void> {
-  const db = getDB();
-  const { notificationSettings } = await import("@/modules/stocks/store");
-  const c = notificationSettings(db);
-  if (c.TGToken === "" || c.TGChatID === "") goSettings({ error: "请先配置 Telegram Bot Token 和 Chat ID" });
-  const outcome = await sendChannel(c, "Telegram", "TickerSentry 测试通知", "测试推送，不涉及股价");
-  if (outcome.status !== "成功") goSettings({ error: `${outcome.status}：${outcome.error}` });
-  goSettings({ tested: "telegram" });
-}
+// 渠道动作已迁至 /channels 全局推送渠道页（src/app/channels/actions.ts）。
 
 // —— 时段（windows.go windowSave / windowDefault / zonePost）——
 export async function windowSaveAction(fd: FormData): Promise<void> {

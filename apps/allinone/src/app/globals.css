@@ -591,3 +591,8 @@ a {
   --color-border: var(--border-cdk);
   --color-accent: var(--accent);
 }
+
+/* 门户标题下的辅助链接行（全局推送渠道入口等） */
+.page-hint { margin: -6px 0 18px; font-size: 12px; }
+.page-hint a { color: var(--accent, #3c6657); text-decoration: none; border-bottom: 1px dashed currentColor; }
+.page-hint a:hover { border-bottom-style: solid; }

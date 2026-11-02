@@ -100,6 +100,7 @@ export function HomeView({ tools, categories, loadError, documentSummary, docume
     <div>
       <h1 className="page-title">我的工具箱</h1>
       <p className="page-sub">业务管理、金融监控与图片创作工具的统一入口。</p>
+      <p className="page-hint"><Link href="/channels">🔔 推送渠道设置（Bark / 飞书 / Telegram，证件夹与提醒事项共用）→</Link></p>
 
       {loadError ? <div className="error-banner">工具配置加载失败：{loadError}</div> : null}
       {documentReminderError ? <p role="status" className="error-banner">证件到期提示暂时无法读取，请打开证件夹检查。</p> : null}

@@ -18,7 +18,6 @@ import {
   getStock,
   getRun,
   listStocks,
-  notificationSettings,
   now,
   recordAttemptChannels,
   reserveQuoteCall,
@@ -28,6 +27,7 @@ import {
 } from "./store";
 import type { Level, Result, Stock } from "./store";
 import { enabledChannels, sendChannel } from "./notify";
+import { getChannelConfig } from "@/lib/channels/center";
 import { activeWindow, windowUsage } from "./windows";
 import { alertLimit } from "./store";
 import { formatPrice } from "./price-format";
@@ -214,7 +214,8 @@ export async function alert(
   if (levels.length === 0) {
     return "价格未命中已启用的提醒";
   }
-  const c = notificationSettings(db);
+  // 渠道配置统一来自全局推送渠道中心（与证件夹/提醒事项共用）；行情设置表里的旧渠道字段已退役。
+  const c = getChannelConfig();
   const channels = enabledChannels(c);
   if (channels.length === 0) {
     recordAttemptChannels(db, runID, { Symbol: q.Symbol, Price: decString(q.Price), QuoteAt: q.At }, levels, "命中但未通知（无启用渠道）", 0, "", []);

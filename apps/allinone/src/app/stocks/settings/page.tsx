@@ -1,40 +1,37 @@
+import Link from "next/link";
+
 import { apiKeyOf, getDB, getQuotaStatus, notificationSettings, queryWindows, windowDuration } from "@/modules/stocks/store";
+import { getChannelConfig, summarizeChannels } from "@/lib/channels/center";
 import { displayClock } from "@/modules/stocks/tz";
 import { timezoneValue } from "@/modules/stocks/windows";
 import {
-  clearBarkAction,
-  clearFeishuAction,
   clearProxyAction,
-  clearTGAction,
   restoreConfigAction,
   saveAPIKeyAction,
   saveQuotaAction,
-  saveBarkAction,
-  saveFeishuAction,
   saveProxyAction,
-  saveTGAction,
-  testBarkAction,
-  testFeishuAction,
-  testTGAction,
 } from "../settings-actions";
 import { Flash } from "../stocks-client";
 
 export const dynamic = "force-dynamic";
 
 // 原版 web.go settingsPage：Title 为「行情与通知设置」。
-export const metadata = { title: "行情与通知设置 · TickerSentry" };
+// 渠道配置已统一到全局推送渠道中心（/channels），本页只保留行情规则、行情代理与备份。
+export const metadata = { title: "行情设置 · TickerSentry" };
 
 // DOM 结构对应 templates/settings.html。
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ result?: string; tested?: string; error?: string }>;
+  searchParams: Promise<{ result?: string; error?: string }>;
 }) {
   const sp = await searchParams;
   const db = getDB();
   const key = apiKeyOf(db);
   const quota = getQuotaStatus(db);
+  // notificationSettings 仅用于读取行情查询代理（proxy_url）；通知渠道改读全局中心。
   const c = notificationSettings(db);
+  const channelsSummary = summarizeChannels(getChannelConfig());
   const tz = timezoneValue(db);
   const proxyRow = db.prepare(`SELECT proxy_latency_ms,proxy_tested_at FROM settings WHERE id=1`).get() as {
     proxy_latency_ms: string;
@@ -55,9 +52,7 @@ export default async function SettingsPage({
     proxy_tested: "代理测试成功，响应耗时已更新",
     quota_saved: "行情额度已保存，已消耗额度不会清零",
   };
-  const testedMap: Record<string, string> = { bark: "Bark", feishu: "飞书", telegram: "Telegram" };
   const quotaDaily = counts.stocks * slots;
-  const tested = sp.tested ? `${testedMap[sp.tested] ?? ""} 已接受测试通知；请在接收端核对送达` : "";
 
   return (
     <div className="settings-page">
@@ -65,15 +60,14 @@ export default async function SettingsPage({
         <div>
           <span className="eyebrow">PREFERENCES</span>
           <h1>服务设置</h1>
-          <p>管理行情来源、通知渠道和配置备份。</p>
+          <p>管理行情来源、网络代理和配置备份。通知渠道在全局推送渠道页统一配置。</p>
         </div>
       </div>
       <Flash text={sp.error ?? notices[sp.result ?? ""] ?? ""} />
-      <Flash text={tested} />
       <div className="settings-index" aria-label="设置分区">
         <a href="#market-title">行情来源</a>
         <a href="#proxy-title">网络代理</a>
-        <a href="#channels-title">通知渠道</a>
+        <Link href="/channels">全局推送渠道 ↗</Link>
         <a href="#backup-title">配置备份</a>
       </div>
 
@@ -164,7 +158,7 @@ export default async function SettingsPage({
             <span className="eyebrow">02 / NETWORK</span>
             <h2 id="proxy-title">网络代理</h2>
           </div>
-          <p>配置后行情查询使用代理；通知渠道可单独选择。</p>
+          <p>仅用于行情查询；推送渠道的代理在全局推送渠道页按渠道单独设置。</p>
         </div>
         <div className="settings-panel">
           <div className="settings-intro">
@@ -219,7 +213,7 @@ export default async function SettingsPage({
                     <input type="hidden" name="proxy_test" value="1" />
                     <button type="submit">重新测试</button>
                   </form>
-                  <form action={clearProxyAction} data-confirm="清除代理后行情和通知渠道都将直连，确定清除？">
+                  <form action={clearProxyAction} data-confirm="清除代理后行情查询将直连，确定清除？">
                     <button type="submit">清除代理</button>
                   </form>
                 </div>
@@ -229,199 +223,41 @@ export default async function SettingsPage({
         </div>
       </section>
 
-      <section className="settings-group" aria-labelledby="channels-title">
+      <section className="settings-group" aria-labelledby="channels-link-title">
         <div className="settings-group-head">
           <div>
             <span className="eyebrow">03 / NOTIFICATIONS</span>
-            <h2 id="channels-title">通知渠道</h2>
+            <h2 id="channels-link-title">通知渠道</h2>
           </div>
           <p>触价后向所有启用渠道发送；每个档位每次命中只计一次提醒。</p>
         </div>
-        <div className="settings-stack">
-          <div className="settings-panel">
-            <div className="settings-intro">
-              <div className="settings-name">
-                <h3>Bark</h3>
-                {c.BarkEnabled ? (
-                  <span className="status-pill">已启用</span>
-                ) : c.Bark.Key ? (
-                  <span className="status-pill is-off">已停用</span>
-                ) : (
-                  <span className="status-pill is-off">未配置</span>
-                )}
-              </div>
-              <p>向 Bark 设备推送提醒。内网自建服务需要允许可信内网地址。</p>
+        <div className="settings-panel">
+          <div className="settings-intro">
+            <div className="settings-name">
+              <h3>统一配置于全局推送渠道</h3>
+              {channelsSummary.bark.configured || channelsSummary.feishu.configured || channelsSummary.telegram.configured ? (
+                <span className="status-pill">已配置</span>
+              ) : (
+                <span className="status-pill is-off">未配置</span>
+              )}
             </div>
-            <div className="settings-content">
-              <form action={saveBarkAction}>
-                <input type="hidden" name="bark_save" value="1" />
-                <label>
-                  服务根地址
-                  <input type="url" name="bark_url" defaultValue={c.Bark.URL} placeholder="https://api.day.app" required />
-                </label>
-                <label>
-                  Bark 设备 Key
-                  <input
-                    type="text"
-                    name="bark_key"
-                    defaultValue={c.Bark.Key}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    maxLength={256}
-                  />
-                </label>
-                <label className="settings-option">
-                  <input type="checkbox" name="allow_local" value="1" defaultChecked={c.Bark.Local} />
-                  允许可信内网地址或 HTTP
-                </label>
-                <label className="settings-option">
-                  <input type="checkbox" name="use_proxy" value="1" defaultChecked={c.BarkProxy} disabled={!c.Proxy} />
-                  通过代理发送{!c.Proxy ? "（请先配置代理）" : ""}
-                </label>
-                <label className="settings-toggle">
-                  <input type="checkbox" name="enabled" value="1" defaultChecked={c.BarkEnabled} />
-                  启用 Bark 通知
-                </label>
-                <div className="settings-actions">
-                  <button className="primary" type="submit">
-                    保存 Bark
-                  </button>
-                </div>
-              </form>
-              {c.Bark.Key ? (
-                <div className="settings-secondary">
-                  <form action={testBarkAction}>
-                    <button type="submit">测试 Bark</button>
-                  </form>
-                  <form action={clearBarkAction} data-confirm="确定清除 Bark 配置？清除后无法发送通知。">
-                    <button type="submit">清除配置</button>
-                  </form>
-                </div>
-              ) : null}
-            </div>
+            <p>
+              Bark / 飞书 / Telegram 与代理在<Link href="/channels">全局推送渠道</Link>页统一配置，
+              证件夹到期提醒与提醒事项共用同一份。行情触价后向所有已启用渠道推送。
+            </p>
           </div>
-
-          <div className="settings-panel">
-            <div className="settings-intro">
-              <div className="settings-name">
-                <h3>飞书群机器人</h3>
-                {c.FeishuEnabled ? (
-                  <span className="status-pill">已启用</span>
-                ) : c.FeishuWebhook ? (
-                  <span className="status-pill is-off">已停用</span>
-                ) : (
-                  <span className="status-pill is-off">未配置</span>
-                )}
-              </div>
-              <p>在飞书群中添加自定义机器人，复制 Webhook。若开启签名校验，填写对应密钥。</p>
+          <div className="settings-content">
+            <div className="quota-summary" aria-label="渠道状态">
+              <span>Bark {channelsSummary.bark.configured ? `已配置（${channelsSummary.bark.host}）` : "未配置"}</span>
+              <span>飞书 {channelsSummary.feishu.configured ? "已配置" : "未配置"}</span>
+              <span>Telegram {channelsSummary.telegram.configured ? "已配置" : "未配置"}</span>
+              <span>代理 {channelsSummary.proxy.configured ? "已配置" : "未配置"}</span>
             </div>
-            <div className="settings-content">
-              <form action={saveFeishuAction}>
-                <input type="hidden" name="feishu_save" value="1" />
-                <label>
-                  Webhook 地址
-                  <input
-                    type="url"
-                    name="feishu_webhook"
-                    defaultValue={c.FeishuWebhook}
-                    placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
-                    autoComplete="off"
-                    required
-                  />
-                </label>
-                <label>
-                  签名密钥 <span className="label-hint">可选</span>
-                  <input type="text" name="feishu_secret" defaultValue={c.FeishuSecret} autoComplete="off" maxLength={256} />
-                </label>
-                <label className="settings-option">
-                  <input type="checkbox" name="use_proxy" value="1" defaultChecked={c.FeishuProxy} disabled={!c.Proxy} />
-                  通过代理发送{!c.Proxy ? "（请先配置代理）" : ""}
-                </label>
-                <label className="settings-toggle">
-                  <input type="checkbox" name="enabled" value="1" defaultChecked={c.FeishuEnabled} />
-                  启用飞书通知
-                </label>
-                <div className="settings-actions">
-                  <button className="primary" type="submit">
-                    保存飞书
-                  </button>
-                </div>
-              </form>
-              {c.FeishuWebhook ? (
-                <div className="settings-secondary">
-                  <form action={testFeishuAction}>
-                    <button type="submit">测试飞书</button>
-                  </form>
-                  <form action={clearFeishuAction} data-confirm="确定清除飞书配置？">
-                    <button type="submit">清除配置</button>
-                  </form>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="settings-panel">
-            <div className="settings-intro">
-              <div className="settings-name">
-                <h3>Telegram Bot</h3>
-                {c.TGEnabled ? (
-                  <span className="status-pill">已启用</span>
-                ) : c.TGToken ? (
-                  <span className="status-pill is-off">已停用</span>
-                ) : (
-                  <span className="status-pill is-off">未配置</span>
-                )}
-              </div>
-              <p>先与 Bot 开始会话，或将 Bot 加入目标群，再填写 Bot Token 和数字 Chat ID。</p>
-            </div>
-            <div className="settings-content">
-              <form action={saveTGAction}>
-                <input type="hidden" name="tg_save" value="1" />
-                <label>
-                  Bot Token
-                  <input
-                    type="text"
-                    name="tg_token"
-                    defaultValue={c.TGToken}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    required
-                  />
-                </label>
-                <label>
-                  数字 Chat ID
-                  <input type="text" name="tg_chat_id" defaultValue={c.TGChatID} autoComplete="off" inputMode="numeric" required />
-                </label>
-                <label className="settings-option">
-                  <input type="checkbox" name="use_proxy" value="1" defaultChecked={c.TGProxy} disabled={!c.Proxy} />
-                  通过代理发送{!c.Proxy ? "（请先配置代理）" : ""}
-                </label>
-                <label className="settings-toggle">
-                  <input type="checkbox" name="enabled" value="1" defaultChecked={c.TGEnabled} />
-                  启用 Telegram 通知
-                </label>
-                <div className="settings-actions">
-                  <button className="primary" type="submit">
-                    保存 Telegram
-                  </button>
-                </div>
-              </form>
-              {c.TGToken ? (
-                <div className="settings-secondary">
-                  <form action={testTGAction}>
-                    <button type="submit">测试 Telegram</button>
-                  </form>
-                  <form action={clearTGAction} data-confirm="确定清除 Telegram 配置？">
-                    <button type="submit">清除配置</button>
-                  </form>
-                </div>
-              ) : null}
+            <div className="settings-actions">
+              <Link className="primary" href="/channels">前往全局推送渠道 →</Link>
             </div>
           </div>
         </div>
-        <p className="settings-footnote">测试通知只确认服务接受请求，请在接收端核对是否送达。</p>
       </section>
 
       <section className="settings-group" aria-labelledby="backup-title">

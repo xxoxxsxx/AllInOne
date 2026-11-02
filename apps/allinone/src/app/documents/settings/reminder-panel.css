@@ -257,3 +257,11 @@
 @media (prefers-reduced-motion: reduce) {
   .reminder-settings *, .reminder-settings *::after { transition: none; }
 }
+
+/* 渠道摘要卡片：面板不再内嵌渠道表单，只展示状态与跳转（表单在 /channels 全局页）。 */
+.reminder-channels-link { display: grid; gap: 14px; }
+.reminder-channel-summary { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 560px) {
+  .reminder-channel-summary { flex-direction: column; align-items: stretch; }
+  .reminder-channel-summary .reminder-pill { justify-content: center; }
+}

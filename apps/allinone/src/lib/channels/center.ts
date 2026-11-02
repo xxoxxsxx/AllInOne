@@ -12,13 +12,14 @@
 // 表示「保持现有值」（设置页展示现有配置，仅提交非空的修改）；开关类布尔字段总是按提交值应用。
 // 非空值经 stocks notify 的 check* 校验（中文报错），校验失败不落库。
 //
-// 一次性迁移（copy-if-empty）：getChannelConfig() 发现 channels 行全空，且旧版证件夹库
-// （DATA_DIR/documents/documents.db 的 reminder_channels 表）存在非空配置时，把旧行复制进中心。
-// 语义要点：
-// - 只读 documents.db（readonly 打开、只 SELECT），绝不写/删它的表，行随旧代码退役自然闲置；
-// - 幂等：中心一旦有配置就不再迁移（旧 documents 行保持陈旧也不会把新配置冲掉）；
-// - 换回旧 documents 备份（reminder_channels 非空、中心为空）能再次播种中心；
-// - documents.db 不存在/无表/损坏 → 静默跳过迁移，中心照常返回（全空）配置。
+// 一次性迁移（copy-if-empty）：getChannelConfig() 发现 channels 行全空时，按顺序从
+// ① DATA_DIR/documents/documents.db 的 reminder_channels 表（原证件夹提醒渠道）
+// ② DATA_DIR/tickersentry/ticker.db 的 settings 表（原 TickerSentry 通知渠道）
+// 把首个非空配置复制进中心。语义要点：
+// - 只读旧库（readonly 打开、只 SELECT），绝不写/删它们的表，旧行随旧代码退役自然闲置；
+// - 幂等：中心一旦有配置就不再迁移（旧库行保持陈旧也不会把新配置冲掉）；
+// - 换回旧备份（旧库非空、中心为空）能再次播种中心；
+// - 旧库不存在/无表/损坏 → 静默跳过迁移，中心照常返回（全空）配置。
 
 import Database from "better-sqlite3";
 import fs from "node:fs";
@@ -205,11 +206,10 @@ export function writeChannelConfig(config: ChannelConfig): void {
   );
 }
 
-// —— 旧版证件夹库的一次性迁移（copy-if-empty，只读） ——
+// —— 旧库的一次性迁移（copy-if-empty，只读）：证件夹 reminder_channels → 行情 settings → 中心 ——
 
-function readLegacyDocumentsChannels(): ChannelConfig | null {
-  const file = path.join(dataDir(), "documents", "documents.db");
-  if (!fs.existsSync(file)) return null; // 绝不因迁移而创建 documents.db
+function readLegacyChannelsFrom(file: string, table: string): ChannelConfig | null {
+  if (!fs.existsSync(file)) return null; // 绝不因迁移而创建旧库
   let db: Database.Database | null = null;
   try {
     db = new Database(file, { readonly: true, fileMustExist: true });
@@ -218,7 +218,7 @@ function readLegacyDocumentsChannels(): ChannelConfig | null {
               feishu_webhook,feishu_secret,feishu_enabled,
               tg_token,tg_chat_id,tg_enabled,
               proxy_url,bark_proxy,feishu_proxy,tg_proxy
-       FROM reminder_channels WHERE id=1`,
+       FROM ${table} WHERE id=1`,
     ).get() as ChannelsRow | undefined;
     return r ? rowToConfig(r) : null;
   } catch {
@@ -234,23 +234,36 @@ function readLegacyDocumentsChannels(): ChannelConfig | null {
   }
 }
 
-function migrateFromLegacyDocumentsIfEmpty(): void {
+function readLegacyDocumentsChannels(): ChannelConfig | null {
+  return readLegacyChannelsFrom(path.join(dataDir(), "documents", "documents.db"), "reminder_channels");
+}
+
+function readLegacyStocksChannels(): ChannelConfig | null {
+  return readLegacyChannelsFrom(path.join(dataDir(), "tickersentry", "ticker.db"), "settings");
+}
+
+function migrateFromLegacyIfEmpty(): void {
   const current = readChannelsRow(getChannelsDb());
   if (!isEmptyChannelConfig(current)) return; // 中心已有配置：永不再次迁移
-  const legacy = readLegacyDocumentsChannels();
-  if (!legacy || isEmptyChannelConfig(legacy)) return; // 旧库为空/不可读：无事可做
-  writeChannelConfig(legacy);
+  // 迁移顺序：证件夹（原提醒渠道配置）优先，其次行情（TickerSentry 通知设置）。
+  for (const legacy of [readLegacyDocumentsChannels(), readLegacyStocksChannels()]) {
+    if (legacy && !isEmptyChannelConfig(legacy)) {
+      writeChannelConfig(legacy);
+      return;
+    }
+  }
 }
 
 // —— 公共 API ——
 
 /**
- * 读取渠道配置；中心为空且旧版证件夹库（reminder_channels）有配置时执行一次性
- * copy-if-empty 迁移。表结构损坏时抛错（摘要/推送路径各自降级处理）。
+ * 读取渠道配置；中心为空时按顺序执行一次性 copy-if-empty 迁移：
+ * 证件夹库（reminder_channels）→ 行情库（settings 表）。表结构损坏时抛错
+ * （摘要/推送路径各自降级处理）。
  */
 export function getChannelConfig(): ChannelConfig {
   try {
-    migrateFromLegacyDocumentsIfEmpty();
+    migrateFromLegacyIfEmpty();
   } catch {
     // 迁移失败绝不影响正常读取。
   }

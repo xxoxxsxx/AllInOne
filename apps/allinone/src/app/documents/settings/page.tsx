@@ -5,7 +5,7 @@ import "./reminder-page.css";
 import { todayStr } from "@/lib/documents/constants";
 import { getDocumentsDB, listDocuments } from "@/lib/documents/db";
 import { getReminderSettings, selectExpiringDocuments } from "@/lib/documents/reminders";
-import { getReminderChannels, summarizeChannels } from "@/lib/documents/reminders-channels";
+import { summarizeReminderChannels } from "@/lib/documents/reminders-channels";
 
 import { RemindersSettings } from "./reminders-settings";
 
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "到期提醒设置 · 证件夹" };
 
-// /documents/settings 路由页：服务端读取提醒设置、渠道配置与到期证件后挂载设置面板。
+// /documents/settings 路由页：服务端读取提醒设置、渠道摘要与到期证件后挂载设置面板。
 // 本文件只负责页面壳（hero / 调度器警告 / 提醒速览 / 今日到期预览），样式在 ./reminder-page.css；
 // 面板本体与表单在 ./reminders-settings.tsx（视觉由配套的 reminder-panel.css 负责）。
 
@@ -23,10 +23,9 @@ export default async function ReminderSettingsPage() {
   const db = getDocumentsDB();
   const settings = getReminderSettings(db);
   const dueDocs = selectExpiringDocuments(listDocuments(db, todayStr()));
-  // 渠道配置读取自全局推送渠道中心（@/lib/channels/center）；完整状态由面板（客户端）实时展示，
-  // 页面壳不重复渲染设置/渠道的服务端快照，避免保存后页面上的状态过期。
-  const channelConfig = getReminderChannels(db);
-  const channels0 = summarizeChannels(channelConfig);
+  // 渠道摘要读取自全局推送渠道中心（@/lib/channels/center）；渠道表单在独立页面 /channels，
+  // 面板只展示摘要与跳转，避免保存后页面上的状态过期。
+  const channels0 = summarizeReminderChannels(db);
   const schedulerDisabled = process.env.DISABLE_SCHEDULER === "1";
 
   // 调度语义（与 reminders-run.ts 一致）：tick 约每 10 分钟一次；北京时间小时等于设定小时才推送；
@@ -72,7 +71,7 @@ export default async function ReminderSettingsPage() {
         </div>
       ) : null}
 
-      <RemindersSettings initialSettings={settings} initialChannels={channels0} initialConfig={channelConfig} />
+      <RemindersSettings initialSettings={settings} initialChannels={channels0} />
 
       <section className="rpg-card" aria-label="提醒速览">
         <div className="rpg-card-head">
@@ -81,7 +80,8 @@ export default async function ReminderSettingsPage() {
         </div>
 
         <p className="rpg-hint">
-          渠道在上方「推送渠道」面板配置（保存在证件夹数据库，与行情设置相互独立）；已保存的值完整回显、留空保存保持原值，改完用「发送测试推送」核对送达。
+          Bark / 飞书 / Telegram 渠道在<Link href="/channels">全局推送渠道</Link>页统一配置（证件夹与提醒事项共用）；
+          这里的「立即检查」按当前渠道配置真实推送一次。提醒开关与推送时间在上方设置面板。
         </p>
 
         <div className="rpg-facts">

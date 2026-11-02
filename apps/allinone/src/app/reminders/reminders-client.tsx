@@ -360,6 +360,7 @@ function ReminderCardView({
         <button type="button" className="rem-button rem-button-secondary" onClick={onTest} disabled={busy}>立即测试</button>
         <button type="button" className="rem-button rem-button-danger" onClick={onDelete} disabled={busy}>删除</button>
       </div>
+      <p className="rem-muted">测试与推送走全局推送渠道：<a href="/channels">配置 Bark / 飞书 / Telegram →</a></p>
     </article>
   );
 }
@@ -702,7 +703,7 @@ export function RemindersClient({ initialReminders }: { initialReminders: Remind
 
       <section className="rem-list" aria-label="提醒列表">
         {reminders.length === 0 ? (
-          <p className="rem-empty">还没有提醒。点击「新建提醒」创建第一条：支持单次、间隔重复与 cron 定时，可附图片。</p>
+          <p className="rem-empty">还没有提醒。点击「新建提醒」创建第一条：支持单次、间隔重复与 cron 定时，可附图片。推送前请先在<a href="/channels">全局推送渠道</a>配置 Bark / 飞书 / Telegram。</p>
         ) : (
           reminders.map((card) => (
             <ReminderCardView

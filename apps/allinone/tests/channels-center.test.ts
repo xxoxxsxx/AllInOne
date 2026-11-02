@@ -26,7 +26,6 @@ import {
   writeChannelConfig,
   type ReminderChannelsInput,
 } from "../src/lib/channels/center.ts";
-import { importChannelsFromStocks } from "../src/lib/documents/reminders-channels.ts";
 import { openDB as openStocksDB, setDB as setStocksDB } from "../src/modules/stocks/store.ts";
 
 const EMPTY_CONFIG = {
@@ -289,50 +288,79 @@ test("writeChannelConfig overwrites the full row including empty values", async 
   });
 });
 
-test("importChannelsFromStocks retargets to the center db", async () => {
-  await withChannelCenterEnv(async ({ legacyDbFile }) => {
-    // 旧 documents 库带一份陈旧配置：导入不应触碰它。
-    const legacy = seedLegacyDocumentsDb(legacyDbFile, { bark_url: "https://legacy.example.com", bark_key: "legacy-key" });
+test("center migrates stocks ticker.db channels when documents has none", async () => {
+  await withChannelCenterEnv(async ({ root }) => {
+    // 行情库带一份 TickerSentry 通知渠道配置（原 settings 表）。
+    const stocksFile = path.join(root, "tickersentry", "ticker.db");
+    fs.mkdirSync(path.dirname(stocksFile), { recursive: true });
+    const stocks = new Database(stocksFile);
+    stocks.exec(`
+      CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY CHECK(id=1),
+        bark_url TEXT NOT NULL DEFAULT '', bark_key TEXT NOT NULL DEFAULT '',
+        bark_local INTEGER NOT NULL DEFAULT 0, bark_enabled INTEGER NOT NULL DEFAULT 0,
+        feishu_webhook TEXT NOT NULL DEFAULT '', feishu_secret TEXT NOT NULL DEFAULT '',
+        feishu_enabled INTEGER NOT NULL DEFAULT 0,
+        tg_token TEXT NOT NULL DEFAULT '', tg_chat_id TEXT NOT NULL DEFAULT '',
+        tg_enabled INTEGER NOT NULL DEFAULT 0,
+        proxy_url TEXT NOT NULL DEFAULT '',
+        bark_proxy INTEGER NOT NULL DEFAULT 0, feishu_proxy INTEGER NOT NULL DEFAULT 0,
+        tg_proxy INTEGER NOT NULL DEFAULT 0
+      );
+      INSERT OR IGNORE INTO settings(id) VALUES(1);
+    `);
+    stocks.prepare(`UPDATE settings SET bark_url='https://api.day.app',bark_key='stocks-key',bark_enabled=1,proxy_url='http://10.0.0.9:7890',tg_proxy=1 WHERE id=1`).run();
+    stocks.close();
 
-    const stocks = openStocksDB(undefined, ":memory:");
-    try {
-      stocks
-        .prepare(
-          `UPDATE settings SET bark_url=?,bark_key=?,bark_local=0,bark_enabled=1,
-           feishu_webhook='',feishu_secret='',feishu_enabled=0,
-           tg_token='',tg_chat_id='',tg_enabled=0,
-           proxy_url='',bark_proxy=0,feishu_proxy=0,tg_proxy=0 WHERE id=1`,
-        )
-        .run("https://api.day.app", "stocks-key");
-      setStocksDB(stocks);
+    assert.deepEqual(getChannelConfig(), {
+      Bark: { URL: "https://api.day.app", Key: "stocks-key", Local: false },
+      BarkEnabled: true,
+      FeishuWebhook: "", FeishuSecret: "", FeishuEnabled: false,
+      TGToken: "", TGChatID: "", TGEnabled: false,
+      Proxy: "http://10.0.0.9:7890", BarkProxy: false, FeishuProxy: false, TGProxy: true,
+    }, "stocks channels seed the center when it is empty");
 
-      const docsHandle = new Database(":memory:"); // 兼容层 db 形参（保留但忽略）
-      try {
-        const result = await importChannelsFromStocks(docsHandle);
-        assert.ok(result.ok);
-        // 导入结果落在中心库，而不是旧 documents 库。
-        assert.deepEqual(getChannelConfig(), {
-          Bark: { URL: "https://api.day.app", Key: "stocks-key", Local: false },
-          BarkEnabled: true,
-          FeishuWebhook: "", FeishuSecret: "", FeishuEnabled: false,
-          TGToken: "", TGChatID: "", TGEnabled: false,
-          Proxy: "", BarkProxy: false, FeishuProxy: false, TGProxy: false,
-        });
-        const legacyRow = legacy.prepare(`SELECT bark_url,bark_key FROM reminder_channels WHERE id=1`).get() as {
-          bark_url: string;
-          bark_key: string;
-        };
-        assert.equal(legacyRow.bark_url, "https://legacy.example.com");
-        assert.equal(legacyRow.bark_key, "legacy-key");
-        // 中心已有配置：下一次读取也不会把旧库值搬回来。
-        assert.equal(getChannelConfig().Bark.Key, "stocks-key");
-      } finally {
-        docsHandle.close();
-      }
-    } finally {
-      setStocksDB(null);
-      stocks.close();
-      legacy.close();
-    }
+    // 迁移只读：行情库的行原样保留（只断言字段不被改动）。
+    const reopened = new Database(stocksFile, { readonly: true });
+    const row = reopened.prepare(`SELECT bark_url,bark_key,bark_enabled FROM settings WHERE id=1`).get() as { bark_url: string; bark_key: string; bark_enabled: number };
+    reopened.close();
+    assert.equal(row.bark_url, "https://api.day.app");
+    assert.equal(row.bark_key, "stocks-key");
+    assert.equal(row.bark_enabled, 1);
+  });
+});
+
+test("documents channels take precedence over stocks when both legacy dbs have config", async () => {
+  await withChannelCenterEnv(async ({ root, legacyDbFile }) => {
+    // 行情库与证件夹库各有一份配置：同一次迁移决策中证件夹优先。
+    const stocksFile = path.join(root, "tickersentry", "ticker.db");
+    fs.mkdirSync(path.dirname(stocksFile), { recursive: true });
+    const stocks = new Database(stocksFile);
+    stocks.exec(`
+      CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY CHECK(id=1),
+        bark_url TEXT NOT NULL DEFAULT '', bark_key TEXT NOT NULL DEFAULT '',
+        bark_local INTEGER NOT NULL DEFAULT 0, bark_enabled INTEGER NOT NULL DEFAULT 0,
+        feishu_webhook TEXT NOT NULL DEFAULT '', feishu_secret TEXT NOT NULL DEFAULT '',
+        feishu_enabled INTEGER NOT NULL DEFAULT 0,
+        tg_token TEXT NOT NULL DEFAULT '', tg_chat_id TEXT NOT NULL DEFAULT '',
+        tg_enabled INTEGER NOT NULL DEFAULT 0,
+        proxy_url TEXT NOT NULL DEFAULT '',
+        bark_proxy INTEGER NOT NULL DEFAULT 0, feishu_proxy INTEGER NOT NULL DEFAULT 0,
+        tg_proxy INTEGER NOT NULL DEFAULT 0
+      );
+      INSERT OR IGNORE INTO settings(id) VALUES(1);
+    `);
+    stocks.prepare(`UPDATE settings SET bark_url='https://api.day.app',bark_key='stocks-key',bark_enabled=1 WHERE id=1`).run();
+    stocks.close();
+
+    const legacy = seedLegacyDocumentsDb(legacyDbFile, { bark_url: "https://docs.example.com", bark_key: "docs-key", bark_enabled: 1 });
+
+    assert.equal(getChannelConfig().Bark.Key, "docs-key", "documents wins the first migration pass");
+    // 行情库不被触碰。
+    const reopened = new Database(stocksFile, { readonly: true });
+    const row = reopened.prepare(`SELECT bark_key FROM settings WHERE id=1`).get() as { bark_key: string };
+    reopened.close();
+    assert.equal(row.bark_key, "stocks-key");
   });
 });

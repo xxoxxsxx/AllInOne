@@ -1,0 +1,12 @@
+/* /channels 全局推送渠道页壳：表单样式沿用 reminder-panel.css，这里只补页面骨架。 */
+
+.channels-page{max-width:860px;margin:46px auto 80px;padding:0 28px}
+.channels-back{display:inline-block;margin-bottom:18px;font-size:13px;color:#7c837e;text-decoration:none}
+.channels-back:hover{color:var(--ink,#24312d)}
+.channels-hero{margin:0 0 26px}
+.channels-kicker{font-size:10px;letter-spacing:.24em;color:#3c6657;font-weight:600;margin:0 0 10px}
+.channels-title{font-family:Georgia,"Songti SC",serif;font-size:30px;font-weight:500;letter-spacing:.04em;margin:0 0 10px}
+.channels-sub{font-size:13px;line-height:1.9;color:#7c837e;margin:0}
+.channels-note{margin:22px 0 0;font-size:11px;line-height:1.8;color:#8a927f}
+@media(max-width:620px){.channels-page{margin-top:26px;padding:0 18px}.channels-title{font-size:24px}}
+@media(prefers-color-scheme:dark){.channels-back{color:#9aa694}.channels-back:hover{color:#e0e8d9}.channels-sub{color:#9aa694}.channels-note{color:#8a927f}}
