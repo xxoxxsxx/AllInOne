@@ -1,11 +1,56 @@
 /* 提醒事项样式：沿用全局设计变量（--surface/--border/--accent/--ok/--warn/--danger）。 */
-.rem-push-settings { border: 1px solid var(--border); background: var(--surface); border-radius: 14px; padding: 18px; display: grid; gap: 12px; }
-.rem-push-settings h2 { font-size: 16px; margin: 0 0 6px; }
-.rem-push-settings p { color: var(--text-2); font-size: 13px; line-height: 1.6; margin: 0; }
-.rem-push-settings label { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; font-size: 14px; }
-.rem-push-settings fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
-.rem-push-settings legend { color: var(--text-2); font-size: 12px; }
-.rem-push-settings button { justify-self: start; }
+
+/* 推送设置：头部开关 + 渠道选择卡 + 底部保存条 */
+.rem-push-settings {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 18px;
+}
+.rem-push-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.rem-push-head h2 { font-size: 16px; margin: 0 0 4px; }
+.rem-push-sub { margin: 0; font-size: 13px; color: var(--text-2); line-height: 1.6; }
+.rem-push-switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+.rem-push-switch input[type="checkbox"] {
+  appearance: none; width: 40px; height: 22px; border-radius: 999px; margin: 0;
+  background: var(--border); position: relative; cursor: pointer; transition: background 0.15s;
+}
+.rem-push-switch input[type="checkbox"]::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; transition: left 0.15s;
+}
+.rem-push-switch input[type="checkbox"]:checked { background: var(--accent, #3c6657); }
+.rem-push-switch input[type="checkbox"]:checked::after { left: 21px; }
+.rem-push-switch span { font-size: 13px; color: var(--text-2); }
+.rem-push-channels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.rem-push-channel {
+  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto;
+  column-gap: 10px; align-items: center;
+  border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+  cursor: pointer; background: var(--paper, transparent);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.rem-push-channel:hover { border-color: var(--accent, #3c6657); }
+.rem-push-channel.is-on { border-color: var(--accent, #3c6657); box-shadow: inset 0 0 0 1px var(--accent, #3c6657); }
+.rem-push-channel input[type="checkbox"] { grid-row: 1 / 3; accent-color: var(--accent, #3c6657); }
+.rem-push-channel-name { font-weight: 600; font-size: 14px; }
+.rem-push-channel-desc { font-size: 12px; color: var(--text-2); }
+.rem-push-note { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.6; }
+.rem-push-note a { color: inherit; }
+.rem-push-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rem-pill { font-size: 11px; padding: 4px 10px; border-radius: 999px; }
+.rem-pill.is-on { background: light-dark(rgb(60 102 87 / 14%), rgb(60 102 87 / 30%)); color: var(--ok, #3c6657); }
+.rem-pill.is-muted { background: var(--border); color: var(--text-2); }
+.rem-feedback.is-ok { color: var(--ok, #3c6657); }
+.rem-feedback.is-error { color: var(--danger, #b3423a); }
+@media (max-width: 640px) {
+  .rem-push-head { flex-direction: column; align-items: stretch; }
+  .rem-push-channels { grid-template-columns: 1fr; }
+  .rem-push-foot { flex-direction: column; align-items: stretch; }
+  .rem-push-foot .rem-button { width: 100%; }
+}
 
 .rem-page {
   display: flex;
