@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { apiKeyOf, getDB, getQuotaStatus, notificationSettings, queryWindows, windowDuration } from "@/modules/stocks/store";
+import { apiKeyOf, getDB, getQuotaStatus, notificationSettings, quoteSourceOf, queryWindows, windowDuration } from "@/modules/stocks/store";
+import { normalizeQuoteProvider, QUOTE_PROVIDER_LABELS } from "@/modules/stocks/quote";
 import { getChannelConfig, summarizeChannels } from "@/lib/channels/center";
 import { displayClock } from "@/modules/stocks/tz";
 import { timezoneValue } from "@/modules/stocks/windows";
@@ -8,6 +9,7 @@ import {
   clearProxyAction,
   restoreConfigAction,
   saveAPIKeyAction,
+  saveQuoteSourceAction,
   saveQuotaAction,
   saveProxyAction,
 } from "../settings-actions";
@@ -51,8 +53,12 @@ export default async function SettingsPage({
     unchanged: "未填写新 Key，已保留当前配置",
     proxy_tested: "代理测试成功，响应耗时已更新",
     quota_saved: "行情额度已保存，已消耗额度不会清零",
+    quote_saved: "行情源已保存",
   };
   const quotaDaily = counts.stocks * slots;
+  const source = quoteSourceOf(db);
+  const provider = normalizeQuoteProvider(source.provider);
+  const finnhubKey = source.finnhubKey;
 
   return (
     <div className="settings-page">
@@ -77,20 +83,45 @@ export default async function SettingsPage({
             <span className="eyebrow">01 / MARKET DATA</span>
             <h2 id="market-title">行情来源</h2>
           </div>
-          <p>查询价格所需的 API Key</p>
+          <p>选择行情源并配置对应的 API Key</p>
         </div>
         <div className="settings-panel">
           <div className="settings-intro">
             <div className="settings-name">
-              <h3>Twelve Data</h3>
-              {key ? <span className="status-pill">已配置</span> : <span className="status-pill is-off">未配置</span>}
+              <h3>当前行情源</h3>
+              <span className="status-pill">{QUOTE_PROVIDER_LABELS[provider]}</span>
+            </div>
+            <p>免费档额度：Twelve Data 8 次/分钟、800 次/天；Finnhub 60 次/分钟。监控股票较多或查询较密时建议选 Finnhub。</p>
+          </div>
+          <div className="settings-content">
+            <form action={saveQuoteSourceAction}>
+              <label>
+                行情源
+                <select name="quote_provider" defaultValue={provider}>
+                  <option value="twelvedata">Twelve Data（8 次/分钟、800 次/天）</option>
+                  <option value="finnhub">Finnhub（60 次/分钟、美股实时）</option>
+                </select>
+              </label>
+              <div className="settings-actions">
+                <button className="primary" type="submit">
+                  保存行情源
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div className="settings-panel">
+          <div className="settings-intro">
+            <div className="settings-name">
+              <h3>Twelve Data API Key</h3>
+              {provider === "twelvedata" ? <span className="status-pill">使用中</span> : key ? <span className="status-pill is-off">已配置</span> : <span className="status-pill is-off">未配置</span>}
             </div>
             <p>
-              当前支持 Twelve Data。可使用
+              当前支持美股（USD）。可使用
               <a href="https://twelvedata.com/pricing" target="_blank" rel="noopener noreferrer">
                 免费套餐申请 Key ↗
               </a>
-              ；免 Key 行情源仍在核验。
+              。
             </p>
           </div>
           <div className="settings-content">
@@ -115,11 +146,50 @@ export default async function SettingsPage({
               </div>
             </form>
             {key ? (
-              <form action={saveAPIKeyAction} className="settings-clear" data-confirm="清除行情 Key 后将无法查询行情，确定清除？">
+              <form action={saveAPIKeyAction} className="settings-clear" data-confirm="清除行情 Key 后，使用 Twelve Data 时将无法查询行情，确定清除？">
                 <input type="hidden" name="clear" value="1" />
                 <button type="submit">清除 Key</button>
               </form>
             ) : null}
+          </div>
+        </div>
+        <div className="settings-panel">
+          <div className="settings-intro">
+            <div className="settings-name">
+              <h3>Finnhub API Key</h3>
+              {provider === "finnhub" ? <span className="status-pill">使用中</span> : finnhubKey ? <span className="status-pill is-off">已配置</span> : <span className="status-pill is-off">未配置</span>}
+            </div>
+            <p>
+              免费档 60 次/分钟、美股实时，仅支持美股（USD）。可在
+              <a href="https://finnhub.io/register" target="_blank" rel="noopener noreferrer">
+                finnhub.io 免费注册 ↗
+              </a>
+              后获取 Key。
+            </p>
+          </div>
+          <div className="settings-content">
+            <form action={saveQuoteSourceAction}>
+              <input type="hidden" name="quote_provider" value={provider} />
+              <label>
+                Finnhub API Key
+                <input
+                  type="text"
+                  name="finnhub_key"
+                  defaultValue={finnhubKey}
+                  placeholder="finnhub_free_key"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  maxLength={256}
+                />
+              </label>
+              <div className="settings-actions">
+                <button className="primary" type="submit">
+                  保存 Finnhub Key
+                </button>
+              </div>
+            </form>
+            <p className="settings-footnote">Finnhub 的 Key 随请求 URL 提交（官方鉴权方式），本应用不落地到日志。切换行情源不会影响额度统计与查询时段。</p>
           </div>
         </div>
         <div className="settings-panel">
@@ -140,7 +210,7 @@ export default async function SettingsPage({
               </div>
               <div className="settings-actions"><button className="primary" type="submit">保存额度</button></div>
             </form>
-            <p className="settings-footnote">免费套餐通常为 8 次/分钟、800 次/天，请按账号实际额度设置。本应用保守使用滚动 61 秒与滚动 24 小时计数，重启保留；统计不含其他程序对同一 Key 的请求。此处用量为页面打开时的快照。</p>
+            <p className="settings-footnote">切换行情源后请同步调整额度：Twelve Data 免费档约 8 次/分钟、800 次/天；Finnhub 免费档约 60 次/分钟（建议设 50 留余量）。本应用保守使用滚动 61 秒与滚动 24 小时计数，重启保留；统计不含其他程序对同一 Key 的请求。此处用量为页面打开时的快照。</p>
           </div>
         </div>
         <p className="settings-footnote">
@@ -148,7 +218,7 @@ export default async function SettingsPage({
           次。休市、重复时间点及达到上限后停止的查询未计入；手动查询、429 重试和其他客户端用量另计。
         </p>
         {quotaDaily >= quota.dayLimit ? (
-          <p className="info-strip">预计用量已达到所设的 {quota.dayLimit} 次 / 24 小时查询预算，建议延长查询间隔或减少启用的股票。</p>
+          <p className="info-strip">预计用量已达到所设的 {quota.dayLimit} 次 / 24 小时查询预算，建议延长查询间隔或减少启用的股票，或切换到 Finnhub。</p>
         ) : null}
       </section>
 

@@ -235,6 +235,9 @@ const UPGRADE_COLUMNS: Array<[string, string, string]> = [
   ["settings", "feishu_proxy", "INTEGER NOT NULL DEFAULT 0"],
   ["settings", "tg_proxy", "INTEGER NOT NULL DEFAULT 0"],
   ["results", "open", "TEXT NOT NULL DEFAULT ''"],
+  // 双行情源：quote_provider 决定 run/手动查询使用哪个源；finnhub_key 为 Finnhub 的 API Key。
+  ["settings", "quote_provider", "TEXT NOT NULL DEFAULT 'twelvedata'"],
+  ["settings", "finnhub_key", "TEXT NOT NULL DEFAULT ''"],
 ];
 
 function upgradeToCurrent(db: Database.Database, from: number): void {
@@ -800,6 +803,30 @@ export function defaultAlerts(db: Database.Database): number {
 
 export function apiKeyOf(db: Database.Database): string {
   return value(db, `SELECT api_key FROM settings WHERE id=1`);
+}
+
+// —— 双行情源（Twelve Data / Finnhub） ——
+
+export type QuoteSource = { provider: string; twelvedataKey: string; finnhubKey: string };
+
+/** 读取行情源与对应 Key（provider 原样返回，由调用方归一化；缺省按 twelvedata 处理）。 */
+export function quoteSourceOf(db: Database.Database): QuoteSource {
+  const r = db.prepare(`SELECT quote_provider,api_key,finnhub_key FROM settings WHERE id=1`).get() as {
+    quote_provider?: string; api_key?: string; finnhub_key?: string;
+  };
+  return {
+    provider: String(r.quote_provider ?? "twelvedata"),
+    twelvedataKey: String(r.api_key ?? ""),
+    finnhubKey: String(r.finnhub_key ?? ""),
+  };
+}
+
+/** 保存行情源选择与 Finnhub Key；Key 留空保持现有值（合并语义，与渠道配置一致）。 */
+export function saveQuoteSource(db: Database.Database, provider: string, finnhubKey: string): void {
+  if (provider !== "twelvedata" && provider !== "finnhub") throw new Error("行情源无效（仅支持 Twelve Data / Finnhub）");
+  db.prepare(
+    `UPDATE settings SET quote_provider=?,finnhub_key=CASE WHEN ?='' THEN finnhub_key ELSE ? END WHERE id=1`,
+  ).run(provider, finnhubKey, finnhubKey);
 }
 
 export function proxySetting(db: Database.Database): string {

@@ -36,6 +36,18 @@ export class RateLimitError extends Error {
   }
 }
 
+// —— 行情源抽象：Twelve Data（默认，字段校验完整）与 Finnhub（免费额度宽，仅美股） ——
+export type QuoteProvider = "twelvedata" | "finnhub";
+export const QUOTE_PROVIDERS: QuoteProvider[] = ["twelvedata", "finnhub"];
+export const QUOTE_PROVIDER_LABELS: Record<QuoteProvider, string> = {
+  twelvedata: "Twelve Data",
+  finnhub: "Finnhub",
+};
+/** 归一化 provider 字符串：未知/缺省回退 twelvedata。 */
+export function normalizeQuoteProvider(value: string | null | undefined): QuoteProvider {
+  return value === "finnhub" ? "finnhub" : "twelvedata";
+}
+
 // retryDelay：先按整数秒，再按 HTTP 日期；无效视为 0（Go retryDelay 语义）。
 export function retryDelay(value: string, now: Date): number {
   const seconds = /^\d+$/.test(value) ? Number(value) : null;
@@ -140,11 +152,15 @@ export function parseOptionalPrice(raw: string | undefined): string {
   return decString(d);
 }
 
-export async function fetchQuote(symbol: string, key: string, proxy: string, now: () => Date = () => new Date(), options: QueueOptions & { db?: Database } = {}): Promise<Quote> {
-  return withQuoteQuota(options.db ?? getDB(), () => fetchQuoteRaw(symbol,key,proxy,now), {...options,now});
+export async function fetchQuote(symbol: string, key: string, proxy: string, now: () => Date = () => new Date(), options: QueueOptions & { db?: Database; provider?: QuoteProvider } = {}): Promise<Quote> {
+  const provider = normalizeQuoteProvider(options.provider);
+  const raw = provider === "finnhub"
+    ? fetchFinnhubRaw(symbol, key, proxy, now)
+    : fetchTwelveDataRaw(symbol, key, proxy, now);
+  return withQuoteQuota(options.db ?? getDB(), () => raw, {...options,now});
 }
 
-async function fetchQuoteRaw(symbol: string, key: string, proxy: string, now: () => Date): Promise<Quote> {
+async function fetchTwelveDataRaw(symbol: string, key: string, proxy: string, now: () => Date): Promise<Quote> {
   const endpoint = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(symbol)}`;
   const response = await httpGetJSON(endpoint, { Authorization: `apikey ${key}` }, proxy, 12000);
   if (response.status === 429) {
@@ -224,6 +240,75 @@ async function fetchQuoteRaw(symbol: string, key: string, proxy: string, now: ()
   };
 }
 
+// —— Finnhub（免费档 60 次/分钟，美股实时）：/quote 仅返回 c/d/dp/h/l/o/pc/t ——
+// - 鉴权 token 走 URL 参数（官方要求）；401/403 归一为中文错误。
+// - quote 不含 currency/exchange/type 字段，USD 与交易所校验无法执行：
+//   Finnhub 免费档仅覆盖美股，按「源已限定美股」放宽 AssetOK（在 UI 中注明）。
+// - t 为 unix 秒的最近成交时间，作为可信时间字段（字段名 "t"，alertValidity 放行）。
+
+type FinnhubQuote = {
+  c?: number; d?: number; dp?: number; h?: number; l?: number;
+  o?: number; pc?: number; t?: number;
+};
+
+/** 解析 Finnhub /quote JSON（纯函数，单测直接覆盖）。价格非正、缺价格或缺可信时间即抛中文错误。 */
+export function parseFinnhubQuote(raw: FinnhubQuote, symbol: string, now: Date): Quote {
+  if (typeof raw.c !== "number" || !Number.isFinite(raw.c)) {
+    throw new Error("行情缺少价格");
+  }
+  const price = parseDecimal(String(raw.c));
+  if (!price || !isPositive(price)) {
+    throw new Error("行情价格无效");
+  }
+  const open = typeof raw.o === "number" ? parseOptionalPrice(String(raw.o)) : "";
+  const prevClose = typeof raw.pc === "number" ? parseOptionalPrice(String(raw.pc)) : "";
+  if (typeof raw.t !== "number" || !Number.isInteger(raw.t) || raw.t <= 0) {
+    throw new Error("行情缺少可信更新时间；不可用区间起点 timestamp 代替");
+  }
+  const at = new Date(raw.t * 1000);
+  if (at.getTime() < Date.UTC(2000, 0, 1)) {
+    throw new Error("行情更新时间无效");
+  }
+  if (at.getTime() > now.getTime() + 2 * 60 * 1000) {
+    throw new Error("行情更新时间在未来");
+  }
+  return {
+    Symbol: symbol,
+    Price: price,
+    Open: open,
+    PrevClose: prevClose,
+    At: at,
+    Source: "Finnhub",
+    TimeField: "t",
+    Delay: "实时（免费档）",
+    AssetOK: true,
+  };
+}
+
+async function fetchFinnhubRaw(symbol: string, key: string, proxy: string, now: () => Date): Promise<Quote> {
+  if (key.trim() === "") {
+    throw new Error("缺少 Finnhub API Key：请先在设置页配置");
+  }
+  const endpoint = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(key.trim())}`;
+  const response = await httpGetJSON(endpoint, {}, proxy, 12000);
+  if (response.status === 429) {
+    throw new RateLimitError(retryDelay(response.headers["retry-after"] ?? "", now()));
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Finnhub 拒绝请求：请检查 API Key 是否有效");
+  }
+  if (response.status !== 200) {
+    throw new Error(`行情服务 HTTP ${response.status}`);
+  }
+  let raw: FinnhubQuote;
+  try {
+    raw = JSON.parse(response.body) as FinnhubQuote;
+  } catch {
+    throw new Error("行情响应不是有效 JSON");
+  }
+  return parseFinnhubQuote(raw, symbol, now());
+}
+
 // alertValidity（alert.go）：触价有效性的统一闸门。fetched 为本次查询完成时刻。
 export function alertValidity(
   q: Pick<Quote, "At" | "TimeField" | "AssetOK">,
@@ -238,7 +323,7 @@ export function alertValidity(
   if (!open(fetched)) {
     return "市场休市，未触价";
   }
-  if (q.TimeField !== "last_update_at" && q.TimeField !== "last_quote_at") {
+  if (q.TimeField !== "last_update_at" && q.TimeField !== "last_quote_at" && q.TimeField !== "t") {
     return "缺少可用的行情时间字段，未触价";
   }
   if (!q.AssetOK) {

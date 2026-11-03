@@ -7,7 +7,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { getDB, now as nowText, validWindow, queryWindows } from "@/modules/stocks/store";
+import { getDB, now as nowText, quoteSourceOf, saveQuoteSource, validWindow, queryWindows } from "@/modules/stocks/store";
 import { checkProxy, testProxy } from "@/modules/stocks/notify";
 import { parseClock } from "@/modules/stocks/tz";
 import { activeWindow, occurrence, timezoneValue, validTimezone, windowsOverlap } from "@/modules/stocks/windows";
@@ -53,6 +53,24 @@ export async function saveQuotaAction(fd: FormData): Promise<void> {
   getDB().prepare(`UPDATE settings SET quota_per_minute=?,quota_per_day=? WHERE id=1`).run(minute, day);
   revalidatePath("/stocks/settings");
   goSettings({ result: "quota_saved" });
+}
+
+// —— 行情源（Twelve Data / Finnhub） ——
+/** 保存行情源选择与 Finnhub Key：provider 可省略（保持当前源，只更新 Key）。 */
+export async function saveQuoteSourceAction(fd: FormData): Promise<void> {
+  const db = getDB();
+  const current = quoteSourceOf(db);
+  const raw = str(fd, "quote_provider");
+  const provider = raw === "finnhub" || raw === "twelvedata" ? raw : (current.provider === "finnhub" ? "finnhub" : "twelvedata");
+  const finnhubKey = str(fd, "finnhub_key").trim();
+  if (finnhubKey.length > 256) goSettings({ error: "Finnhub Key 过长" });
+  try {
+    saveQuoteSource(db, provider, finnhubKey);
+  } catch (e) {
+    goSettings({ error: e instanceof Error ? e.message : "行情源保存失败" });
+  }
+  revalidatePath("/stocks/settings");
+  goSettings({ result: "quote_saved" });
 }
 
 // —— 代理 ——

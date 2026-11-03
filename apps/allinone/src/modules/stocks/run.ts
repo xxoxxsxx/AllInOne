@@ -28,6 +28,8 @@ import {
 import type { Level, Result, Stock } from "./store";
 import { enabledChannels, sendChannel } from "./notify";
 import { getChannelConfig } from "@/lib/channels/center";
+import { normalizeQuoteProvider } from "./quote";
+import { quoteSourceOf } from "./store";
 import { activeWindow, windowUsage } from "./windows";
 import { alertLimit } from "./store";
 import { formatPrice } from "./price-format";
@@ -279,8 +281,12 @@ export function startManualRun(db: Database, tz: StockTimezone, provider?: Fetch
   if (runningID !== 0) {
     return { ok: true, id: runningID, reused: true };
   }
-  const key = value(db, `SELECT api_key FROM settings WHERE id=1`).trim();
-  if (key === "") return { ok: false, error: "先在设置页配置 Twelve Data Key" };
+  const src = quoteSourceOf(db);
+  const p = normalizeQuoteProvider(src.provider);
+  const key = (p === "finnhub" ? src.finnhubKey : src.twelvedataKey).trim();
+  if (key === "") {
+    return { ok: false, error: p === "finnhub" ? "先在设置页配置 Finnhub API Key" : "先在设置页配置 Twelve Data Key" };
+  }
   const all = listStocks(db);
   const stocks = all.filter((s) => s.Enabled);
   if (stocks.length === 0) return { ok: false, error: "请先添加并启用股票" };
@@ -291,9 +297,11 @@ export function startManualRun(db: Database, tz: StockTimezone, provider?: Fetch
 }
 
 export function defaultProvider(db: Database): FetchFn {
-  const key = value(db, `SELECT api_key FROM settings WHERE id=1`);
+  const { provider: rawProvider, twelvedataKey, finnhubKey } = quoteSourceOf(db);
+  const p = normalizeQuoteProvider(rawProvider);
+  const key = (p === "finnhub" ? finnhubKey : twelvedataKey).trim();
   const proxy = value(db, `SELECT proxy_url FROM settings WHERE id=1`);
-  const provider:FetchFn = (symbol,options) => fetchQuote(symbol,key,proxy,options?.now ?? (()=>new Date()),{...options,db});
+  const provider:FetchFn = (symbol,options) => fetchQuote(symbol,key,proxy,options?.now ?? (()=>new Date()),{...options,db,provider:p});
   managedProviders.add(provider);
   return provider;
 }
@@ -301,11 +309,9 @@ export function defaultProvider(db: Database): FetchFn {
 // 定时查询入口（scheduler.go scheduled 的执行部分）。
 export function startScheduledRun(db: Database, stocks: Stock[], scheduleID: number, due: string, slotAt: string, tz: StockTimezone): number {
   if(runningID !== 0) return runningID;
-  const key = value(db, `SELECT api_key FROM settings WHERE id=1`);
   const id = createRun(db, stocks, "scheduled", scheduleID, due, slotAt);
   runningID = id;
   void runOnce(db, id, stocks, defaultProvider(db), tz).catch(() => undefined);
-  void key;
   return id;
 }
 
