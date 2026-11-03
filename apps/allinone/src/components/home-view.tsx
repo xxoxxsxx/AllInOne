@@ -13,6 +13,7 @@ interface HomeViewProps {
   loadError: string | null;
   documentSummary?: { total: number; expiring: number; expired: number } | null;
   documentReminderError?: boolean;
+  filmSummary?: { expired: number; soon: number } | null;
 }
 
 const STATE_LABEL: Record<ToolStatus["state"], string> = {
@@ -39,7 +40,7 @@ function statusLine(state: ToolStatus["state"], checkedAt: string | null): strin
   return label;
 }
 
-export function HomeView({ tools, categories, loadError, documentSummary, documentReminderError }: HomeViewProps) {
+export function HomeView({ tools, categories, loadError, documentSummary, documentReminderError, filmSummary }: HomeViewProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("all");
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -102,6 +103,7 @@ export function HomeView({ tools, categories, loadError, documentSummary, docume
       <p className="page-sub">业务管理、金融监控与图片创作工具的统一入口。</p>
       <p className="page-hint"><Link href="/channels">🔔 推送渠道设置（Bark / 飞书 / Telegram，证件夹与提醒事项共用）→</Link></p>
 
+      {filmSummary && (filmSummary.expired > 0 || filmSummary.soon > 0) ? <section className="document-reminder" aria-label="胶卷到期提示"><div><strong>胶卷库存提示</strong><span>{filmSummary.expired} 卷已过期 · {filmSummary.soon} 卷半年内到期</span></div><div className="document-reminder-links"><Link href="/filmlog">查看胶卷 →</Link></div></section> : null}
       {loadError ? <div className="error-banner">工具配置加载失败：{loadError}</div> : null}
       {documentReminderError ? <p role="status" className="error-banner">证件到期提示暂时无法读取，请打开证件夹检查。</p> : null}
       {documentSummary && (documentSummary.expiring > 0 || documentSummary.expired > 0) ? (

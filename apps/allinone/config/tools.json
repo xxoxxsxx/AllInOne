@@ -130,6 +130,21 @@
     "integration": "path"
   },
   {
+    "id": "filmlog",
+    "name": "胶卷日志",
+    "description": "记录每卷胶卷从购买、拍摄到冲洗的故事",
+    "category": "life",
+    "tags": ["胶卷", "摄影", "冲洗", "库存"],
+    "icon": "image",
+    "kind": "service",
+    "entry": "/filmlog",
+    "openMode": "same-tab",
+    "order": 51,
+    "visible": true,
+    "lifecycle": "active",
+    "integration": "path"
+  },
+  {
     "id": "reminders",
     "name": "提醒事项",
     "description": "文字与图片提醒：多时间点、间隔重复与 cron 定时，多渠道推送",
