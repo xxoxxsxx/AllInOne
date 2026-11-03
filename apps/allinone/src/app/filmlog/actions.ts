@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { advanceRoll, deleteImage, deleteRoll, getFilmDb, saveImage, saveRoll, type FilmInput } from "@/lib/filmlog/store";
+import { advanceRoll, deleteImage, deleteRoll, getFilmDb, listOptions, saveImage, saveOptions, saveRoll, type FilmInput } from "@/lib/filmlog/store";
+import { isOptionField } from "@/lib/filmlog/store";
 
 export type Result = { ok: true } | { ok: false; error: string };
 const text = (form: FormData, key: string) => String(form.get(key) ?? "");
@@ -18,9 +19,28 @@ export async function saveRollAction(form: FormData): Promise<Result> {
     const keys: (keyof FilmInput)[] = ["brand","film","iso","format","frames","batch","purchasedAt","expiresAt","openedAt","finishedAt","sentAt","developedAt","camera","process","lab","purchasePrice","developPrice","note","status"];
     const input = Object.fromEntries(keys.map(key => [key, text(form, key)])) as FilmInput;
     const id = text(form, "id");
-    saveRoll(getFilmDb(), input, id ? validId(id) : undefined);
+    const rollId = id ? validId(id) : undefined;
+    // 新选项库：客户端确认保存的新值（{字段: [值,...]}），先校验再随胶卷一并落库。
+    let newOptions: Record<string, string[]> | null = null;
+    const raw = text(form, "new_options");
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      for (const [field, values] of Object.entries(parsed)) {
+        if (!isOptionField(field)) throw new Error("选项字段无效");
+        if (!Array.isArray(values) || values.some(v => typeof v !== "string")) throw new Error("选项值无效");
+        (newOptions ??= {})[field] = values as string[];
+      }
+    }
+    saveRoll(getFilmDb(), input, rollId);
+    if (newOptions) for (const [field, values] of Object.entries(newOptions)) {
+      if (!isOptionField(field)) throw new Error("选项字段无效");
+      saveOptions(getFilmDb(), field, values);
+    }
     refresh(); return { ok: true };
   } catch (error) { return failure(error); }
+}
+export async function listOptionsAction(): Promise<Record<string, string[]>> {
+  return listOptions(getFilmDb());
 }
 export async function advanceRollAction(id: number): Promise<Result> {
   try {

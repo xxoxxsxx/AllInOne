@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { dataDir } from "@/lib/data-dir";
 
-export const FILM_SCHEMA_VERSION = 1;
+export const FILM_SCHEMA_VERSION = 2;
 /** 每卷最多图片数。 */
 export const MAX_IMAGES_PER_ROLL = 12;
 /** 单张图片最大字节数（10MB）。 */
@@ -233,7 +233,7 @@ export function resetFilmDbForTest(): void {
 function migrate(db: Database.Database): void {
   const version = Number(db.pragma("user_version", { simple: true }));
   if (version >= FILM_SCHEMA_VERSION) return;
-  if (version === 0) {
+  if (version < 1) {
     db.exec(`
       CREATE TABLE film_rolls (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -269,6 +269,18 @@ function migrate(db: Database.Database): void {
         created_at TEXT NOT NULL
       );
       CREATE INDEX idx_film_images_roll ON film_images(roll_id);
+    `);
+    db.pragma("user_version = 1");
+  }
+  if (version < 2) {
+    // 录入选项库：品牌/型号/规格/工艺等字段的自由输入可保存为下拉选项。
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS film_options (
+        field TEXT NOT NULL,
+        value TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (field, value)
+      );
     `);
     db.pragma(`user_version = ${FILM_SCHEMA_VERSION}`);
   }
@@ -518,5 +530,50 @@ export function removeAttachmentDir(rollId: number): void {
     fs.rmSync(dir, { recursive: true, force: true });
   } catch {
     // 目录不存在等情况下忽略。
+  }
+}
+
+// —— 录入选项库（品牌/型号/规格/工艺等下拉预设 + 用户自存选项） ——
+
+/** 支持下拉选项的字段（与表单字段同名）。 */
+export const OPTION_FIELDS = ["brand", "film", "iso", "format", "process", "camera", "lab"] as const;
+export type OptionField = (typeof OPTION_FIELDS)[number];
+
+/** 常见预设（始终出现在下拉中）；用户保存的新选项存入 film_options 表。 */
+export const FILM_PRESETS: Record<OptionField, string[]> = {
+  brand: ["Kodak 柯达", "Fujifilm 富士", "Ilford 伊尔福", "Agfa 爱克发", "CineStill", "Lomography", "乐凯", "上海申光"],
+  film: ["Portra 400", "Ektar 100", "Gold 200", "Ultramax 400", "Tri-X 400", "HP5 Plus", "Delta 3200", "Fuji C200", "Superia X-TRA 400", "Velvia 50", "Provia 100F", "CineStill 800T", "上海 GP3"],
+  iso: ["50", "100", "125", "160", "200", "400", "800", "1600", "3200"],
+  format: ["135", "120", "220", "110"],
+  process: ["C-41 彩负", "E-6 反转", "黑白", "反转直冲", "自冲"],
+  camera: [],
+  lab: [],
+};
+
+export function isOptionField(field: string): field is OptionField {
+  return (OPTION_FIELDS as readonly string[]).includes(field);
+}
+
+/** 合并预设与用户自存选项（去重、按本地规则排序）。 */
+export function listOptions(db: Database.Database): Record<OptionField, string[]> {
+  const rows = db.prepare("SELECT field,value FROM film_options").all() as Array<{ field: string; value: string }>;
+  const out = {} as Record<OptionField, string[]>;
+  for (const field of OPTION_FIELDS) {
+    const custom = rows.filter((r) => r.field === field).map((r) => r.value);
+    out[field] = [...new Set([...FILM_PRESETS[field], ...custom])].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  }
+  return out;
+}
+
+/** 保存用户自存选项：忽略已存在项（预设或已存），非法字段抛中文错误。 */
+export function saveOptions(db: Database.Database, field: OptionField, values: string[]): void {
+  if (!isOptionField(field)) throw new Error("选项字段无效");
+  const now = nowIso();
+  const insert = db.prepare("INSERT OR IGNORE INTO film_options(field,value,created_at) VALUES(?,?,?)");
+  for (const raw of values) {
+    const value = validateText(raw, "选项值");
+    if (value === "") continue;
+    if (FILM_PRESETS[field].includes(value)) continue;
+    insert.run(field, value, now);
   }
 }

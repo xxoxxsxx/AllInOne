@@ -16,8 +16,10 @@ import {
   getFilmDb,
   getRoll,
   isValidStoredImageName,
+  listOptions,
   listRolls,
   MAX_IMAGES_PER_ROLL,
+  saveOptions,
   openFilmDb,
   readImage,
   resetFilmDbForTest,
@@ -246,4 +248,19 @@ test("validateImage 识别三种真实签名", () => {
   assert.throws(() => validateImage(JPEG_BYTES, "image/png"), /不符/);
   assert.throws(() => validateImage(Buffer.alloc(0), "image/png"), /为空/);
   assert.deepEqual([...FILM_STATUSES], ["stock", "shooting", "shot", "developing", "developed"]);
+});
+
+// —— 录入选项库：预设 + 用户自存下拉选项 ——
+test("listOptions 合并预设与自存选项，saveOptions 去重并校验字段", () => {
+  const db = openFilmDb(":memory:");
+  const before = listOptions(db);
+  assert.ok(before.brand.includes("Kodak 柯达"));
+  assert.ok(before.format.includes("135"));
+  assert.equal(before.camera.length, 0, "相机/店铺无预设，只收录用户保存的值");
+  saveOptions(db, "camera", ["Nikon FM2", "Nikon FM2", "  "]);
+  assert.deepEqual(listOptions(db).camera, ["Nikon FM2"]);
+  assert.throws(() => saveOptions(db, "note" as never, ["x"]), /选项字段无效/, "白名单外字段拒绝");
+  // 用户保存的值不再重复提示（前端按 includes 判断，这里验证去重落库）
+  saveOptions(db, "camera", ["Nikon FM2"]);
+  assert.deepEqual(listOptions(db).camera, ["Nikon FM2"]);
 });
