@@ -5,6 +5,7 @@
 // 渠道动作已迁至 /channels 全局推送渠道页（src/app/channels/actions.ts）。
 
 import { revalidatePath } from "next/cache";
+import { saveModulePolicy } from "@/lib/channels/module-policy";
 import { redirect } from "next/navigation";
 
 import { getDB, now as nowText, quoteSourceOf, saveQuoteSource, validWindow, queryWindows } from "@/modules/stocks/store";
@@ -29,6 +30,18 @@ function goSettings(params: Record<string, string>): never {
 function goSchedule(params: Record<string, string>): never {
   const q = new URLSearchParams(params);
   redirect(`/stocks/schedule${q.toString() ? `?${q}` : ""}`);
+}
+
+// 仅保存股票业务的推送策略，不修改全局渠道配置或其他业务策略。
+export async function saveNotificationPolicyAction(fd: FormData): Promise<void> {
+  saveModulePolicy(getDB(), "stocks", {
+    enabled: has(fd, "enabled"),
+    bark: has(fd, "bark"),
+    feishu: has(fd, "feishu"),
+    telegram: has(fd, "telegram"),
+  });
+  revalidatePath("/stocks/settings");
+  goSettings({ result: "notification_policy_saved" });
 }
 
 // —— 行情 Key ——

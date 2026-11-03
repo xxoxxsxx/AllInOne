@@ -5,6 +5,7 @@
 // 服务端逐张做文件头校验（JPEG/PNG/WebP，≤10MiB），并执行「每条提醒 ≤12 张」上限。
 
 import { revalidatePath } from "next/cache";
+import { saveModulePolicy, type ModulePolicy } from "@/lib/channels/module-policy";
 
 import {
   createReminder,
@@ -94,6 +95,13 @@ export async function deleteReminderAction(id: number): Promise<ActionResult> {
   } catch (e) {
     return fail(e);
   }
+}
+
+export async function saveReminderPushPolicyAction(policy: ModulePolicy): Promise<ActionResult> {
+  try {
+    saveModulePolicy(getRemindersDB(), "reminders", { enabled: policy?.enabled === true, bark: policy?.bark === true, feishu: policy?.feishu === true, telegram: policy?.telegram === true });
+    revalidate(); return { ok: true };
+  } catch (e) { return fail(e); }
 }
 
 export async function setReminderEnabledAction(id: number, enabled: boolean): Promise<ActionResult> {

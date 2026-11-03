@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { getRemindersDB, listReminders, type ReminderView, type ScheduleView } from "@/lib/reminders/store";
+import { getModulePolicy } from "@/lib/channels/module-policy";
+import { ReminderPushSettings } from "./push-settings";
 
 import { RemindersClient, type ReminderCard, type ReminderStatus } from "./reminders-client";
 
@@ -81,6 +83,7 @@ export default function RemindersPage() {
   return (
     <main className="rem-page">
       <Link href="/" className="rem-back">← 工具箱</Link>
+      <ReminderPushSettings initial={getModulePolicy(getRemindersDB(), "reminders")} />
       <RemindersClient initialReminders={reminders} />
     </main>
   );

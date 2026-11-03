@@ -26,6 +26,7 @@ import {
   type SendOutcome,
 } from "@/modules/stocks/notify";
 
+import { filterModuleChannels, getModulePolicy } from "@/lib/channels/module-policy";
 import { todayStr } from "./constants";
 import { loadReminderChannelConfig } from "./reminders-channels";
 import { listDocuments } from "./db";
@@ -167,7 +168,11 @@ export async function runDocumentExpiryCheck(
   const hour = due.hour;
 
   // 渠道配置默认取自全局推送渠道中心（channels.db），与行情设置无关。
-  const config = opts.channelsConfig ? opts.channelsConfig() : loadReminderChannelConfig(db);
+  const globalConfig = opts.channelsConfig ? opts.channelsConfig() : loadReminderChannelConfig(db);
+  // 证件夹只使用模块渠道选择；自动总开关唯一来源为 reminder_settings.enabled。
+  const config = globalConfig ? filterModuleChannels(globalConfig, {
+    ...getModulePolicy(db, "documents", true), enabled: true,
+  }) : null;
   if (!config || enabledChannels(config).length === 0) {
     return skip(settings, today, hour, "channels_unavailable");
   }

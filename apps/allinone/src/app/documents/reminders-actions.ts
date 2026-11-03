@@ -15,7 +15,10 @@ import {
   saveReminderSettings,
   type ReminderSettings,
 } from "@/lib/documents/reminders";
-import { enabledChannels, type ChannelConfig } from "@/modules/stocks/notify";
+import { enabledChannels } from "@/modules/stocks/notify";
+import { filterModuleChannels, getModulePolicy, saveModulePolicy } from "@/lib/channels/module-policy";
+
+export type DocumentChannelSelection = { bark: boolean; feishu: boolean; telegram: boolean };
 import {
   loadReminderChannelConfig,
   summarizeChannels,
@@ -30,7 +33,7 @@ import {
 } from "@/lib/documents/reminders-run";
 
 export type ReminderActionResult =
-  | { ok: true; settings: ReminderSettings; channels: ReminderChannelsSummary }
+  | { ok: true; settings: ReminderSettings; channels: ReminderChannelsSummary; selection: DocumentChannelSelection }
   | { ok: false; error: string; channels: ReminderChannelsSummary };
 
 export type ReminderTestResult =
@@ -42,7 +45,7 @@ export type ReminderRunActionResult =
   | { ok: false; error: string };
 
 const NO_CHANNELS_ERROR =
-  "尚未配置任何推送渠道：请在下方启用并配置 Bark / 飞书 / Telegram 至少一个渠道";
+  "证件夹没有可用推送渠道：请在提醒设置中选择至少一个渠道，并在全局推送渠道页启用且配置该渠道";
 
 function failChannels(error: unknown): { ok: false; error: string; channels: ReminderChannelsSummary } {
   let channels: ReminderChannelsSummary;
@@ -63,29 +66,40 @@ function failChannels(error: unknown): { ok: false; error: string; channels: Rem
 export async function getReminderSettingsAction(): Promise<ReminderActionResult> {
   try {
     const db = getDocumentsDB();
-    return { ok: true, settings: getReminderSettings(db), channels: summarizeReminderChannels(db) };
+    return { ok: true, settings: getReminderSettings(db), channels: summarizeReminderChannels(db), selection: getModulePolicy(db, "documents", true) };
   } catch (e) {
     return failChannels(e);
   }
 }
 
 /** 保存提醒开关与时刻（Asia/Shanghai 小时 0–23）。 */
-export async function saveReminderSettingsAction(enabled: boolean, hour: number): Promise<ReminderActionResult> {
+export async function saveReminderSettingsAction(enabled: boolean, hour: number, selection?: DocumentChannelSelection): Promise<ReminderActionResult> {
   try {
     const db = getDocumentsDB();
-    const settings = saveReminderSettings(db, { enabled: enabled === true, hour });
+    const settings = db.transaction(() => {
+      const saved = saveReminderSettings(db, { enabled: enabled === true, hour });
+      if (selection) saveModulePolicy(db, "documents", {
+        enabled: true, bark: selection.bark === true,
+        feishu: selection.feishu === true, telegram: selection.telegram === true,
+      });
+      return saved;
+    })();
     revalidatePath("/documents");
     revalidatePath("/documents/settings");
-    return { ok: true, settings, channels: summarizeReminderChannels(db) };
+    return { ok: true, settings, channels: summarizeReminderChannels(db), selection: getModulePolicy(db, "documents", true) };
   } catch (e) {
     return failChannels(e);
   }
 }
 
-/** 发送一条测试推送（所有已启用渠道）；不影响 last_sent_date，也不依赖提醒开关。 */
+/** 发送一条测试推送（模块已选且全局启用渠道）；不影响 last_sent_date，也不依赖提醒开关。 */
 export async function testReminderAction(): Promise<ReminderTestResult> {
   try {
-    const config = loadReminderChannelConfig(getDocumentsDB());
+    const db = getDocumentsDB();
+    const globalConfig = loadReminderChannelConfig(db);
+    const config = globalConfig ? filterModuleChannels(globalConfig, {
+      ...getModulePolicy(db, "documents", true), enabled: true,
+    }) : null;
     if (!config || enabledChannels(config).length === 0) {
       return { ok: false, error: NO_CHANNELS_ERROR, channels: [] };
     }

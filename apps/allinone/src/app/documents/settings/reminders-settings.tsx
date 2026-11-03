@@ -2,13 +2,13 @@
 
 // 证件到期提醒设置面板：提醒开关/时刻 + 立即检查 + 上次结果。
 // 推送渠道配置已迁至全局推送渠道中心（独立页面 /channels，证件夹与提醒事项共用），
-// 本面板只展示渠道摘要与跳转入口，不再内嵌渠道表单。
+// 本面板保存证件夹的独立渠道选择，凭据与全局启用状态仍由 /channels 管理。
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import "./reminder-panel.css";
 
-import { runReminderNowAction, saveReminderSettingsAction } from "../reminders-actions";
+import { runReminderNowAction, saveReminderSettingsAction, testReminderAction, type DocumentChannelSelection } from "../reminders-actions";
 
 type SettingsView = { enabled: boolean; hour: number; lastSentDate: string | null };
 
@@ -41,7 +41,7 @@ const SKIP_REASONS: Record<string, string> = {
   disabled: "提醒未开启",
   hour_mismatch: "未到提醒时刻（北京时间）",
   already_sent_today: "今日已推送",
-  channels_unavailable: "未配置推送渠道（前往「全局推送渠道」页启用 Bark / 飞书 / Telegram 至少一个）",
+  channels_unavailable: "证件夹没有可用推送渠道：请至少选择一个渠道，并在「全局推送渠道」页启用且配置该渠道",
   no_due_documents: "没有 30 天内到期的证件",
   due: "已到提醒时刻",
 };
@@ -56,7 +56,9 @@ function channelLines(channels: ChannelResultView[]): string {
   return channels.map((c) => `${c.name}：${c.status}${c.error ? `（${c.error}）` : ""}`).join("\n");
 }
 
-export function RemindersSettings({ initialSettings, initialChannels }: { initialSettings: SettingsView; initialChannels: ChannelsSummaryView }) {
+export function RemindersSettings({ initialSettings, initialChannels, initialSelection }: { initialSettings: SettingsView; initialChannels: ChannelsSummaryView; initialSelection: DocumentChannelSelection }) {
+  const [selection, setSelection] = useState<DocumentChannelSelection>(initialSelection);
+  const [savedSelection, setSavedSelection] = useState<DocumentChannelSelection>(initialSelection);
   const [settings, setSettings] = useState<SettingsView>(initialSettings);
   const [savedSettings, setSavedSettings] = useState<SettingsView>(initialSettings);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -67,10 +69,12 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
   const save = (): void => {
     setMessage(null);
     startSave(async () => {
-      const res = await saveReminderSettingsAction(settings.enabled, settings.hour);
+      const res = await saveReminderSettingsAction(settings.enabled, settings.hour, selection);
       if (res.ok) {
         setSettings(res.settings);
         setSavedSettings(res.settings);
+        setSelection(res.selection);
+        setSavedSelection(res.selection);
         setMessage({ tone: "ok", text: `已保存：${res.settings.enabled ? "开启" : "关闭"}，${hourLabel(res.settings.hour)}` });
       } else {
         setMessage({ tone: "error", text: res.error });
@@ -91,10 +95,21 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
     });
   };
 
+  const testChannels = (): void => {
+    setMessage(null);
+    startRun(async () => {
+      const res = await testReminderAction();
+      setMessage({ tone: res.ok ? "ok" : "error", text: `${res.ok ? `测试推送：${res.status}` : res.error}${res.channels.length ? `\n${channelLines(res.channels)}` : ""}` });
+    });
+  };
+
   const pending = saving || running;
-  const scheduleDirty = settings.enabled !== savedSettings.enabled || settings.hour !== savedSettings.hour;
+  const channelKeys = ["bark", "feishu", "telegram"] as const;
+  const selectionDirty = channelKeys.some((key) => selection[key] !== savedSelection[key]);
+  const scheduleDirty = settings.enabled !== savedSettings.enabled || settings.hour !== savedSettings.hour || selectionDirty;
   const channels = initialChannels;
-  const anyConfigured = channels.bark.configured || channels.feishu.configured || channels.telegram.configured;
+  const anySelected = channelKeys.some((key) => selection[key]);
+  const anyAvailable = channelKeys.some((key) => selection[key] && channels[key].enabled && channels[key].configured);
 
   return (
     <div className="reminder-settings">
@@ -136,7 +151,7 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
         <div className="reminder-schedule-footer">
           <p className="reminder-last-sent"><span className="reminder-clock" aria-hidden="true">◷</span> 上次推送：{settings.lastSentDate ?? "暂无记录"}{scheduleDirty ? <span className="reminder-dirty">提醒计划未保存</span> : null}</p>
           <div className="reminder-actions">
-            <button type="button" className="reminder-button reminder-button-secondary" onClick={runNow} disabled={pending || running}>
+            <button type="button" className="reminder-button reminder-button-secondary" onClick={runNow} disabled={pending || scheduleDirty}>
               {running ? "检查中…" : "立即检查"}
             </button>
             <button type="button" className="reminder-button reminder-button-primary" onClick={save} disabled={pending}>
@@ -170,12 +185,22 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
           <div>
             <p className="reminder-eyebrow">CHANNELS</p>
             <h2 id="reminder-channels-link-title">推送渠道</h2>
-            <p>Bark / 飞书 / Telegram 与代理在全局推送渠道页统一配置，证件夹与提醒事项共用。</p>
+            <p>选择证件夹使用的渠道；仅当渠道在全局页已启用且配置完成时才会发送。保存后生效，手动测试不受每日提醒开关限制。</p>
           </div>
-          <span className={`reminder-pill ${anyConfigured ? "is-on" : "is-warning"}`}>
-            <span aria-hidden="true" />{anyConfigured ? "已配置" : "未配置"}
+          <span className={`reminder-pill ${anyAvailable ? "is-on" : "is-warning"}`}>
+            <span aria-hidden="true" />{anyAvailable ? "有可用渠道" : "无可用渠道"}
           </span>
         </div>
+        <div className="reminder-channel-summary">
+          {channelKeys.map((key) => (
+            <label key={key} className="reminder-switch-row">
+              <input type="checkbox" checked={selection[key]} disabled={pending} onChange={(e) => setSelection((current) => ({ ...current, [key]: e.target.checked }))} />
+              <span>{({ bark: "Bark", feishu: "飞书", telegram: "Telegram" })[key]}<small>{channels[key].enabled ? "全局已启用" : "全局未启用"} · {channels[key].configured ? "已配置" : "未配置"}</small></span>
+            </label>
+          ))}
+        </div>
+        {!anyAvailable && <p className="reminder-feedback is-error" role="status">{!anySelected ? "尚未选择证件夹推送渠道；请至少勾选一个渠道并保存。" : "所选渠道均不可用；请在全局推送渠道页启用并配置至少一个所选渠道。"}</p>}
+        {scheduleDirty && <p className="reminder-last-sent">设置有未保存修改，请先保存再立即检查或发送测试。</p>}
         <div className="reminder-channel-summary">
           <span className={`reminder-pill ${channels.bark.configured ? "is-on" : "is-muted"}`}>Bark {channels.bark.configured ? `已配置（${channels.bark.host}）` : "未配置"}</span>
           <span className={`reminder-pill ${channels.feishu.configured ? "is-on" : "is-muted"}`}>飞书 {channels.feishu.configured ? "已配置" : "未配置"}</span>
@@ -183,7 +208,9 @@ export function RemindersSettings({ initialSettings, initialChannels }: { initia
           <span className={`reminder-pill ${channels.proxy.configured ? "is-on" : "is-muted"}`}>代理 {channels.proxy.configured ? "已配置" : "未配置"}</span>
         </div>
         <div className="reminder-actions">
-          <Link href="/channels" className="reminder-button reminder-button-primary">前往全局推送渠道 →</Link>
+          <button type="button" className="reminder-button reminder-button-secondary" onClick={testChannels} disabled={pending || scheduleDirty}>{running ? "发送中…" : "发送测试"}</button>
+          <button type="button" className="reminder-button reminder-button-primary" onClick={save} disabled={pending}>{saving ? "保存中…" : "保存提醒设置与渠道"}</button>
+          <Link href="/channels" className="reminder-button reminder-button-secondary">前往全局推送渠道 →</Link>
         </div>
       </section>
     </div>

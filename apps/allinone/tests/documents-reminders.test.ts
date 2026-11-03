@@ -13,6 +13,8 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 
+import { getModulePolicy, saveModulePolicy } from "../src/lib/channels/module-policy.ts";
+
 import {
   channelsDbPath,
   closeChannelsDbForTest,
@@ -548,6 +550,57 @@ test("dispatches only enabled channels; BarkEnabled=false excludes Bark", async 
       ["飞书", "成功"],
       ["Telegram", "成功"],
     ]);
+  } finally {
+    db.close();
+    cleanup();
+  }
+});
+
+test("document channel selection persists across reopen and intersects global switches", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "documents-policy-"));
+  const file = path.join(root, "documents.db");
+  let db = openDocumentsDB(undefined, file);
+  try {
+    assert.deepEqual(getModulePolicy(db, "documents", true), { enabled: true, bark: true, feishu: true, telegram: true });
+    seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
+    saveReminderSettings(db, { enabled: true, hour: HOUR_AT_NOW });
+    saveModulePolicy(db, "documents", { enabled: false, bark: false, feishu: true, telegram: true });
+    db.close();
+    db = openDocumentsDB(undefined, file);
+    assert.deepEqual(getModulePolicy(db, "documents", true), { enabled: false, bark: false, feishu: true, telegram: true });
+    const { sender, calls } = senderStub("成功");
+    const config = configWith({ FeishuEnabled: true, FeishuWebhook: "https://example.com/hook", TGEnabled: false });
+    const result = await runDocumentExpiryCheck(db, baseOpts(sender, { channelsConfig: () => config }));
+    assert.equal(result.sent, true);
+    assert.deepEqual(calls.map((call) => call.name), ["飞书"]);
+    assert.equal(config.BarkEnabled, true, "module filtering must not mutate global configuration");
+    assert.equal(config.TGEnabled, false);
+  } finally {
+    db.close();
+    assert.equal(path.dirname(path.resolve(root)), path.resolve(os.tmpdir()));
+    assert.ok(path.basename(root).startsWith("documents-policy-"));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("empty document selection skips even forced checks without marking sent; manual checks ignore automatic switch", async () => {
+  const { db, cleanup } = tempDb();
+  try {
+    seedDoc(db, "护照", addDuration(TODAY, 7, "day"));
+    saveReminderSettings(db, { enabled: false, hour: HOUR_AT_NOW });
+    saveModulePolicy(db, "documents", { enabled: true, bark: false, feishu: false, telegram: false });
+    const { sender, calls } = senderStub("成功");
+    const skipped = await runDocumentExpiryCheck(db, baseOpts(sender, { force: true }));
+    assert.equal(skipped.reason, "channels_unavailable");
+    assert.equal(calls.length, 0);
+    assert.equal(getReminderSettings(db).lastSentDate, null);
+    saveModulePolicy(db, "documents", { enabled: false, bark: true, feishu: false, telegram: false });
+    const automatic = await runDocumentExpiryCheck(db, baseOpts(sender));
+    assert.equal(automatic.reason, "disabled");
+    const manual = await runDocumentExpiryCheck(db, baseOpts(sender, { force: true }));
+    assert.equal(manual.sent, true);
+    assert.equal(manual.enabled, false);
+    assert.deepEqual(calls.map((call) => call.name), ["Bark"]);
   } finally {
     db.close();
     cleanup();

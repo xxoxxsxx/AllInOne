@@ -17,6 +17,7 @@
 import type Database from "better-sqlite3";
 
 import { enabledChannels, channelStatus, type ChannelConfig, type SendOutcome } from "@/modules/stocks/notify";
+import { filterModuleChannels, getModulePolicy } from "@/lib/channels/module-policy";
 import {
   defaultChannelSender,
   dispatchToEnabledChannels,
@@ -254,6 +255,9 @@ async function deliverOne(
 export async function runRemindersTick(opts: RemindersRunOptions = {}): Promise<RemindersTickResult> {
   const db = opts.db ?? getRemindersDB();
   const now = opts.nowMs ?? Date.now();
+  const policy = getModulePolicy(db, "reminders");
+  // 关闭模块时不推进计划或重试状态；重新开启后沿用原有错过/补发规则。
+  if (!policy.enabled) return { ran: false, reason: "module_disabled", dueCount: 0, delivered: 0, catchupCount: 0, missedCount: 0, retryScheduled: 0, dispatches: [] };
   const runSchedules = listRunSchedules(db);
   const retryDue = listRetryDueSchedules(db, now);
   const { due, updates } = computeDue({ schedules: runSchedules.map((r) => r.schedule), now });
@@ -279,7 +283,8 @@ export async function runRemindersTick(opts: RemindersRunOptions = {}): Promise<
     missedCount++;
   }
 
-  const config = await (opts.channelsConfig ? opts.channelsConfig() : defaultChannelsConfig()());
+  const globalConfig = await (opts.channelsConfig ? opts.channelsConfig() : defaultChannelsConfig()());
+  const config = globalConfig ? filterModuleChannels(globalConfig, policy) : null;
   const emptyResult: RemindersTickResult = {
     ran: false,
     reason: "",
@@ -363,7 +368,9 @@ export async function sendReminderTest(
 ): Promise<{ ok: true; aggregate: string; channels: ChannelSendResult[] } | { ok: false; error: string }> {
   const db = opts.db ?? getRemindersDB();
   const now = opts.nowMs ?? Date.now();
-  const config = await (opts.channelsConfig ? opts.channelsConfig() : defaultChannelsConfig()());
+  const globalConfig = await (opts.channelsConfig ? opts.channelsConfig() : defaultChannelsConfig()());
+  // 手动测试独立于自动开关，但仍遵守本模块的渠道选择。
+  const config = globalConfig ? filterModuleChannels(globalConfig, getModulePolicy(db, "reminders")) : null;
   if (!config || enabledChannels(config).length === 0) {
     return { ok: false, error: "尚未配置任何推送渠道：请先启用并配置 Bark / 飞书 / Telegram 至少一个渠道" };
   }

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import "./reminder-page.css";
 
+import { getModulePolicy } from "@/lib/channels/module-policy";
 import { todayStr } from "@/lib/documents/constants";
 import { getDocumentsDB, listDocuments } from "@/lib/documents/db";
 import { getReminderSettings, selectExpiringDocuments } from "@/lib/documents/reminders";
@@ -24,7 +25,7 @@ export default async function ReminderSettingsPage() {
   const settings = getReminderSettings(db);
   const dueDocs = selectExpiringDocuments(listDocuments(db, todayStr()));
   // 渠道摘要读取自全局推送渠道中心（@/lib/channels/center）；渠道表单在独立页面 /channels，
-  // 面板只展示摘要与跳转，避免保存后页面上的状态过期。
+  // 面板保存证件夹自己的渠道选择，同时展示全局可用状态。
   const channels0 = summarizeReminderChannels(db);
   const schedulerDisabled = process.env.DISABLE_SCHEDULER === "1";
 
@@ -71,7 +72,7 @@ export default async function ReminderSettingsPage() {
         </div>
       ) : null}
 
-      <RemindersSettings initialSettings={settings} initialChannels={channels0} />
+      <RemindersSettings initialSettings={settings} initialChannels={channels0} initialSelection={getModulePolicy(db, "documents", true)} />
 
       <section className="rpg-card" aria-label="提醒速览">
         <div className="rpg-card-head">
@@ -81,7 +82,7 @@ export default async function ReminderSettingsPage() {
 
         <p className="rpg-hint">
           Bark / 飞书 / Telegram 渠道在<Link href="/channels">全局推送渠道</Link>页统一配置（证件夹与提醒事项共用）；
-          这里的「立即检查」按当前渠道配置真实推送一次。提醒开关与推送时间在上方设置面板。
+          这里的「立即检查」与「发送测试」按已保存的证件夹渠道选择真实推送，均不受每日提醒开关限制。提醒开关与推送时间在上方设置面板。
         </p>
 
         <div className="rpg-facts">

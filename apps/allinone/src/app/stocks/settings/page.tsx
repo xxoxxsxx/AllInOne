@@ -3,6 +3,7 @@ import Link from "next/link";
 import { apiKeyOf, getDB, getQuotaStatus, notificationSettings, quoteSourceOf, queryWindows, windowDuration } from "@/modules/stocks/store";
 import { normalizeQuoteProvider, QUOTE_PROVIDER_LABELS } from "@/modules/stocks/quote";
 import { getChannelConfig, summarizeChannels } from "@/lib/channels/center";
+import { getModulePolicy } from "@/lib/channels/module-policy";
 import { displayClock } from "@/modules/stocks/tz";
 import { timezoneValue } from "@/modules/stocks/windows";
 import {
@@ -12,13 +13,14 @@ import {
   saveQuoteSourceAction,
   saveQuotaAction,
   saveProxyAction,
+  saveNotificationPolicyAction,
 } from "../settings-actions";
 import { Flash } from "../stocks-client";
 
 export const dynamic = "force-dynamic";
 
 // 原版 web.go settingsPage：Title 为「行情与通知设置」。
-// 渠道配置已统一到全局推送渠道中心（/channels），本页只保留行情规则、行情代理与备份。
+// 渠道凭据统一到全局推送渠道中心；本页独立控制股票推送开关与渠道选择。
 export const metadata = { title: "行情设置 · TickerSentry" };
 
 // DOM 结构对应 templates/settings.html。
@@ -34,6 +36,7 @@ export default async function SettingsPage({
   // notificationSettings 仅用于读取行情查询代理（proxy_url）；通知渠道改读全局中心。
   const c = notificationSettings(db);
   const channelsSummary = summarizeChannels(getChannelConfig());
+  const policy = getModulePolicy(db, "stocks", false);
   const tz = timezoneValue(db);
   const proxyRow = db.prepare(`SELECT proxy_latency_ms,proxy_tested_at FROM settings WHERE id=1`).get() as {
     proxy_latency_ms: string;
@@ -54,6 +57,7 @@ export default async function SettingsPage({
     proxy_tested: "代理测试成功，响应耗时已更新",
     quota_saved: "行情额度已保存，已消耗额度不会清零",
     quote_saved: "行情源已保存",
+    notification_policy_saved: "股票推送设置已保存，全局渠道配置未修改",
   };
   const quotaDaily = counts.stocks * slots;
   const source = quoteSourceOf(db);
@@ -66,14 +70,14 @@ export default async function SettingsPage({
         <div>
           <span className="eyebrow">PREFERENCES</span>
           <h1>服务设置</h1>
-          <p>管理行情来源、网络代理和配置备份。通知渠道在全局推送渠道页统一配置。</p>
+          <p>管理行情来源、股票自动推送、网络代理和配置备份。渠道凭据在全局推送渠道页统一配置。</p>
         </div>
       </div>
       <Flash text={sp.error ?? notices[sp.result ?? ""] ?? ""} />
       <div className="settings-index" aria-label="设置分区">
         <a href="#market-title">行情来源</a>
         <a href="#proxy-title">网络代理</a>
-        <Link href="/channels">全局推送渠道 ↗</Link>
+        <a href="#channels-link-title">股票推送</a>
         <a href="#backup-title">配置备份</a>
       </div>
 
@@ -297,9 +301,9 @@ export default async function SettingsPage({
         <div className="settings-group-head">
           <div>
             <span className="eyebrow">03 / NOTIFICATIONS</span>
-            <h2 id="channels-link-title">通知渠道</h2>
+            <h2 id="channels-link-title">股票推送</h2>
           </div>
-          <p>触价后向所有启用渠道发送；每个档位每次命中只计一次提醒。</p>
+          <p>自动推送默认关闭；开启后向本模块勾选且全局启用的渠道发送。</p>
         </div>
         <div className="settings-panel">
           <div className="settings-intro">
@@ -313,10 +317,25 @@ export default async function SettingsPage({
             </div>
             <p>
               Bark / 飞书 / Telegram 与代理在<Link href="/channels">全局推送渠道</Link>页统一配置，
-              证件夹到期提醒与提醒事项共用同一份。行情触价后向所有已启用渠道推送。
+              证件夹到期提醒与提醒事项共用同一份。下方设置仅影响股票推送，不修改全局渠道或其他业务设置。
             </p>
           </div>
           <div className="settings-content">
+            <form action={saveNotificationPolicyAction}>
+              <label className="settings-option">
+                <input type="checkbox" name="enabled" defaultChecked={policy.enabled} />
+                开启自动推送
+              </label>
+              <p className="settings-footnote">关闭后仍可查询行情，但不发送触价提醒、不占用档位提醒额度。每个档位每次命中只计一次提醒。</p>
+              <fieldset>
+                <legend>股票推送渠道</legend>
+                <label className="settings-option"><input type="checkbox" name="bark" defaultChecked={policy.bark} />Bark（全局{channelsSummary.bark.enabled ? "已启用" : "未启用"}）</label>
+                <label className="settings-option"><input type="checkbox" name="feishu" defaultChecked={policy.feishu} />飞书（全局{channelsSummary.feishu.enabled ? "已启用" : "未启用"}）</label>
+                <label className="settings-option"><input type="checkbox" name="telegram" defaultChecked={policy.telegram} />Telegram（全局{channelsSummary.telegram.enabled ? "已启用" : "未启用"}）</label>
+              </fieldset>
+              <p className="settings-footnote">只有本页勾选且全局启用并配置好的渠道会发送；未选择渠道时不发送通知。</p>
+              <div className="settings-actions"><button className="primary" type="submit">保存股票推送设置</button></div>
+            </form>
             <div className="quota-summary" aria-label="渠道状态">
               <span>Bark {channelsSummary.bark.configured ? `已配置（${channelsSummary.bark.host}）` : "未配置"}</span>
               <span>飞书 {channelsSummary.feishu.configured ? "已配置" : "未配置"}</span>

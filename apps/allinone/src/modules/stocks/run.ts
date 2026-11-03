@@ -28,6 +28,7 @@ import {
 import type { Level, Result, Stock } from "./store";
 import { enabledChannels, sendChannel } from "./notify";
 import { getChannelConfig } from "@/lib/channels/center";
+import { filterModuleChannels, getModulePolicy } from "@/lib/channels/module-policy";
 import { normalizeQuoteProvider } from "./quote";
 import { quoteSourceOf } from "./store";
 import { activeWindow, windowUsage } from "./windows";
@@ -205,6 +206,9 @@ export async function alert(
   fetched: Date,
   tz: StockTimezone,
 ): Promise<string> {
+  // 每次告警实时读取，设置保存后下一次触价即可生效；关闭不创建发送记录或占用档位额度。
+  const policy = getModulePolicy(db, "stocks", false);
+  if (!policy.enabled) return "股票自动推送已关闭";
   const why = alertValidityLocal(q, fetched);
   if (why !== "") return why;
   // 网络调用期间股票被暂停或改码，不得再触发新提醒。
@@ -217,7 +221,7 @@ export async function alert(
     return "价格未命中已启用的提醒";
   }
   // 渠道配置统一来自全局推送渠道中心（与证件夹/提醒事项共用）；行情设置表里的旧渠道字段已退役。
-  const c = getChannelConfig();
+  const c = filterModuleChannels(getChannelConfig(), policy);
   const channels = enabledChannels(c);
   if (channels.length === 0) {
     recordAttemptChannels(db, runID, { Symbol: q.Symbol, Price: decString(q.Price), QuoteAt: q.At }, levels, "命中但未通知（无启用渠道）", 0, "", []);

@@ -3,7 +3,14 @@ import assert from "node:assert/strict";
 
 import { EMPTY_CHANNEL_CONFIG, type ReminderChannelsSummary } from "../src/lib/channels/center.ts";
 import { runRemindersTick, sendReminderTest, type RemindersRunOptions } from "../src/lib/reminders/run.ts";
-import { createReminder, getReminder, listFireLog, openRemindersDB } from "../src/lib/reminders/store.ts";
+import { createReminder, getReminder, listFireLog, openRemindersDB as openTestDb } from "../src/lib/reminders/store.ts";
+import { saveModulePolicy } from "../src/lib/channels/module-policy.ts";
+
+function openRemindersDB() {
+  const db = openTestDb();
+  saveModulePolicy(db, "reminders", { enabled: true, bark: true, feishu: true, telegram: true });
+  return db;
+}
 import type { ChannelConfig, SendOutcome } from "@/modules/stocks/notify";
 import type { ChannelSendResult } from "@/lib/documents/reminders-run.ts";
 
@@ -39,6 +46,22 @@ function createOnce(db: NonNullable<RemindersRunOptions["db"]>, atMs: number, te
   const scheduleId = getReminder(db, id)!.schedules[0]!.id;
   return { id, scheduleId };
 }
+
+test("reminders module defaults off independently; selection filters each channel", async () => {
+  const db = openTestDb();
+  const created = createOnce(db, T0 - 30_000);
+  const { calls, sender } = spySender();
+  const opts = { db, nowMs: T0, channelsConfig: async () => twoChannelConfig(), channelSender: sender };
+  const disabled = await runRemindersTick(opts);
+  assert.equal(disabled.reason, "module_disabled");
+  assert.equal(calls.length, 0);
+  assert.equal(getReminder(db, created.id)!.schedules[0]!.sent, 0);
+  saveModulePolicy(db, "reminders", { enabled: true, bark: false, feishu: true, telegram: false });
+  const enabled = await runRemindersTick(opts);
+  assert.equal(enabled.dispatches[0]!.action, "sent");
+  assert.deepEqual(calls.map(c => c.name), ["飞书"]);
+  db.close();
+});
 
 test("channels unavailable: tick does nothing but still logs overdue misses", async () => {
   const db = openRemindersDB();

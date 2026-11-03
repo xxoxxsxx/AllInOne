@@ -1,4 +1,11 @@
 /* 提醒事项样式：沿用全局设计变量（--surface/--border/--accent/--ok/--warn/--danger）。 */
+.rem-push-settings { border: 1px solid var(--border); background: var(--surface); border-radius: 14px; padding: 18px; display: grid; gap: 12px; }
+.rem-push-settings h2 { font-size: 16px; margin: 0 0 6px; }
+.rem-push-settings p { color: var(--text-2); font-size: 13px; line-height: 1.6; margin: 0; }
+.rem-push-settings label { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; font-size: 14px; }
+.rem-push-settings fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.rem-push-settings legend { color: var(--text-2); font-size: 12px; }
+.rem-push-settings button { justify-self: start; }
 
 .rem-page {
   display: flex;
