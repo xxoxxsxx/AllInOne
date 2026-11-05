@@ -139,7 +139,13 @@
 .fl-upload input{display:block;max-width:100%;font-size:11px;margin-top:5px}
 
 /* —— 响应式 —— */
-@media(max-width:900px){.fl-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.fl-stats{grid-template-columns:repeat(3,1fr)}.fl-flow li span{display:none}}
+@media(max-width:900px){.fl-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.fl-flow li span{display:none}
+  /* 5 个统计格排 3 列：行首格(第 4 个)不再继承 border-left，行间补上分隔线 */
+  .fl-stats{grid-template-columns:repeat(3,1fr)}
+  .fl-stats div:nth-child(3n+1){border-left:0}
+  .fl-stats div:nth-child(n+4){border-top:1px solid var(--line)}
+  /* 561-900px 时 fieldset 若仍排 3 列，日期输入只剩约 84px 宽，值显示不全 */
+  .fl-fieldset{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){
   .fl-page{padding:26px 16px 70px}
   .fl-hero{flex-direction:column;align-items:stretch;padding:26px 22px 40px}
@@ -147,9 +153,14 @@
   .fl-stats{grid-template-columns:repeat(2,1fr)}
   .fl-stats div{padding:14px 16px}
   .fl-stats div+div{border-left:0}
+  /* 2 列布局恢复右列竖线 + 行间横线，行首格不带残留左边框 */
+  .fl-stats div:nth-child(even){border-left:1px solid var(--line)}
+  .fl-stats div:nth-child(n+3){border-top:1px solid var(--line)}
   .fl-form-grid{grid-template-columns:1fr}
   .fl-fieldset{grid-template-columns:1fr}
   .fl-grid{grid-template-columns:1fr}
   .fl-collection-head{align-items:stretch;flex-direction:column}.fl-search{width:100%}
+  /* 16px 以下可输入控件会触发 iOS Safari 聚焦自动放大（同 settings 面板约定） */
+  .fl-fieldset input,.fl-fieldset select,.fl-fieldset textarea,.fl-search{font-size:16px}
 }
 @media(prefers-reduced-motion:reduce){.fl-page *{transition:none!important}}

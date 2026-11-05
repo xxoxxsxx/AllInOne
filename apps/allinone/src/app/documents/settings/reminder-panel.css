@@ -248,6 +248,9 @@
   .reminder-save-bar { align-items: stretch; }
   .reminder-save-bar .reminder-actions { width: 100%; }
   .reminder-save-bar .reminder-actions .reminder-button { flex: 1 1 auto; }
+  /* 16px 以下可输入控件会触发 iOS Safari 自动放大 */
+  .reminder-field input,
+  .reminder-field select { font-size: 16px; }
 }
 @media (max-width: 360px) {
   .reminder-channel-controls { width: 100%; justify-content: space-between; }

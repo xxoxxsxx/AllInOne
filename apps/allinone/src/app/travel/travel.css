@@ -714,6 +714,8 @@ textarea.input {
   width: 100%;
   max-width: 680px;
   max-height: 88vh;
+  /* 移动端地址栏收展会改变可视高度：vh 偏大时底部弹层顶部会顶进浏览器 UI，用 dvh 校正 */
+  max-height: 88dvh;
   overflow: auto;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -778,6 +780,8 @@ textarea.input {
   display: flex;
   align-items: end;
   gap: 8px;
+  /* 弹层 1fr 1fr 双列在 ≤375px 手机上每列仅约 148px，两个按钮不换行会被压缩 */
+  flex-wrap: wrap;
 }
 .t-field-actions > span {
   display: none;
@@ -1263,4 +1267,14 @@ textarea.input {
   border-radius: 6px;
   background: none;
   cursor: pointer;
+}
+
+/* —— 移动端表单 —— */
+/* 16px 以下可输入控件会触发 iOS Safari 聚焦自动放大（同 reminder-panel / t-day-title 约定） */
+@media (max-width: 640px) {
+  .input,
+  .new-trip-input,
+  .t-day-title {
+    font-size: 16px;
+  }
 }

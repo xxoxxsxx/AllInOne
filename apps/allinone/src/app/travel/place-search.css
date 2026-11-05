@@ -196,3 +196,8 @@
 .travel-search-buttons button:disabled { opacity: .5; cursor: not-allowed; }
 .travel-search-buttons button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .travel-search-form input { min-width: 0; width: 100%; }
+
+/* 16px 以下可输入控件会触发 iOS Safari 聚焦自动放大 */
+@media (max-width: 640px) {
+  .travel-search-form input { font-size: 16px; }
+}

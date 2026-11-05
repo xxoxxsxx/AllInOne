@@ -152,6 +152,7 @@ code { padding: 2px 5px; border-radius: 4px; background: #edf2f0; color: #286d65
   .grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px; }
   .page-head { display: block; }
   .page-head > .status-pill { margin-top: 12px; }
   .header-inner, .site-main, .site-footer { width: min(100% - 28px, 1200px); }

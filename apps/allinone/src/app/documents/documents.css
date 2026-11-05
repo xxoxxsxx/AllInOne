@@ -577,6 +577,8 @@
   border-radius: var(--radius);
   width: min(640px, 100%);
   max-height: min(86vh, 760px);
+  /* 移动端地址栏收展会改变可视高度：vh 偏大时弹窗上下边会被浏览器 UI 遮住，用 dvh 校正 */
+  max-height: min(86dvh, 760px);
   display: flex;
   flex-direction: column;
   box-shadow: 0 12px 40px rgb(0 0 0 / 25%);
@@ -871,6 +873,21 @@
 }
 
 @media (max-width: 640px) {
+  /* iOS Safari 会自动放大 16px 以下的可输入控件 */
+  .docs-filters select,
+  .docs-search,
+  .docs-field input,
+  .docs-field select,
+  .docs-field textarea,
+  .docs-manage-add input {
+    font-size: 16px;
+  }
+
+  .docs-filters select,
+  .docs-search {
+    min-height: 44px;
+  }
+
   .docs-row-meta,
   .docs-row-tags {
     display: none;
@@ -1225,6 +1242,18 @@
 @media (max-width: 560px) {
   .docs-facts {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ---- 移动端 ---- */
+@media (max-width: 640px) {
+  /* hero 收紧：与 /documents/settings 移动端（.rpg-page .docs-hero）保持一致 */
+  .docs-hero {
+    padding: 20px 16px 18px;
+  }
+
+  .docs-title {
+    font-size: 24px;
   }
 }
 

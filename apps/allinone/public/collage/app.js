@@ -124,7 +124,7 @@ for(const [id,key] of [['zoom','zoom'],['focus-x','focusX'],['focus-y','focusY']
 $('reset').addEventListener('click',()=>{cells[selected]={...emptyCell(),photoId:cells[selected].photoId};updateCropUI();requestRender();});
 function canvasPoint(e){const r=preview.getBoundingClientRect();return {x:(e.clientX-r.left)*preview.width/r.width,y:(e.clientY-r.top)*preview.height/r.height};}
 preview.addEventListener('pointerdown',e=>{
-  if(e.button!==0)return;const point=canvasPoint(e);
+  if(drag||wmDrag||(e.pointerType==='mouse'&&e.button!==0))return;const point=canvasPoint(e);
   const cssScale=preview.width/(preview.getBoundingClientRect().width||preview.width);
   // Watermarks first: the grip resizes size-only, a text hit moves that mark,
   // and a miss clears watermark selection so the photo crop gesture takes over.
@@ -174,7 +174,10 @@ preview.addEventListener('pointermove',e=>{
   if(!cursor&&watermarkHitTest(wmLayouts,point,WM_HIT_TOLERANCE*cssScale,activeWatermarkId))cursor='grab';
   if(preview.style.cursor!==cursor)preview.style.cursor=cursor;
 });
-for(const event of ['pointerup','pointercancel','lostpointercapture'])preview.addEventListener(event,()=>{if(wmDrag){wmDrag=null;saveWatermarks();}drag=null;});
+for(const event of ['pointerup','pointercancel','lostpointercapture'])preview.addEventListener(event,e=>{
+  if(wmDrag&&e.pointerId===wmDrag.pointerId){wmDrag=null;saveWatermarks();}
+  if(drag&&e.pointerId===drag.pointer)drag=null;
+});
 preview.addEventListener('keydown',e=>{
   if(activeWatermarkId){
     const mark=watermarks.find(m=>m.id===activeWatermarkId);

@@ -110,3 +110,8 @@
   font-size: 12px;
   color: var(--text-2);
 }
+
+/* 16px 以下可输入控件会触发 iOS Safari 聚焦自动放大 */
+@media (max-width: 640px) {
+  .travel-settings-form input { font-size: 16px; }
+}

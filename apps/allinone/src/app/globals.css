@@ -562,7 +562,29 @@ a {
   font-weight: 600;
 }
 
+@media (max-width: 640px) {
+  /* iOS Safari zooms into editable controls smaller than 16px. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 @media (max-width: 480px) {
+  .site-header-inner {
+    padding-inline: 12px;
+  }
+
+  .site-nav a {
+    padding-inline: 8px;
+    min-height: 44px;
+  }
+
+  .category-chip {
+    min-height: 44px;
+  }
+
   .tool-grid {
     grid-template-columns: 1fr;
   }

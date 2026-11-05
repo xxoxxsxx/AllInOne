@@ -627,4 +627,11 @@
   .rem-list {
     grid-template-columns: 1fr;
   }
+
+  /* 16px 以下可输入控件会触发 iOS Safari 聚焦自动放大（同 reminder-panel 约定） */
+  .rem-field input,
+  .rem-field select,
+  .rem-field textarea {
+    font-size: 16px;
+  }
 }
