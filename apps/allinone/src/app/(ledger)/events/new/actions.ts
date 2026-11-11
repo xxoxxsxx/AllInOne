@@ -62,11 +62,20 @@ export async function createEventAction(formData: FormData) {
   const savedAt = getCurrentShanghaiDateTimeLocal();
   const occurredAt = getString(formData, "occurredAt") || savedAt;
   const redeemedAt = getString(formData, "redeemedAt") || savedAt;
+  const priceOverrides = {
+    costPrice: getString(formData, "costPrice"),
+    salePrice: getString(formData, "salePrice"),
+    supplyPrice: getString(formData, "supplyPrice"),
+    platformFeeRatePercent: getString(formData, "platformFeeRatePercent"),
+    platformFeeFixedAmount: getString(formData, "platformFeeFixedAmount"),
+    platformFeeAmount: getString(formData, "platformFeeAmount"),
+  };
   let errorMessage: string | undefined;
 
   try {
     if (kind === "issue_self") {
       await createIssueSelf({
+        ...priceOverrides,
         occurredAt,
         redeemedAt,
         packageCode: getString(formData, "packageCode"),
@@ -78,6 +87,7 @@ export async function createEventAction(formData: FormData) {
 
     if (kind === "issue_reseller") {
       await createIssueReseller({
+        ...priceOverrides,
         occurredAt,
         redeemedAt,
         counterpartyCode: getString(formData, "counterpartyCode"),

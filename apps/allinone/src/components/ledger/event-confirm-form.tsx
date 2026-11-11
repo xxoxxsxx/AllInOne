@@ -120,6 +120,20 @@ function getCreateSummary(form: HTMLFormElement, kind: EventType) {
     });
   }
 
+  if (kind === "issue_self" || kind === "issue_reseller") {
+    const priceFields = [
+      { label: "成本价", name: "costPrice" },
+      kind === "issue_self" ? { label: "售卖价", name: "salePrice" } : { label: "供货价", name: "supplyPrice" },
+      { label: "手续费比例（%）", name: "platformFeeRatePercent" },
+      { label: "固定手续费", name: "platformFeeFixedAmount" },
+      { label: "平台手续费", name: "platformFeeAmount" },
+    ];
+    for (const field of priceFields) {
+      const value = getInputValue(form, field.name);
+      if (value) items.push({ label: field.label, value });
+    }
+  }
+
   const note = getInputValue(form, "note");
 
   if (note) {

@@ -142,7 +142,7 @@ function PricingSummary(props: {
 
   return (
     <div className="sm:col-span-2 rounded-2xl border border-dashed border-border bg-white/60 px-4 py-4 text-sm">
-      <p className="font-medium text-foreground">价格预览</p>
+      <p className="font-medium text-foreground">配置价格参考（不含下方调整）</p>
       <div className="mt-3 grid gap-2 text-muted sm:grid-cols-2 lg:grid-cols-4">
         <p>成本价：{formatAmount(packageOption.cost_price)}</p>
         <p>{kind === "issue_self" ? "售卖价" : "供货价"}：{formatAmount(basePrice)}</p>
@@ -162,6 +162,7 @@ function PricingSummary(props: {
 function PriceSnapshotFields(props: {
   kind: EventType;
   values: EventEditValues;
+  mode: "create" | "update";
 }) {
   if (props.kind !== "issue_self" && props.kind !== "issue_reseller") {
     return null;
@@ -172,9 +173,11 @@ function PriceSnapshotFields(props: {
   return (
     <div className="sm:col-span-2 rounded-2xl border border-accent/30 bg-accent/5 p-4 sm:p-5">
       <div>
-        <p className="text-sm font-semibold text-foreground">历史价格快照</p>
+        <p className="text-sm font-semibold text-foreground">{props.mode === "create" ? "调整本次价格" : "历史价格快照"}</p>
         <p className="mt-1 text-xs leading-6 text-muted">
-          这里保存的是当前事件当时的价格。修改套餐、下游或平台配置不会自动带入，留空会清除该事件的价格快照。
+          {props.mode === "create"
+            ? "选填：留空使用上方配置价格；修改价格或手续费规则后，平台手续费自动重新计算，也可手动填写。"
+            : "这里保存的是当前事件当时的价格。修改套餐、下游或平台配置不会自动带入，留空会清除该事件的价格快照。"}
         </p>
       </div>
 
@@ -377,9 +380,8 @@ export function EventEditFields(props: {
           platformOption={platformOption}
           resellerPackagePrice={resellerPackagePrice}
         />
-      ) : (
-        <PriceSnapshotFields kind={kind} values={values} />
-      )}
+      ) : null}
+      <PriceSnapshotFields kind={kind} values={values} mode={mode} />
 
       <div className="sm:col-span-2">
         <TextareaField

@@ -71,13 +71,18 @@ type EventUpdateInput = {
   supplyPrice: string;
 };
 
-type IssueSelfInput = BaseEventInput & {
+type CreatePriceOverrides = Partial<Pick<EventUpdateInput,
+  "costPrice" | "salePrice" | "supplyPrice" | "platformFeeRatePercent" |
+  "platformFeeFixedAmount" | "platformFeeAmount"
+>>;
+
+type IssueSelfInput = BaseEventInput & CreatePriceOverrides & {
   cdk: string;
   packageCode: string;
   platformCode: string;
 };
 
-type IssueResellerInput = BaseEventInput & {
+type IssueResellerInput = BaseEventInput & CreatePriceOverrides & {
   cdk: string;
   counterpartyCode: string;
   packageCode: string;
@@ -370,7 +375,7 @@ function normalizePriceSnapshot(snapshot: PriceSnapshot): PriceSnapshot {
 
 function buildUpdatedPriceSnapshot(
   eventType: EventType,
-  input: EventUpdateInput,
+  input: Pick<EventUpdateInput, "costPrice" | "salePrice" | "supplyPrice" | "platformFeeRatePercent" | "platformFeeFixedAmount" | "platformFeeAmount">,
 ): PriceSnapshot {
   if (eventType !== "issue_self" && eventType !== "issue_reseller") {
     return {
@@ -469,6 +474,21 @@ function calculatePlatformFee(
   const feeCents = Math.round(baseCents * rateUnits / 1000000) + fixedCents;
 
   return formatMoneyCents(feeCents);
+}
+
+function applyCreatePriceOverrides(kind: "issue_self" | "issue_reseller", defaults: PriceSnapshot, input: CreatePriceOverrides): PriceSnapshot {
+  const costPrice = input.costPrice?.trim() || defaults.cost_price || "";
+  const salePrice = input.salePrice?.trim() || defaults.sale_price || "";
+  const supplyPrice = input.supplyPrice?.trim() || defaults.supply_price || "";
+  const platformFeeRatePercent = input.platformFeeRatePercent?.trim() || defaults.platform_fee_rate_percent || "";
+  const platformFeeFixedAmount = input.platformFeeFixedAmount?.trim() || defaults.platform_fee_fixed_amount || "";
+  const basePrice = kind === "issue_self" ? salePrice : supplyPrice;
+  const platformFeeAmount = input.platformFeeAmount?.trim() || (
+    basePrice && platformFeeRatePercent && platformFeeFixedAmount
+      ? calculatePlatformFee(basePrice, platformFeeRatePercent, platformFeeFixedAmount)
+      : defaults.platform_fee_amount || ""
+  );
+  return buildUpdatedPriceSnapshot(kind, { costPrice, salePrice, supplyPrice, platformFeeRatePercent, platformFeeFixedAmount, platformFeeAmount });
 }
 
 async function getPriceSnapshot(
@@ -1071,11 +1091,11 @@ export async function createIssueSelf(input: IssueSelfInput) {
         throw new Error("该 CDK 已存在有效成功记录，不能重复登记。");
       }
 
-      const priceSnapshot = await getPriceSnapshot(query, {
+      const priceSnapshot = applyCreatePriceOverrides("issue_self", await getPriceSnapshot(query, {
         eventType: "issue_self",
         packageCode,
         platformCode,
-      });
+      }), input);
 
       await query(
         `
@@ -1142,12 +1162,12 @@ export async function createIssueReseller(input: IssueResellerInput) {
         throw new Error("该 CDK 已存在有效成功记录，不能重复登记。");
       }
 
-      const priceSnapshot = await getPriceSnapshot(query, {
+      const priceSnapshot = applyCreatePriceOverrides("issue_reseller", await getPriceSnapshot(query, {
         counterpartyCode,
         eventType: "issue_reseller",
         packageCode,
         platformCode,
-      });
+      }), input);
 
       await query(
         `
