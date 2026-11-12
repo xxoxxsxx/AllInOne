@@ -5,7 +5,11 @@ import path from "node:path";
 import Database from "better-sqlite3";
 
 import { dataDir } from "@/lib/data-dir";
-import { LEDGER_SCHEMA_SQL } from "@/lib/ledger/schema-sql";
+import {
+  LEDGER_EVENTS_INDEXES_SQL,
+  LEDGER_EVENTS_TABLE_SQL,
+  LEDGER_SCHEMA_SQL,
+} from "@/lib/ledger/schema-sql";
 
 export type LedgerQueryResult<T> = {
   rows: T[];
@@ -89,6 +93,48 @@ export function getDb() {
 export function ensureLedgerSchema() {
   const db = getDb();
   db.exec(LEDGER_SCHEMA_SQL);
+  migrateEventsShapeIfLegacy();
+}
+
+// 存量库迁移：旧版 events_shape_valid 要求 replace 的 related_cdk 非空；换新允许仅作废旧 CDK 后
+// 需要放宽 CHECK。SQLite 无法修改 CHECK，检测到旧约束文本时按 SQLite 官方流程整表重建：
+// 关外键 → 事务内建 events_new → 搬数据 → 删旧表 → 改名 → 重建索引 → 外键校验。
+function migrateEventsShapeIfLegacy() {
+  const db = getDb();
+  const table = db
+    .prepare(
+      "select sql from sqlite_master where type = 'table' and name = 'events'",
+    )
+    .get() as { sql: string } | undefined;
+
+  if (!table || !table.sql.includes("related_cdk is not null")) {
+    return;
+  }
+
+  const eventsNewSql = LEDGER_EVENTS_TABLE_SQL.replace(
+    "create table if not exists events",
+    "create table events_new",
+  );
+
+  db.pragma("foreign_keys = OFF");
+  db.pragma("legacy_alter_table = ON");
+  try {
+    db.transaction(() => {
+      db.exec(eventsNewSql);
+      db.exec("insert into events_new select * from events");
+      db.exec("drop table events");
+      db.exec("alter table events_new rename to events");
+      db.exec(LEDGER_EVENTS_INDEXES_SQL);
+
+      const violations = db.pragma("foreign_key_check") as unknown[];
+      if (violations.length > 0) {
+        throw new Error("events 表重建后外键校验失败。");
+      }
+    })();
+  } finally {
+    db.pragma("legacy_alter_table = OFF");
+    db.pragma("foreign_keys = ON");
+  }
 }
 
 // 供调用方在启动时调用；进程内只建一次。

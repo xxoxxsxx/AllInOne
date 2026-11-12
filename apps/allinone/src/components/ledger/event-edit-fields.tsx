@@ -355,13 +355,15 @@ export function EventEditFields(props: {
             defaultValue={values.cdk}
             placeholder="输入旧 CDK"
           />
-          <InputField
-            name="relatedCdk"
-            label="新 CDK"
-            required
-            defaultValue={values.relatedCdk}
-            placeholder="输入新 CDK"
-          />
+          <div className="flex flex-col gap-2">
+            <InputField
+              name="relatedCdk"
+              label="新 CDK（选填）"
+              defaultValue={values.relatedCdk}
+              placeholder="留空表示仅作废旧 CDK"
+            />
+            <p className="text-xs text-muted">留空时仅作废旧 CDK，不激活新 CDK。</p>
+          </div>
         </>
       ) : (
         <InputField

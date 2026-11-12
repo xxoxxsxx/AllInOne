@@ -15,67 +15,13 @@
 // - 0006：packages 价格列、sales_platforms 手续费列、reseller_package_prices 表、事件价格快照列及其 CHECK；
 // - 0007：refund 相关列、events_event_type_valid 加入 refund、events_refund_valid、events_shape_valid 的
 //   refund 分支、events_source_event_idx 部分索引。
+// 后续放宽：events_shape_valid 的 replace 分支允许 related_cdk 为空（换新可仅作废旧 CDK，
+// 不强制填新 CDK）。SQLite 无法修改 CHECK，存量库由 db.ts 的整表重建迁移负责放宽。
 // PG 迁移中 NOT VALID 的历史语义（仅约束新增/修改行）无法在 SQLite 表达，新库全量生效即等价。
 
-export const LEDGER_SCHEMA_SQL: string = `
-create table if not exists packages (
-  code text primary key not null,
-  name text not null,
-  is_active integer not null default 1 check (is_active in (0, 1)),
-  is_default integer not null default 0 check (is_default in (0, 1)),
-  sort_order integer not null default 0,
-  cost_price text null,
-  sale_price text null,
-  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at text null,
-  constraint packages_code_trimmed check (code = lower(trim(code))),
-  constraint packages_code_present check (code <> ''),
-  constraint packages_name_present check (trim(name) <> ''),
-  constraint packages_cost_price_nonnegative check (cost_price is null or cast(cost_price as numeric) >= 0),
-  constraint packages_sale_price_nonnegative check (sale_price is null or cast(sale_price as numeric) >= 0)
-);
-
-create table if not exists resellers (
-  code text primary key not null,
-  name text not null,
-  is_active integer not null default 1 check (is_active in (0, 1)),
-  is_default integer not null default 0 check (is_default in (0, 1)),
-  sort_order integer not null default 0,
-  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at text null,
-  constraint resellers_code_trimmed check (code = lower(trim(code))),
-  constraint resellers_code_present check (code <> ''),
-  constraint resellers_name_present check (trim(name) <> '')
-);
-
-create table if not exists sales_platforms (
-  code text primary key not null,
-  name text not null,
-  is_active integer not null default 1 check (is_active in (0, 1)),
-  is_default integer not null default 0 check (is_default in (0, 1)),
-  sort_order integer not null default 0,
-  fee_rate_percent text not null default '0',
-  fee_fixed_amount text not null default '0',
-  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at text null,
-  constraint sales_platforms_code_trimmed check (code = lower(trim(code))),
-  constraint sales_platforms_code_present check (code <> ''),
-  constraint sales_platforms_name_present check (trim(name) <> ''),
-  constraint sales_platforms_fee_rate_nonnegative check (cast(fee_rate_percent as numeric) >= 0),
-  constraint sales_platforms_fee_fixed_nonnegative check (cast(fee_fixed_amount as numeric) >= 0)
-);
-
-create table if not exists reseller_package_prices (
-  reseller_code text not null references resellers(code) on update restrict on delete restrict,
-  package_code text not null references packages(code) on update restrict on delete restrict,
-  supply_price text not null,
-  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at text null,
-  primary key (reseller_code, package_code),
-  constraint reseller_package_prices_supply_nonnegative check (cast(supply_price as numeric) >= 0)
-);
-
-create table if not exists events (
+// events 表 DDL 单独导出：存量库的 CHECK 放宽需要整表重建（SQLite 不能修改 CHECK），
+// 重建时复用同一份定义，保证新库与迁移后的老库结构一致。
+export const LEDGER_EVENTS_TABLE_SQL: string = `create table if not exists events (
   id text primary key not null,
   event_type text not null,
   occurred_at text not null,
@@ -143,7 +89,6 @@ create table if not exists events (
       and package_code is not null
       and platform_code is not null
       and cdk is not null
-      and related_cdk is not null
       and counterparty_code is null
     )
   ),
@@ -201,33 +146,14 @@ create table if not exists events (
       )
     )
   )
-);
+);`;
 
+// events 的全部索引：ensureLedgerSchema 和整表重建迁移共用；重建 drop 表时索引随表删除，需重建。
+export const LEDGER_EVENTS_INDEXES_SQL: string = `
 -- 0002：CDK 去重唯一约束（部分索引）。
 create unique index if not exists events_type_occurred_cdk_unique_idx
   on events (event_type, occurred_at, cdk)
   where cdk is not null;
-
-create index if not exists packages_active_sort_idx
-  on packages (is_active desc, sort_order asc, created_at asc);
-
-create index if not exists resellers_active_sort_idx
-  on resellers (is_active desc, sort_order asc, created_at asc);
-
-create index if not exists sales_platforms_active_sort_idx
-  on sales_platforms (is_active desc, sort_order asc, created_at asc);
-
-create unique index if not exists packages_default_unique_idx
-  on packages (is_default)
-  where is_default = 1;
-
-create unique index if not exists resellers_default_unique_idx
-  on resellers (is_default)
-  where is_default = 1;
-
-create unique index if not exists sales_platforms_default_unique_idx
-  on sales_platforms (is_default)
-  where is_default = 1;
 
 create index if not exists events_occurred_at_idx
   on events (occurred_at desc, created_at desc);
@@ -256,8 +182,91 @@ create index if not exists events_redeemed_at_idx
 create index if not exists events_source_event_idx
   on events (source_event_id)
   where source_event_id is not null;
+`;
+
+export const LEDGER_SCHEMA_SQL: string = `
+create table if not exists packages (
+  code text primary key not null,
+  name text not null,
+  is_active integer not null default 1 check (is_active in (0, 1)),
+  is_default integer not null default 0 check (is_default in (0, 1)),
+  sort_order integer not null default 0,
+  cost_price text null,
+  sale_price text null,
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at text null,
+  constraint packages_code_trimmed check (code = lower(trim(code))),
+  constraint packages_code_present check (code <> ''),
+  constraint packages_name_present check (trim(name) <> ''),
+  constraint packages_cost_price_nonnegative check (cost_price is null or cast(cost_price as numeric) >= 0),
+  constraint packages_sale_price_nonnegative check (sale_price is null or cast(sale_price as numeric) >= 0)
+);
+
+create table if not exists resellers (
+  code text primary key not null,
+  name text not null,
+  is_active integer not null default 1 check (is_active in (0, 1)),
+  is_default integer not null default 0 check (is_default in (0, 1)),
+  sort_order integer not null default 0,
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at text null,
+  constraint resellers_code_trimmed check (code = lower(trim(code))),
+  constraint resellers_code_present check (code <> ''),
+  constraint resellers_name_present check (trim(name) <> '')
+);
+
+create table if not exists sales_platforms (
+  code text primary key not null,
+  name text not null,
+  is_active integer not null default 1 check (is_active in (0, 1)),
+  is_default integer not null default 0 check (is_default in (0, 1)),
+  sort_order integer not null default 0,
+  fee_rate_percent text not null default '0',
+  fee_fixed_amount text not null default '0',
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at text null,
+  constraint sales_platforms_code_trimmed check (code = lower(trim(code))),
+  constraint sales_platforms_code_present check (code <> ''),
+  constraint sales_platforms_name_present check (trim(name) <> ''),
+  constraint sales_platforms_fee_rate_nonnegative check (cast(fee_rate_percent as numeric) >= 0),
+  constraint sales_platforms_fee_fixed_nonnegative check (cast(fee_fixed_amount as numeric) >= 0)
+);
+
+create table if not exists reseller_package_prices (
+  reseller_code text not null references resellers(code) on update restrict on delete restrict,
+  package_code text not null references packages(code) on update restrict on delete restrict,
+  supply_price text not null,
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at text null,
+  primary key (reseller_code, package_code),
+  constraint reseller_package_prices_supply_nonnegative check (cast(supply_price as numeric) >= 0)
+);
+
+${LEDGER_EVENTS_TABLE_SQL}
+
+create index if not exists packages_active_sort_idx
+  on packages (is_active desc, sort_order asc, created_at asc);
+
+create index if not exists resellers_active_sort_idx
+  on resellers (is_active desc, sort_order asc, created_at asc);
+
+create index if not exists sales_platforms_active_sort_idx
+  on sales_platforms (is_active desc, sort_order asc, created_at asc);
+
+create unique index if not exists packages_default_unique_idx
+  on packages (is_default)
+  where is_default = 1;
+
+create unique index if not exists resellers_default_unique_idx
+  on resellers (is_default)
+  where is_default = 1;
+
+create unique index if not exists sales_platforms_default_unique_idx
+  on sales_platforms (is_default)
+  where is_default = 1;
 
 create index if not exists reseller_package_prices_package_idx
   on reseller_package_prices (package_code);
 
+${LEDGER_EVENTS_INDEXES_SQL}
 `;

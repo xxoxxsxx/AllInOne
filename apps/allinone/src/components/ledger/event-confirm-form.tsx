@@ -110,7 +110,7 @@ function getCreateSummary(form: HTMLFormElement, kind: EventType) {
       },
       {
         label: "新 CDK",
-        value: formatValue(getInputValue(form, "relatedCdk")),
+        value: getInputValue(form, "relatedCdk") || "留空 — 仅作废旧 CDK",
       },
     );
   } else {

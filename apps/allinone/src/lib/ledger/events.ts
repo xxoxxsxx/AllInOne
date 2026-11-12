@@ -859,9 +859,10 @@ function buildUpdatedEvent(
   }
 
   const cdk = assertCdk(input.cdk, "旧 CDK");
-  const relatedCdk = assertCdk(input.relatedCdk, "新 CDK");
+  // 新 CDK 选填：留空表示仅作废旧 CDK，与录入页语义一致。
+  const relatedCdk = normalizeCdk(input.relatedCdk);
 
-  if (cdk === relatedCdk) {
+  if (relatedCdk && cdk === relatedCdk) {
     throw new Error("旧 CDK 和新 CDK 不能相同。");
   }
 
@@ -871,7 +872,7 @@ function buildUpdatedEvent(
     package_code: assertCode(input.packageCode, "套餐类型"),
     platform_code: assertCode(input.platformCode, "售卖平台"),
     cdk,
-    related_cdk: relatedCdk,
+    related_cdk: relatedCdk || null,
     counterparty_code: null,
     note,
   };
@@ -937,10 +938,7 @@ async function assertEventUpdateState(
     return;
   }
 
-  const [oldState, newState] = await Promise.all([
-    getEventState(next.cdk ?? "", query, current.id),
-    getEventState(next.related_cdk ?? "", query, current.id),
-  ]);
+  const oldState = await getEventState(next.cdk ?? "", query, current.id);
 
   if (!oldState.exists_in_history) {
     throw new Error("旧 CDK 不存在历史记录，不能保存换新事件。");
@@ -950,8 +948,12 @@ async function assertEventUpdateState(
     throw new Error("旧 CDK 当前不是有效成功记录，不能保存换新事件。");
   }
 
-  if (newState.is_active) {
-    throw new Error("新 CDK 已存在有效成功记录，不能作为换新结果。");
+  if (next.related_cdk) {
+    const newState = await getEventState(next.related_cdk, query, current.id);
+
+    if (newState.is_active) {
+      throw new Error("新 CDK 已存在有效成功记录，不能作为换新结果。");
+    }
   }
 }
 
@@ -1245,11 +1247,12 @@ export async function createVoid(input: VoidInput) {
 export async function createReplace(input: ReplaceInput) {
   const payload = toEventPayload(input);
   const oldCdk = assertCdk(input.oldCdk, "旧 CDK");
-  const newCdk = assertCdk(input.newCdk, "新 CDK");
+  // 新 CDK 选填：留空表示仅作废旧 CDK，不激活任何新 CDK。
+  const newCdk = normalizeCdk(input.newCdk);
   const packageCode = assertCode(input.packageCode, "套餐类型");
   const platformCode = assertCode(input.platformCode, "售卖平台");
 
-  if (oldCdk === newCdk) {
+  if (newCdk && oldCdk === newCdk) {
     throw new Error("旧 CDK 和新 CDK 不能相同。");
   }
 
@@ -1260,10 +1263,7 @@ export async function createReplace(input: ReplaceInput) {
 
   try {
     await withTransaction(async (query) => {
-      const [oldState, newState] = await Promise.all([
-        getEventState(oldCdk, query),
-        getEventState(newCdk, query),
-      ]);
+      const oldState = await getEventState(oldCdk, query);
 
       if (!oldState.exists_in_history) {
         throw new Error("旧 CDK 不存在历史记录，不能换新。");
@@ -1273,8 +1273,12 @@ export async function createReplace(input: ReplaceInput) {
         throw new Error("旧 CDK 当前不是有效成功记录，不能换新。");
       }
 
-      if (newState.is_active) {
-        throw new Error("新 CDK 已存在有效成功记录，不能作为换新结果。");
+      if (newCdk) {
+        const newState = await getEventState(newCdk, query);
+
+        if (newState.is_active) {
+          throw new Error("新 CDK 已存在有效成功记录，不能作为换新结果。");
+        }
       }
 
       await query(
@@ -1291,7 +1295,7 @@ export async function createReplace(input: ReplaceInput) {
           )
           values (?, 'replace', ?, ?, ?, ?, ?, ?)
         `,
-        [randomUUID(), payload.occurredAt, packageCode, platformCode, oldCdk, newCdk, payload.note],
+        [randomUUID(), payload.occurredAt, packageCode, platformCode, oldCdk, newCdk || null, payload.note],
       );
     });
   } catch (error) {

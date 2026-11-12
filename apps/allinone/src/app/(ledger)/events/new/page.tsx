@@ -131,7 +131,7 @@ export default async function EventNewPage({
                 ? "记录某条 CDK 的作废事件。"
                 : null}
               {kind === "replace"
-                ? "记录旧 CDK 失效并由新 CDK 接替。"
+                ? "记录旧 CDK 失效；新 CDK 选填，留空表示仅作废旧 CDK。"
                 : null}
             </p>
           </div>
@@ -183,7 +183,7 @@ export default async function EventNewPage({
                   <p className="text-sm font-medium text-foreground">当前校验规则</p>
                   <ul className="list-disc space-y-1 pl-5">
                     <li>自营发货和下游代发不能重复登记当前有效 CDK。</li>
-                    <li>换新要求旧 CDK 已存在且当前有效，新 CDK 当前不能有效。</li>
+                    <li>换新要求旧 CDK 已存在且当前有效；新 CDK 选填，填写时不能当前有效。</li>
                     <li>作废要求 CDK 在历史中至少出现过一次。</li>
                     <li>默认配置会自动带出套餐类型、自营/换新的售卖平台和默认下游对象。</li>
                     <li>套餐类型和下游对象必须从启用配置中选择；售卖平台仅自营和换新需要选择。</li>
