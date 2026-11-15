@@ -1753,16 +1753,19 @@ export async function getDashboardStats() {
       continue;
     }
 
-    if (row.event_type === "replace" && row.cdk && row.related_cdk) {
+    if (row.event_type === "replace" && row.cdk) {
       const previous = states.get(row.cdk);
       states.set(row.cdk, {
         active: false,
         category: previous?.category ?? null,
       });
-      states.set(row.related_cdk, {
-        active: true,
-        category: previous?.category ?? null,
-      });
+      // 新 CDK 选填（0008 迁移后 related_cdk 可为空）：留空表示仅作废旧 CDK，不激活新 CDK。
+      if (row.related_cdk) {
+        states.set(row.related_cdk, {
+          active: true,
+          category: previous?.category ?? null,
+        });
+      }
     }
   }
 

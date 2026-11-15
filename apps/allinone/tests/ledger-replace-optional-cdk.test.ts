@@ -12,6 +12,7 @@ import {
 import {
   createIssueSelf,
   createReplace,
+  getDashboardStats,
   updateEvent,
 } from "../src/lib/ledger/events.ts";
 
@@ -174,6 +175,28 @@ test("换新：新 CDK 选填，留空仅作废旧 CDK；填写时保持原有�
       updateEvent({ ...editInput, relatedCdk: "OLD-2" }),
       /旧 CDK 和新 CDK 不能相同/,
     );
+  } finally {
+    cleanupLedger(dir);
+  }
+});
+
+test("首页统计：仅作废旧 CDK 的换新会把旧 CDK 计为失效", async () => {
+  resetLedgerGlobals();
+  let dir = process.env.DATA_DIR;
+  try {
+    initLedgerSchemaIfNeeded();
+    const db = getDb();
+    seedConfig(db);
+    const dashCommon = { occurredAt: "2026-03-01T10:00", note: "", packageCode: "p1", platformCode: "s1" };
+
+    await createIssueSelf({ ...dashCommon, cdk: "DASH-1" });
+    await createIssueSelf({ ...dashCommon, occurredAt: "2026-03-02T10:00", cdk: "DASH-2" });
+    await createReplace({ ...dashCommon, occurredAt: "2026-03-03T10:00", oldCdk: "DASH-1", newCdk: "" });
+
+    const stats = await getDashboardStats();
+    assert.equal(stats.activeTotal, 1);
+    assert.equal(stats.issueSelfActive, 1);
+    assert.equal(stats.voidCount, 0);
   } finally {
     cleanupLedger(dir);
   }
