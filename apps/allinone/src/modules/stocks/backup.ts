@@ -214,7 +214,7 @@ export function validateConfig(b: ConfigBackup): void {
     for (const l of stock.levels) {
       l.target = parseTarget(l.target);
       if (
-        (l.side !== "buy" && l.side !== "sell") ||
+        (l.side !== "buy" && l.side !== "sell" && l.side !== "review") ||
         (l.mode !== "once" && l.mode !== "repeat") ||
         l.cooldown < 1 ||
         l.cooldown > 10080 ||

@@ -277,7 +277,7 @@ export function StockDialog() {
       <div className="panel-head">
         <div>
           <h2 id="stock-dialog-title">添加股票</h2>
-          <p>可以连续添加，也可以直接设置买入和卖出提醒。</p>
+          <p>可以连续添加，也可以直接设置买入、卖出和重新评估提醒。</p>
         </div>
         <button type="button" id="close-stock-dialog" aria-label="关闭添加窗口" onClick={requestClose}>
           关闭

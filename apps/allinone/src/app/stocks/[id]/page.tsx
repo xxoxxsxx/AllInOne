@@ -49,6 +49,13 @@ function SidePicker({ side }: { side: string }) {
           <small>价格 ≥ 目标价</small>
         </span>
       </label>
+      <label className="side-option review-option">
+        <input type="radio" name="side" value="review" defaultChecked={side === "review"} required />
+        <span>
+          <strong>↓ 重新评估</strong>
+          <small>价格 ≤ 目标价</small>
+        </span>
+      </label>
     </fieldset>
   );
 }
@@ -180,7 +187,7 @@ export default async function StockPage({
         </div>
         <div className="add-level" id="add-level">
           <h3>添加提醒价格</h3>
-          <p className="muted small">买入：报价低于或等于目标价；卖出：报价高于或等于目标价。</p>
+          <p className="muted small">买入、重新评估：报价低于或等于目标价；卖出：报价高于或等于目标价。</p>
           <form action={levelAddAction} className="level-fields">
             <input type="hidden" name="id" value={stock.ID} />
             <SidePicker side="buy" />
@@ -204,25 +211,25 @@ export default async function StockPage({
         <details className="rule-help">
           <summary>提醒什么时候会发送？</summary>
           <p>
-            每次有效查询，买入选择已命中的最低目标价，卖出选择已命中的最高目标价；同价位只选最早创建的档位。各档独立计数，已用尽的档位不会转用其他档位次数。买入与卖出同时命中时合并一条通知，分别扣各自次数。所有启用档位的时段额度都用尽后，停止这只股票的本时段自动查询。
+            每次有效查询，买入和重新评估分别选择已命中的最低目标价，卖出选择已命中的最高目标价；同价位只选最早创建的档位。重新评估命中时优先于买入，即使重新评估额度已用尽，也不会发送买入提醒。各档独立计数，已用尽的档位不会转用其他档位次数。多个方向同时命中时合并一条通知，分别扣各自次数。所有启用档位的时段额度都用尽后，停止这只股票的本时段自动查询。
           </p>
         </details>
         <h3 className="level-list-title">已设置的提醒价格</h3>
         {levels.length === 0 ? (
-          <p className="empty-state">还没有提醒价格。上方可添加买入或卖出价格。</p>
+          <p className="empty-state">还没有提醒价格。上方可添加买入、卖出或重新评估价格。</p>
         ) : (
           levels.map((l) => (
             <div className={`level-card level-${l.Side}`} id={`level-${l.ID}`} key={l.ID}>
               {updatedID === l.ID ? <Flash text="提醒已保存。" /> : null}
               <div className="level-heading">
-                <span className="side-badge">{l.Side === "buy" ? "↓ 买入提醒" : "↑ 卖出提醒"}</span>
+                <span className="side-badge">{l.Side === "review" ? "↓ 重新评估" : l.Side === "buy" ? "↓ 买入提醒" : "↑ 卖出提醒"}</span>
                 <span className={`status-pill${l.Enabled ? "" : " is-off"}`}>{l.Enabled ? "每次命中提醒" : "已暂停"}</span>
               </div>
               <div className="target-price">
-                <span>{l.Side === "buy" ? "≤" : "≥"}</span> <strong>{money(l.Target)}</strong> <small>USD</small>
+                <span>{l.Side === "sell" ? "≥" : "≤"}</span> <strong>{money(l.Target)}</strong> <small>USD</small>
               </div>
               <p className="target-rule">
-                {l.Side === "buy" ? "报价低于或等于此价格时提醒买入" : "报价高于或等于此价格时提醒卖出"}
+                {l.Side === "review" ? "报价低于或等于此价格时提醒重新评估" : l.Side === "buy" ? "报价低于或等于此价格时提醒买入" : "报价高于或等于此价格时提醒卖出"}
               </p>
               <p className="target-gap">{l.Gap} · 基于上方保存报价</p>
               <p className="level-quota">

@@ -107,10 +107,24 @@ export async function stockReferenceAction(fd: FormData): Promise<void> {
   goHome({ flash: "reference_saved" });
 }
 
+// —— 档位开关 ——
+export async function levelToggleAction(fd: FormData): Promise<void> {
+  const db = getDB();
+  const stockID = str(fd, "id");
+  const levelID = str(fd, "level");
+  const action = str(fd, "action") === "pause" ? "pause" : "enable";
+  const flash = action === "pause" ? "level_paused" : "level_enabled";
+  const res = db.prepare(`UPDATE levels SET enabled=? WHERE id=? AND stock_id=?`).run(action === "pause" ? 0 : 1, levelID, stockID);
+  if (Number(res.changes) === 0) redirect("/stocks/error/404");
+  revalidatePath(`/stocks/${stockID}`);
+  revalidatePath("/");
+  goHome({ flash });
+}
+
 // —— 档位 ——
 function levelFields(fd: FormData): { side: string; target: string; note: string; limit: number } {
   const side = str(fd, "side");
-  if (side !== "buy" && side !== "sell") throw new Error("方向无效");
+  if (side !== "buy" && side !== "sell" && side !== "review") throw new Error("方向无效");
   const target = parseTarget(str(fd, "target"));
   const note = str(fd, "note").trim();
   if (note.length > 200) throw new Error("备注过长");

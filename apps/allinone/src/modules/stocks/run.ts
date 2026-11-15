@@ -248,9 +248,9 @@ export async function alert(
     channels,
   );
   const lines = levels.map((l) => {
-    const side = l.Side === "sell" ? "卖出" : "买入";
+    const side = l.Side === "review" ? "重新评估" : l.Side === "sell" ? "卖出" : "买入";
     const op = l.Side === "sell" ? "≥" : "≤";
-    return `${side} ${op} ${formatPrice(l.Target)} USD`;
+    return `${side} ${op} ${formatPrice(l.Target)} USD${l.Note ? `\n备注：${l.Note}` : ""}`;
   });
   const body = `${lines.join("\n")}\n查询价 ${stringFixed(q.Price, 2)} USD · 行情时间 ${q.At.toISOString().replace(/\.\d{3}Z$/, "Z")} · ${q.Source}\n仅供提醒，非交易指令`;
   const results: Array<{ Name: string; Status: string; Error: string }> = [];

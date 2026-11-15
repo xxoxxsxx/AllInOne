@@ -1,10 +1,7 @@
 // SQLite 存储：better-sqlite3 同步接口，语义与 Go 版 store.go 一一对应。
 //
-// schema 说明：Go 版把 v1→v13 的迁移链按任务要求拍平成一份初始 DDL，
-// user_version 从 13 起；打开时 user_version <13 或 >13 均报错拒绝运行（=13 正常，
-// 后续版本可在 openDB 内续排升级）。v14–v17（代理地址/耗时字段）与 v19（results.open）
-// 在 Go 侧同样存在且被本移植的查询/备份逻辑使用，故一并并入初始 DDL；
-// 但 user_version 仍按任务约束固定为 13（这些字段自 v14 起带默认值，拍平后语义不变）。
+// 新建库使用完整 DDL；旧库补齐历史字段，v21 重建档位表以支持独立的重新评估提醒。
+// 迁移保留档位标识和提醒状态；拒绝打开比当前程序更新的数据库。
 
 import Database from "better-sqlite3";
 import fs from "node:fs";
@@ -25,9 +22,8 @@ import {
   type Decimal,
 } from "./decimal";
 
-// 目标 schema 版本：Go 版部署链实际到 v19（v14-17 代理字段、v19 results.open）。
-// DDL 已按 v19 拍平；打开 13..19 的真实 Go 库时用幂等 ALTER 补齐缺列后升到 19。
-export const SCHEMA_VERSION = 20;
+// v20：双行情源；v21：重新评估档位。
+export const SCHEMA_VERSION = 21;
 
 export type Stock = {
   ID: number;
@@ -53,6 +49,7 @@ export type Stock = {
   BuyBasis: string;
   BuyLevels: Level[];
   SellLevels: Level[];
+  ReviewLevels: Level[];
 };
 
 export type Result = {
@@ -192,7 +189,7 @@ CREATE TABLE IF NOT EXISTS results (run_id INTEGER NOT NULL REFERENCES runs(id),
 CREATE INDEX IF NOT EXISTS results_symbol_run ON results(symbol,run_id DESC);
 CREATE INDEX IF NOT EXISTS results_symbol_ok ON results(symbol,run_id DESC) WHERE status='ok';
 CREATE TABLE IF NOT EXISTS levels (id INTEGER PRIMARY KEY, stock_id INTEGER NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,
-  side TEXT NOT NULL CHECK(side IN ('buy','sell')), target TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
+  side TEXT NOT NULL CHECK(side IN ('buy','sell','review')), target TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
   enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), generation INTEGER NOT NULL DEFAULT 1, alerted_generation INTEGER,
   mode TEXT NOT NULL DEFAULT 'once' CHECK(mode IN ('once','repeat')),
   cooldown INTEGER NOT NULL DEFAULT 60 CHECK(cooldown BETWEEN 1 AND 10080),
@@ -248,7 +245,22 @@ function upgradeToCurrent(db: Database.Database, from: number): void {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
     }
   }
-  db.pragma(`user_version = ${SCHEMA_VERSION}`);
+  if (from > 0 && from < 21) {
+    // SQLite cannot alter a CHECK constraint. Preserve all IDs, UIDs and quota state.
+    db.transaction(() => {
+      const definition = SCHEMA_DDL.match(/CREATE TABLE IF NOT EXISTS levels \([\s\S]*?\);/)![0];
+      db.exec(definition.replace("IF NOT EXISTS levels", "levels_upgrade"));
+      const columns = "id,stock_id,side,target,note,enabled,generation,alerted_generation,mode,cooldown,last_attempt,max_alerts,uid";
+      db.exec(`INSERT INTO levels_upgrade (${columns}) SELECT ${columns} FROM levels;
+        DROP TABLE levels;
+        ALTER TABLE levels_upgrade RENAME TO levels;
+        CREATE UNIQUE INDEX levels_uid ON levels(uid) WHERE uid!='';
+        CREATE INDEX levels_stock_side ON levels(stock_id,side);`);
+      db.pragma(`user_version = ${SCHEMA_VERSION}`);
+    })();
+  } else {
+    db.pragma(`user_version = ${SCHEMA_VERSION}`);
+  }
 }
 
 export function openDB(dir?: string, file = "ticker.db"): Database.Database {
@@ -390,6 +402,7 @@ export function listStocks(db: Database.Database): Stock[] {
       BuyBasis: "",
       BuyLevels: [],
       SellLevels: [],
+      ReviewLevels: [],
     };
     const [dayChange, dayPercent, dayClass] = dayMove(s.LastPrice, s.PrevClose);
     s.DayChange = dayChange;
@@ -423,7 +436,7 @@ export function getStock(db: Database.Database, id: number): Stock | null {
     ReferenceBuy: String(r.reference_buy),
     LastPrice: "", Open: "", PrevClose: "", DayChange: "", DayPercent: "", DayClass: "",
     LastAt: "", LastSource: "", LastStatus: "", LastError: "", TimeField: "", AssetOK: false,
-    AlertReason: "", WindowStatus: "", WindowCapped: false, BuyBasis: "", BuyLevels: [], SellLevels: [],
+    AlertReason: "", WindowStatus: "", WindowCapped: false, BuyBasis: "", BuyLevels: [], SellLevels: [], ReviewLevels: [],
   };
 }
 
@@ -617,14 +630,18 @@ export function dueLevels(db: Database.Database, stockID: number, price: Decimal
   const levels = listLevels(db, stockID);
   let buy: Level | null = null;
   let sell: Level | null = null;
+  let review: Level | null = null;
   for (const l of levels) {
     if (!l.Enabled) continue;
     const d = parseDecimal(l.Target);
     if (!d) throw new Error(`档位价格无效: ${l.Target}`);
     const isBuy = l.Side === "buy";
-    const hit = isBuy ? cmpDec(price, d) <= 0 : cmpDec(price, d) >= 0;
+    const hit = l.Side === "sell" ? cmpDec(price, d) >= 0 : cmpDec(price, d) <= 0;
     if (!hit) continue;
-    if (isBuy) {
+    if (l.Side === "review") {
+      const cur = review ? parseDecimal(review.Target) : null;
+      if (!cur || cmpDec(d, cur) < 0) review = l;
+    } else if (isBuy) {
       const cur = buy ? parseDecimal(buy.Target) : null;
       if (!cur || cmpDec(d, cur) < 0) buy = l;
     } else {
@@ -633,7 +650,9 @@ export function dueLevels(db: Database.Database, stockID: number, price: Decimal
     }
   }
   const out: Level[] = [];
-  if (buy) out.push(buy);
+  // A risk-review threshold overrides buy suggestions, even if its notification quota is exhausted.
+  if (review) out.push(review);
+  else if (buy) out.push(buy);
   if (sell) out.push(sell);
   return out;
 }
@@ -743,11 +762,11 @@ export function targetGap(side: string, target: string, price: string): string {
   if (!p || !isPositive(p)) return "暂无报价，无法计算差距";
   const t = parseDecimal(target);
   if (!t) return "目标价无效";
-  const hit = (side === "buy" && cmpDec(p, t) <= 0) || (side === "sell" && cmpDec(p, t) >= 0);
+  const hit = ((side === "buy" || side === "review") && cmpDec(p, t) <= 0) || (side === "sell" && cmpDec(p, t) >= 0);
   if (hit) return "报价已达目标（不代表已通知）";
   const diffAbs = subDec(t, p);
   const diff = isPositive(diffAbs) ? diffAbs : subDec(p, t);
-  const direction = side === "buy" ? "下跌" : "上涨";
+  const direction = side === "sell" ? "上涨" : "下跌";
   const pct = mulDec(divDec(diff, p), decFromInt(100));
   return `还需${direction} ${stringFixed(diff, 2)} USD（${stringFixed(pct, 2)}%）`;
 }

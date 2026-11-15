@@ -12,10 +12,16 @@ import type { Quote } from "../../src/modules/stocks/quote.ts";
 // Exercise the real alert path against an isolated channel DB and local Bark server.
 test("股票策略实时生效：默认关闭不占额度，模块选择与全局开关取交集", async () => {
   let sends = 0;
-  const server = http.createServer((_req, res) => {
+  let lastPayload = "";
+  const server = http.createServer((req, res) => {
     sends++;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ code: 200, message: "success" }));
+    let payload = "";
+    req.on("data", chunk => { payload += chunk.toString(); });
+    req.on("end", () => {
+      lastPayload = payload;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ code: 200, message: "success" }));
+    });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const db = openDB(undefined, ":memory:");
@@ -60,10 +66,17 @@ test("股票策略实时生效：默认关闭不占额度，模块选择与全�
     assert.equal(sends, 1, "保存后不重启即可发送");
     assert.deepEqual(db.prepare("SELECT channel FROM notification_channels").all(), [{ channel: "Bark" }]);
 
+    db.prepare("INSERT INTO levels(stock_id,side,target,note,uid) VALUES(?,'review','99','中子火箭技术问题或客户流失时，不是加仓机会','review-level')").run(stockID);
+    assert.equal(await fire(), "成功");
+    assert.equal(sends, 2);
+    assert.match(lastPayload, /重新评估 ≤ 99/);
+    assert.match(lastPayload, /中子火箭技术问题或客户流失时，不是加仓机会/);
+    assert.doesNotMatch(lastPayload, /买入|卖出/);
+
     const countBeforeDisable = notificationCount();
     saveModulePolicy(db, "stocks", { enabled: false, bark: true, feishu: true, telegram: true });
     assert.equal(await fire(), "股票自动推送已关闭");
-    assert.equal(sends, 1);
+    assert.equal(sends, 2);
     assert.equal(notificationCount(), countBeforeDisable, "重新关闭不新增发送记录或额度");
   } finally {
     globalThis.__channelsSqlite = previousChannels;

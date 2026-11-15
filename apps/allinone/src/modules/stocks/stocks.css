@@ -343,14 +343,15 @@ code { padding: 2px 5px; border-radius: 4px; background: #edf2f0; color: #286d65
 /* Use labels and comparison symbols as well as color to distinguish directions. */
 .level-buy, .buy-option { --side-color: #1d579e; --side-bg: #eef5ff; --side-border: #b5cdea; }
 .level-sell, .sell-option { --side-color: #a14c14; --side-bg: #fff4e9; --side-border: #edc6a2; }
-.level-card.level-buy, .level-card.level-sell { border-left: 5px solid var(--side-color); background: var(--side-bg); }
+.level-review, .review-option { --side-color: #6d4296; --side-bg: #f6f0fc; --side-border: #d4bee8; }
+.level-card.level-buy, .level-card.level-sell, .level-card.level-review { border-left: 5px solid var(--side-color); background: var(--side-bg); }
 .side-badge { display: inline-block; color: var(--side-color); font-size: 16px; font-weight: 800; }
 .target-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; color: var(--side-color); }
 .target-price strong { font-size: clamp(28px, 4vw, 38px); line-height: 1.2; overflow-wrap: anywhere; min-width: 0; }
 .target-price > span { font-size: 24px; }
 .target-price small { font-size: 13px; font-weight: 700; }
 .target-rule { margin: 8px 0 18px; color: var(--side-color); font-size: 12px; }
-.side-picker { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-width: 0; margin: 0 0 4px; padding: 0; border: 0; }
+.side-picker { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; min-width: 0; margin: 0 0 4px; padding: 0; border: 0; }
 .side-picker legend { margin-bottom: 8px; color: #344c51; font-size: 13px; font-weight: 700; }
 .side-picker .side-option { display: flex; align-items: center; gap: 9px; padding: 13px; border: 2px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; }
 .side-option input[type="radio"] { width: 17px; height: 17px; flex-shrink: 0; margin: 0; accent-color: var(--side-color); }
@@ -390,6 +391,11 @@ nav a[aria-current="page"] { background: #ffffff22; color: #fff; box-shadow: ins
 .price-chip .target-gap { max-width: 240px; font-weight: 500; }
 .price-chip .price-quota { font-weight: 750; }
 .price-chip .price-quota.is-exhausted { color: #a63e43; }
+.price-chip-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
+.price-chip-actions form { margin: 0; }
+.chip-toggle { padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 700; color: inherit; background: #ffffffd9; border: 1px solid currentColor; border-radius: 999px; cursor: pointer; }
+.chip-toggle:hover { box-shadow: 0 0 0 1.5px currentColor; }
+.chip-toggle.is-paused { color: #166557; font-weight: 750; }
 .default-limit-form { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 18px 0 8px; }
 .default-limit-form label { flex: 0 1 320px; margin: 0; }
 .default-limit-form button { margin: 0; }
@@ -409,7 +415,7 @@ nav a[aria-current="page"] { background: #ffffff22; color: #fff; box-shadow: ins
 .watch-toolbar label { margin: 0; }
 .watch-toolbar label:first-child { flex: 1; }
 .watch-toolbar > span { padding-bottom: 12px; color: var(--muted); font-size: 13px; }
-.watch-columns, .home-layout .watch-item { display: grid; grid-template-columns: minmax(220px, .9fr) minmax(220px, 1fr) minmax(260px, 1.2fr); gap: 16px; }
+.watch-columns, .home-layout .watch-item { display: grid; grid-template-columns: minmax(180px, .9fr) minmax(180px, 1fr) minmax(200px, 1.1fr) minmax(180px, 1fr); gap: 16px; }
 .watch-columns { position: sticky; top: 0; z-index: 2; padding: 14px 18px; background: #eaf0f0; border-radius: 8px; font-weight: 700; font-size: 13px; }
 .home-layout .watch-list { margin-top: 12px; }
 .home-layout .watch-item { padding: 18px; align-items: start; }

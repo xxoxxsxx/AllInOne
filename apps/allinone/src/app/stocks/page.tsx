@@ -15,11 +15,53 @@ import { activeWindow, levelUsage, timezoneValue, windowUsageAll } from "@/modul
 import { nextFireForSchedule, nextWindowOccurrence } from "@/modules/stocks/next-fire";
 import { quoteReadiness, readiness } from "@/modules/stocks/readiness";
 import { displayClock } from "@/modules/stocks/tz";
+import type { Level } from "@/modules/stocks/store";
 import { flashText, money, statusText } from "./display";
-import { stockReferenceAction } from "./actions";
+import { levelToggleAction, stockReferenceAction } from "./actions";
 import { Flash, RunNowButton, StockDialog, WatchFilter } from "./stocks-client";
 
 export const dynamic = "force-dynamic";
+
+// 价格档位卡片：整体点击进详情修改；右上角按钮直接暂停/恢复该档位通知（levelActionAction）。
+function PriceLevelCard({ stockID, side, level }: {
+  stockID: number;
+  side: "buy" | "sell" | "review";
+  level: Level;
+}) {
+  const paused = !level.Enabled;
+  return (
+    <Link
+      href={`/stocks/${stockID}?edit=${level.ID}#edit-level-${level.ID}`}
+      className={`price-chip${paused ? " is-paused" : ""}`}
+    >
+      <strong>{side === "sell" ? "≥" : "≤"} {money(level.Target)}</strong>
+      {level.State ? <small>{level.State}</small> : null}
+      <small className="target-gap">{level.Gap}</small>
+      {side === "sell" ? <small className="expected-profit">{level.Profit}</small> : null}
+      {side === "review" && level.Note ? <small className="level-note">{level.Note}</small> : null}
+      <small
+        className={`price-quota${level.WindowActive && level.Enabled && level.Used >= level.Limit ? " is-exhausted" : ""}`}
+      >
+        {level.WindowActive
+          ? `本时段已提醒 ${level.Used}/${level.Limit} 次`
+          : level.MaxAlerts
+            ? `每时段上限 ${level.MaxAlerts} 次`
+            : "上限继承查询时段"}
+      </small>
+      <span className="price-chip-actions">
+        <small className="price-edit">修改提醒 →</small>
+        <form action={levelToggleAction}>
+          <input type="hidden" name="id" value={stockID} />
+          <input type="hidden" name="level" value={level.ID} />
+          <input type="hidden" name="action" value={paused ? "enable" : "pause"} />
+          <button type="submit" className={`chip-toggle${paused ? " is-paused" : ""}`} title={paused ? "恢复该档位提醒" : "暂停该档位提醒，不影响其他档位"}>
+            {paused ? "恢复提醒" : "暂停提醒"}
+          </button>
+        </form>
+      </span>
+    </Link>
+  );
+}
 
 // 原版 web.go home：Title 为「监控列表」。
 export const metadata = { title: "监控列表 · TickerSentry" };
@@ -39,12 +81,13 @@ export default async function StocksHomePage({
     const { levels, window } = levelUsage(db, s.ID, s.Symbol, nowD, tz);
     for (const l of levels) {
       l.Gap = targetGap(l.Side, l.Target, s.LastPrice);
-      if (l.Side === "buy") s.BuyLevels.push(l);
-      else s.SellLevels.push(l);
     }
+    s.BuyLevels = levels.filter((l) => l.Side === "buy");
+    s.SellLevels = levels.filter((l) => l.Side === "sell");
+    s.ReviewLevels = levels.filter((l) => l.Side === "review");
     setReturns(s);
     s.AlertReason = quoteReadiness(s, nowD);
-    const levelsAll = [...s.BuyLevels, ...s.SellLevels];
+    const levelsAll = [...s.BuyLevels, ...s.SellLevels, ...s.ReviewLevels];
     if (window) {
       let active = 0;
       let exhausted = 0;
@@ -85,7 +128,7 @@ export default async function StocksHomePage({
   // 覆盖首页档位用量（与 Go home() 一致：activeWindow 驱动 Used/Limit 展示）。
   if (active) {
     for (const s of stocks) {
-      for (const group of [s.BuyLevels, s.SellLevels]) {
+      for (const group of [s.BuyLevels, s.SellLevels, s.ReviewLevels]) {
         for (const l of group) {
           l.Used = usage.get(s.Symbol)?.get(l.UID) ?? 0;
           l.Limit = l.MaxAlerts > 0 ? l.MaxAlerts : active.window.max_alerts;
@@ -154,7 +197,7 @@ export default async function StocksHomePage({
             <div>
               <span className="eyebrow">WATCHLIST</span>
               <h2>监控股票</h2>
-              <p>{stocks.length > 0 ? "管理买入或卖出提醒价格，也可继续添加股票。" : "先添加股票，再设置买入或卖出提醒价格。"}</p>
+              <p>{stocks.length > 0 ? "管理买入、卖出或重新评估提醒价格，也可继续添加股票。" : "先添加股票，再设置买入、卖出或重新评估提醒价格。"}</p>
             </div>
             <button className="primary add-stock-button" type="button" data-add-stock="true">
               ＋ 添加股票
@@ -185,6 +228,7 @@ export default async function StocksHomePage({
                 <span>股票 / 报价</span>
                 <span>↓ 买入目标</span>
                 <span>↑ 卖出目标 / 预计收益</span>
+                <span>↓ 重新评估</span>
               </div>
               <div className="watch-list">
                 {stocks.map((s) => (
@@ -280,25 +324,7 @@ export default async function StocksHomePage({
                         <div className="price-chips">
                           {s.BuyLevels.length > 0 ? (
                             s.BuyLevels.map((l) => (
-                              <Link
-                                key={l.ID}
-                                href={`/stocks/${s.ID}?edit=${l.ID}#edit-level-${l.ID}`}
-                                className={`price-chip${l.Enabled ? "" : " is-paused"}`}
-                              >
-                                <strong>≤ {money(l.Target)}</strong>
-                                {l.State ? <small>{l.State}</small> : null}
-                                <small className="target-gap">{l.Gap}</small>
-                                <small
-                                  className={`price-quota${l.WindowActive && l.Enabled && l.Used >= l.Limit ? " is-exhausted" : ""}`}
-                                >
-                                  {l.WindowActive
-                                    ? `本时段已提醒 ${l.Used}/${l.Limit} 次`
-                                    : l.MaxAlerts
-                                      ? `每时段上限 ${l.MaxAlerts} 次`
-                                      : "上限继承查询时段"}
-                                </small>
-                                <small className="price-edit">修改提醒 →</small>
-                              </Link>
+                              <PriceLevelCard key={l.ID} stockID={s.ID} side="buy" level={l} />
                             ))
                           ) : (
                             <span className="price-empty">尚未设置买入价格</span>
@@ -312,29 +338,24 @@ export default async function StocksHomePage({
                         <div className="price-chips">
                           {s.SellLevels.length > 0 ? (
                             s.SellLevels.map((l) => (
-                              <Link
-                                key={l.ID}
-                                href={`/stocks/${s.ID}?edit=${l.ID}#edit-level-${l.ID}`}
-                                className={`price-chip${l.Enabled ? "" : " is-paused"}`}
-                              >
-                                <strong>≥ {money(l.Target)}</strong>
-                                {l.State ? <small>{l.State}</small> : null}
-                                <small className="target-gap">{l.Gap}</small>
-                                <small className="expected-profit">{l.Profit}</small>
-                                <small
-                                  className={`price-quota${l.WindowActive && l.Enabled && l.Used >= l.Limit ? " is-exhausted" : ""}`}
-                                >
-                                  {l.WindowActive
-                                    ? `本时段已提醒 ${l.Used}/${l.Limit} 次`
-                                    : l.MaxAlerts
-                                      ? `每时段上限 ${l.MaxAlerts} 次`
-                                      : "上限继承查询时段"}
-                                </small>
-                                <small className="price-edit">修改提醒 →</small>
-                              </Link>
+                              <PriceLevelCard key={l.ID} stockID={s.ID} side="sell" level={l} />
                             ))
                           ) : (
                             <span className="price-empty">尚未设置卖出价格</span>
+                          )}
+                        </div>
+                      </section>
+                      <section className="price-group level-review" aria-label="重新评估目标价">
+                        <h3>
+                          ↓ 重新评估 <b>{s.ReviewLevels.length}</b> 个 <small>USD</small>
+                        </h3>
+                        <div className="price-chips">
+                          {s.ReviewLevels.length > 0 ? (
+                            s.ReviewLevels.map((l) => (
+                              <PriceLevelCard key={l.ID} stockID={s.ID} side="review" level={l} />
+                            ))
+                          ) : (
+                            <span className="price-empty">尚未设置重新评估价格</span>
                           )}
                         </div>
                       </section>
