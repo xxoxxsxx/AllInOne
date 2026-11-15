@@ -108,17 +108,18 @@ export async function stockReferenceAction(fd: FormData): Promise<void> {
 }
 
 // —— 档位开关 ——
-export async function levelToggleAction(fd: FormData): Promise<void> {
+// 概览页“暂停提醒/恢复提醒”按钮：页内直接执行，不重定向。
+// useActionState 契约：(prevState, formData) => error | null；变更后 revalidatePath 原地刷新。
+export async function levelToggleQuietAction(_prev: string | null, fd: FormData): Promise<string | null> {
   const db = getDB();
   const stockID = str(fd, "id");
   const levelID = str(fd, "level");
   const action = str(fd, "action") === "pause" ? "pause" : "enable";
-  const flash = action === "pause" ? "level_paused" : "level_enabled";
   const res = db.prepare(`UPDATE levels SET enabled=? WHERE id=? AND stock_id=?`).run(action === "pause" ? 0 : 1, levelID, stockID);
-  if (Number(res.changes) === 0) redirect("/stocks/error/404");
-  revalidatePath(`/stocks/${stockID}`);
+  if (Number(res.changes) === 0) return "档位不存在或已更新，请刷新页面后重试";
   revalidatePath("/");
-  goHome({ flash });
+  revalidatePath(`/stocks/${stockID}`);
+  return null;
 }
 
 // —— 档位 ——

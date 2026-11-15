@@ -17,12 +17,12 @@ import { quoteReadiness, readiness } from "@/modules/stocks/readiness";
 import { displayClock } from "@/modules/stocks/tz";
 import type { Level } from "@/modules/stocks/store";
 import { flashText, money, statusText } from "./display";
-import { levelToggleAction, stockReferenceAction } from "./actions";
-import { Flash, RunNowButton, StockDialog, WatchFilter } from "./stocks-client";
+import { stockReferenceAction } from "./actions";
+import { Flash, LevelToggleForm, RunNowButton, StockDialog, WatchFilter } from "./stocks-client";
 
 export const dynamic = "force-dynamic";
 
-// 价格档位卡片：整体点击进详情修改；右上角按钮直接暂停/恢复该档位通知（levelActionAction）。
+// 价格档位卡片：信息区整体可点击进详情修改；暂停/恢复按钮独立提交，页内直接生效。
 function PriceLevelCard({ stockID, side, level }: {
   stockID: number;
   side: "buy" | "sell" | "review";
@@ -30,36 +30,31 @@ function PriceLevelCard({ stockID, side, level }: {
 }) {
   const paused = !level.Enabled;
   return (
-    <Link
-      href={`/stocks/${stockID}?edit=${level.ID}#edit-level-${level.ID}`}
-      className={`price-chip${paused ? " is-paused" : ""}`}
-    >
-      <strong>{side === "sell" ? "≥" : "≤"} {money(level.Target)}</strong>
-      {level.State ? <small>{level.State}</small> : null}
-      <small className="target-gap">{level.Gap}</small>
-      {side === "sell" ? <small className="expected-profit">{level.Profit}</small> : null}
-      {side === "review" && level.Note ? <small className="level-note">{level.Note}</small> : null}
-      <small
-        className={`price-quota${level.WindowActive && level.Enabled && level.Used >= level.Limit ? " is-exhausted" : ""}`}
+    <div className={`price-chip${paused ? " is-paused" : ""}`}>
+      <Link
+        href={`/stocks/${stockID}?edit=${level.ID}#edit-level-${level.ID}`}
+        className="chip-link"
       >
-        {level.WindowActive
-          ? `本时段已提醒 ${level.Used}/${level.Limit} 次`
-          : level.MaxAlerts
-            ? `每时段上限 ${level.MaxAlerts} 次`
-            : "上限继承查询时段"}
-      </small>
-      <span className="price-chip-actions">
+        <strong>{side === "sell" ? "≥" : "≤"} {money(level.Target)}</strong>
+        {level.State ? <small>{level.State}</small> : null}
+        <small className="target-gap">{level.Gap}</small>
+        {side === "sell" ? <small className="expected-profit">{level.Profit}</small> : null}
+        {side === "review" && level.Note ? <small className="level-note">{level.Note}</small> : null}
+        <small
+          className={`price-quota${level.WindowActive && level.Enabled && level.Used >= level.Limit ? " is-exhausted" : ""}`}
+        >
+          {level.WindowActive
+            ? `本时段已提醒 ${level.Used}/${level.Limit} 次`
+            : level.MaxAlerts
+              ? `每时段上限 ${level.MaxAlerts} 次`
+              : "上限继承查询时段"}
+        </small>
         <small className="price-edit">修改提醒 →</small>
-        <form action={levelToggleAction}>
-          <input type="hidden" name="id" value={stockID} />
-          <input type="hidden" name="level" value={level.ID} />
-          <input type="hidden" name="action" value={paused ? "enable" : "pause"} />
-          <button type="submit" className={`chip-toggle${paused ? " is-paused" : ""}`} title={paused ? "恢复该档位提醒" : "暂停该档位提醒，不影响其他档位"}>
-            {paused ? "恢复提醒" : "暂停提醒"}
-          </button>
-        </form>
+      </Link>
+      <span className="price-chip-actions">
+        <LevelToggleForm stockID={stockID} levelID={level.ID} paused={paused} />
       </span>
-    </Link>
+    </div>
   );
 }
 

@@ -288,6 +288,10 @@ code { padding: 2px 5px; border-radius: 4px; background: #edf2f0; color: #286d65
 .price-chip[href] { text-decoration: none; }
 .price-chip[href]:hover { box-shadow: 0 0 0 2px currentColor; }
 .price-chip .price-edit { color: inherit; font-weight: 750; }
+.chip-toggle { padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 700; color: inherit; background: #ffffffd9; border: 1px solid currentColor; border-radius: 999px; cursor: pointer; }
+.chip-toggle:hover { box-shadow: 0 0 0 1.5px currentColor; }
+.chip-toggle.is-paused { color: #166557; font-weight: 750; }
+.chip-toggle:disabled { opacity: 0.6; cursor: default; }
 .level-card:target { outline: 2px solid var(--accent-dark); outline-offset: 3px; }
 .level-card, .level-edit { scroll-margin-top: 24px; }
 .level-edit form { margin-top: 16px; }
@@ -378,6 +382,8 @@ nav a[aria-current="page"] { background: #ffffff22; color: #fff; box-shadow: ins
 .price-group h3 small { margin-left: 4px; font-size: 11px; font-weight: 500; }
 .price-chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .price-chip { display: inline-flex; flex-direction: column; gap: 3px; max-width: 100%; padding: 6px 9px; border-radius: 6px; background: #ffffffcc; overflow-wrap: anywhere; }
+.price-chip .chip-link { display: inline-flex; flex-direction: column; gap: 3px; color: inherit; text-decoration: none; overflow-wrap: anywhere; border-radius: 6px; }
+.price-chip .chip-link:hover { box-shadow: 0 0 0 2px currentColor; }
 .price-chip strong { font-size: 17px; }
 .price-chip small, .price-empty { font-size: 12px; }
 .price-chip.is-paused { color: #667776; background: #ffffff77; }
@@ -391,11 +397,8 @@ nav a[aria-current="page"] { background: #ffffff22; color: #fff; box-shadow: ins
 .price-chip .target-gap { max-width: 240px; font-weight: 500; }
 .price-chip .price-quota { font-weight: 750; }
 .price-chip .price-quota.is-exhausted { color: #a63e43; }
-.price-chip-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
+.price-chip-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 2px; }
 .price-chip-actions form { margin: 0; }
-.chip-toggle { padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 700; color: inherit; background: #ffffffd9; border: 1px solid currentColor; border-radius: 999px; cursor: pointer; }
-.chip-toggle:hover { box-shadow: 0 0 0 1.5px currentColor; }
-.chip-toggle.is-paused { color: #166557; font-weight: 750; }
 .default-limit-form { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 18px 0 8px; }
 .default-limit-form label { flex: 0 1 320px; margin: 0; }
 .default-limit-form button { margin: 0; }

@@ -18,10 +18,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useActionState, useRef, useState, useTransition } from "react";
 import type { FormEvent, SyntheticEvent } from "react";
 
-import { startRunAction, stockAddOnceAction } from "./actions";
+import { levelToggleQuietAction, startRunAction, stockAddOnceAction } from "./actions";
 
 // —— toast（原版 app.js 的实现） ——
 let toastStack: HTMLDivElement | null = null;
@@ -71,6 +71,30 @@ export function Flash({ text }: { text: string }) {
     <p className="info-strip" role="status" data-flash hidden={shown}>
       {text}
     </p>
+  );
+}
+
+// —— 档位暂停/恢复（概览页）：页内直接执行，不跳转 ——
+// useActionState + 不重定向的 Server Action：提交后原地刷新档位状态，错误用 toast 提示。
+export function LevelToggleForm({ stockID, levelID, paused }: { stockID: number; levelID: number; paused: boolean }) {
+  const [error, formAction, pending] = useActionState(levelToggleQuietAction, null as string | null);
+  useEffect(() => {
+    if (error) toast(error);
+  }, [error]);
+  return (
+    <form action={formAction}>
+      <input type="hidden" name="id" value={stockID} />
+      <input type="hidden" name="level" value={levelID} />
+      <input type="hidden" name="action" value={paused ? "enable" : "pause"} />
+      <button
+        type="submit"
+        className={`chip-toggle${paused ? " is-paused" : ""}`}
+        disabled={pending}
+        title={paused ? "恢复该档位提醒" : "暂停该档位提醒，不影响其他档位"}
+      >
+        {pending ? "处理中…" : paused ? "恢复提醒" : "暂停提醒"}
+      </button>
+    </form>
   );
 }
 

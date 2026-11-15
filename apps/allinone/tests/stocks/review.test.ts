@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { dueLevels, openDB, SCHEMA_VERSION, setDB, targetGap } from "../../src/modules/stocks/store.ts";
-import { levelToggleAction } from "../../src/app/stocks/actions.ts";
+import { levelToggleQuietAction } from "../../src/app/stocks/actions.ts";
 import { parseDecimal } from "../../src/modules/stocks/decimal.ts";
 import { exportConfig, validateConfig, importConfig } from "../../src/modules/stocks/backup.ts";
 
@@ -42,22 +42,20 @@ test("重新评估档位和备注可备份恢复", () => {
   } finally { db.close(); restored.close(); }
 });
 
-test("概览页暂停按钮仅切换 enabled，保留提醒额度与档位数据", async () => {
+test("概览页暂停按钮页内直接生效：仅切换 enabled，保留提醒额度与档位数据", async () => {
   const db = openDB(undefined, ":memory:");
   setDB(db);
   try {
     db.exec("INSERT INTO stocks(id,symbol) VALUES(1,'MU')");
     db.exec("INSERT INTO levels(id,stock_id,side,target,uid,generation,alerted_generation) VALUES(7,1,'sell','80','toggle-test',4,4)");
     const fd = (action: string) => { const f = new FormData(); f.set("id","1"); f.set("level","7"); f.set("action",action); return f; };
-    let redirected = "";
-    try { await levelToggleAction(fd("pause")); } catch (e) { redirected = String((e as {digest?:string}).digest ?? ""); }
-    assert.match(redirected, /flash=level_paused/);
+    assert.equal(await levelToggleQuietAction(null, fd("pause")), null);
     const row = () => db.prepare("SELECT enabled,generation,alerted_generation FROM levels WHERE id=7").get() as Record<string, unknown>;
     assert.deepEqual(row(), { enabled: 0, generation: 4, alerted_generation: 4 });
-    redirected = "";
-    try { await levelToggleAction(fd("enable")); } catch (e) { redirected = String((e as {digest?:string}).digest ?? ""); }
-    assert.match(redirected, /flash=level_enabled/);
+    assert.equal(await levelToggleQuietAction(null, fd("enable")), null);
     assert.deepEqual(row(), { enabled: 1, generation: 4, alerted_generation: 4 });
+    const missing = fd("pause"); missing.set("level","999");
+    assert.notEqual(await levelToggleQuietAction(null, missing), null); // 不存在的档位返回错误信息
   } finally { setDB(null); db.close(); }
 });
 
