@@ -116,8 +116,10 @@ test("换新：新 CDK 选填，留空仅作废旧 CDK；填写时保持原有�
     const common = { occurredAt: "2026-02-01T10:00", note: "", packageCode: "p1", platformCode: "s1" };
 
     // 带 新 CDK 的换新：新 CDK 被激活，旧 CDK 失效。
+    // 换新时间与发货错开：同毫秒 created_at 时 assertNoLaterRelatedEvents 以 UUID 定序，
+    // 会让后续 updateEvent 的「无后续关联事件」检查变成非确定性。
     await createIssueSelf({ ...common, cdk: "OLD-2" });
-    await createReplace({ ...common, oldCdk: "OLD-2", newCdk: "NEW-2" });
+    await createReplace({ ...common, occurredAt: "2026-02-01T11:00", oldCdk: "OLD-2", newCdk: "NEW-2" });
     await assert.rejects(
       createIssueSelf({ ...common, occurredAt: "2026-02-02T10:00", cdk: "NEW-2" }),
       /该 CDK 已存在有效成功记录/,
@@ -145,7 +147,7 @@ test("换新：新 CDK 选填，留空仅作废旧 CDK；填写时保持原有�
     ).id;
     const editInput = {
       id: replaceId,
-      occurredAt: "2026-02-01T10:00",
+      occurredAt: "2026-02-01T11:00",
       redeemedAt: "",
       packageCode: "p1",
       platformCode: "s1",

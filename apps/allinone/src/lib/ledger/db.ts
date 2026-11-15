@@ -6,10 +6,10 @@ import Database from "better-sqlite3";
 
 import { dataDir } from "@/lib/data-dir";
 import {
-  LEDGER_EVENTS_INDEXES_SQL,
-  LEDGER_EVENTS_TABLE_SQL,
-  LEDGER_SCHEMA_SQL,
-} from "@/lib/ledger/schema-sql";
+  LEDGER_LATEST_VERSION,
+  LEDGER_MIGRATIONS,
+} from "@/lib/ledger/migrations";
+import { LEDGER_SCHEMA_SQL } from "@/lib/ledger/schema-sql";
 
 export type LedgerQueryResult<T> = {
   rows: T[];
@@ -90,50 +90,45 @@ export function getDb() {
 }
 
 // 把 7 个 PG 迁移拍平为一份 SQLite DDL（见 schema-sql.ts 的迁移对照注释）。
+// schema-sql.ts 是版本化迁移机制的基线：新库直建最终形态；存量库由 runLedgerMigrations
+// 按 user_version 逐级执行编号迁移（迁移定义见 migrations.ts）。
 export function ensureLedgerSchema() {
   const db = getDb();
   db.exec(LEDGER_SCHEMA_SQL);
-  migrateEventsShapeIfLegacy();
+  runLedgerMigrations();
 }
 
-// 存量库迁移：旧版 events_shape_valid 要求 replace 的 related_cdk 非空；换新允许仅作废旧 CDK 后
-// 需要放宽 CHECK。SQLite 无法修改 CHECK，检测到旧约束文本时按 SQLite 官方流程整表重建：
-// 关外键 → 事务内建 events_new → 搬数据 → 删旧表 → 改名 → 重建索引 → 外键校验。
-function migrateEventsShapeIfLegacy() {
+function runLedgerMigrations() {
   const db = getDb();
-  const table = db
-    .prepare(
-      "select sql from sqlite_master where type = 'table' and name = 'events'",
-    )
-    .get() as { sql: string } | undefined;
+  const current = db.pragma("user_version", { simple: true }) as number;
 
-  if (!table || !table.sql.includes("related_cdk is not null")) {
+  if (current > LEDGER_LATEST_VERSION) {
+    throw new Error(
+      `台账库版本 ${current} 高于代码支持的 ${LEDGER_LATEST_VERSION}，请先升级应用再访问。`,
+    );
+  }
+
+  // 版本 0 且无 events 表：全新库，基线 DDL 已是最终形态，直接对齐版本号。
+  // 版本 0 但有 events 表：历史存量库（基线之前创建），逐个执行迁移；
+  // 迁移自带守卫，兼容上一版已放宽 CHECK 但未写版本号的库。
+  const hasEventsTable = db
+    .prepare(
+      "select 1 from sqlite_master where type = 'table' and name = 'events'",
+    )
+    .get();
+
+  if (current === 0 && !hasEventsTable) {
+    db.pragma(`user_version = ${LEDGER_LATEST_VERSION}`);
     return;
   }
 
-  const eventsNewSql = LEDGER_EVENTS_TABLE_SQL.replace(
-    "create table if not exists events",
-    "create table events_new",
-  );
+  for (const migration of LEDGER_MIGRATIONS) {
+    if (migration.version <= current) {
+      continue;
+    }
 
-  db.pragma("foreign_keys = OFF");
-  db.pragma("legacy_alter_table = ON");
-  try {
-    db.transaction(() => {
-      db.exec(eventsNewSql);
-      db.exec("insert into events_new select * from events");
-      db.exec("drop table events");
-      db.exec("alter table events_new rename to events");
-      db.exec(LEDGER_EVENTS_INDEXES_SQL);
-
-      const violations = db.pragma("foreign_key_check") as unknown[];
-      if (violations.length > 0) {
-        throw new Error("events 表重建后外键校验失败。");
-      }
-    })();
-  } finally {
-    db.pragma("legacy_alter_table = OFF");
-    db.pragma("foreign_keys = ON");
+    migration.up(db);
+    db.pragma(`user_version = ${migration.version}`);
   }
 }
 

@@ -16,7 +16,9 @@
 // - 0007：refund 相关列、events_event_type_valid 加入 refund、events_refund_valid、events_shape_valid 的
 //   refund 分支、events_source_event_idx 部分索引。
 // 后续放宽：events_shape_valid 的 replace 分支允许 related_cdk 为空（换新可仅作废旧 CDK，
-// 不强制填新 CDK）。SQLite 无法修改 CHECK，存量库由 db.ts 的整表重建迁移负责放宽。
+// 不强制填新 CDK）。SQLite 无法修改 CHECK，存量库由 migrations.ts 的 0008 整表重建迁移负责放宽。
+// 本文件是版本化迁移机制的基线：新增迁移时必须同步更新这里的 DDL，
+// 保证「新库直建」与「老库迁移到最新」的最终结构一致（机制见 migrations.ts）。
 // PG 迁移中 NOT VALID 的历史语义（仅约束新增/修改行）无法在 SQLite 表达，新库全量生效即等价。
 
 // events 表 DDL 单独导出：存量库的 CHECK 放宽需要整表重建（SQLite 不能修改 CHECK），
