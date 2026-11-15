@@ -2,10 +2,11 @@ import { HomeView } from "@/components/home-view";
 import { loadCatalog } from "@/lib/tools";
 import { documentsSummary, getDocumentsDB } from "@/lib/documents/db";
 import { getFilmDb, listRolls } from "@/lib/filmlog/store";
+import { collectHomeModuleStats } from "@/lib/home-stats";
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
+export default async function HomePage() {
   const { tools, categories, error } = loadCatalog();
   let documentSummary = null;
   let documentReminderError = false;
@@ -27,5 +28,10 @@ export default function HomePage() {
         soon: rolls.filter(r => { const days = (Date.parse(`${r.expiresAt}T00:00:00Z`) - cutoff) / 86400000; return days >= 0 && days <= 183; }).length };
     } catch (error) { console.error("胶卷库存读取失败", error); }
   }
-  return <HomeView tools={tools} categories={categories} loadError={error} documentSummary={documentSummary} documentReminderError={documentReminderError} filmSummary={filmSummary} />;
+  const moduleStats = await collectHomeModuleStats({
+    cdkLedger: tools.some((tool) => tool.id === "cdk-ledger"),
+    reminders: tools.some((tool) => tool.id === "reminders"),
+    stocks: tools.some((tool) => tool.id === "tickersentry"),
+  });
+  return <HomeView tools={tools} categories={categories} loadError={error} documentSummary={documentSummary} documentReminderError={documentReminderError} filmSummary={filmSummary} stats={moduleStats} />;
 }

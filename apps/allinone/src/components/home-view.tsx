@@ -6,6 +6,7 @@ import { ToolIcon } from "@/components/tool-icon";
 import { matchesQuery } from "@/lib/search";
 import { pushRecent, readFavorites, readRecent, toggleFavorite } from "@/lib/storage";
 import type { CategoryConfig, ToolConfig, ToolStatus } from "@/lib/types";
+import type { HomeModuleStats } from "@/lib/home-stats";
 
 interface HomeViewProps {
   tools: ToolConfig[];
@@ -14,6 +15,7 @@ interface HomeViewProps {
   documentSummary?: { total: number; expiring: number; expired: number } | null;
   documentReminderError?: boolean;
   filmSummary?: { expired: number; soon: number } | null;
+  stats?: HomeModuleStats;
 }
 
 const STATE_LABEL: Record<ToolStatus["state"], string> = {
@@ -40,7 +42,7 @@ function statusLine(state: ToolStatus["state"], checkedAt: string | null): strin
   return label;
 }
 
-export function HomeView({ tools, categories, loadError, documentSummary, documentReminderError, filmSummary }: HomeViewProps) {
+export function HomeView({ tools, categories, loadError, documentSummary, documentReminderError, filmSummary, stats }: HomeViewProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("all");
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -102,6 +104,35 @@ export function HomeView({ tools, categories, loadError, documentSummary, docume
       <h1 className="page-title">我的工具箱</h1>
       <p className="page-sub">业务管理、金融监控与图片创作工具的统一入口。</p>
       <p className="page-hint"><Link href="/channels">🔔 推送渠道设置（Bark / 飞书 / Telegram，证件夹与提醒事项共用）→</Link></p>
+
+      {stats && (stats.remindersToday !== null || stats.cdkActive !== null || stats.stockAlertsToday !== null) ? (
+        <section className="home-stats" aria-label="今日概览">
+          {stats.remindersToday !== null ? (
+            <Link className="home-stat" href="/reminders">
+              <span className="home-stat-num">{stats.remindersToday}</span>
+              <span className="home-stat-label">今日待办提醒</span>
+            </Link>
+          ) : null}
+          {stats.cdkActive !== null ? (
+            <Link className="home-stat" href="/ledger">
+              <span className="home-stat-num">{stats.cdkActive}</span>
+              <span className="home-stat-label">有效 CDK</span>
+            </Link>
+          ) : null}
+          {documentSummary ? (
+            <Link className="home-stat" href="/documents?status=expiring">
+              <span className="home-stat-num">{documentSummary.expiring}</span>
+              <span className="home-stat-label">证件临期</span>
+            </Link>
+          ) : null}
+          {stats.stockAlertsToday !== null ? (
+            <Link className="home-stat" href="/stocks">
+              <span className="home-stat-num">{stats.stockAlertsToday}</span>
+              <span className="home-stat-label">今日股票触发</span>
+            </Link>
+          ) : null}
+        </section>
+      ) : null}
 
       {filmSummary && (filmSummary.expired > 0 || filmSummary.soon > 0) ? <section className="document-reminder" aria-label="胶卷到期提示"><div><strong>胶卷库存提示</strong><span>{filmSummary.expired} 卷已过期 · {filmSummary.soon} 卷半年内到期</span></div><div className="document-reminder-links"><Link href="/filmlog">查看胶卷 →</Link></div></section> : null}
       {loadError ? <div className="error-banner">工具配置加载失败：{loadError}</div> : null}

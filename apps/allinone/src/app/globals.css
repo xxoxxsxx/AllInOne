@@ -555,6 +555,42 @@ a {
   color: var(--danger);
 }
 
+/* ---- 首页今日概览 ---- */
+
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.home-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  text-decoration: none;
+}
+
+.home-stat:hover {
+  border-color: var(--accent);
+}
+
+.home-stat-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.home-stat-label {
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
 .document-badge {
   color: var(--warn);
   border-color: color-mix(in srgb, var(--warn) 55%, var(--border));
