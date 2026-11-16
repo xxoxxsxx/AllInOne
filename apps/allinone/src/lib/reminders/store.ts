@@ -408,22 +408,24 @@ export function createReminder(db: Database.Database, input: ReminderInput, nowM
   }).immediate();
 }
 
-/** 更新提醒（文字/开关/调度整体替换：调度按提交内容重新起算）。 */
-export function updateReminder(db: Database.Database, id: number, input: ReminderInput, nowMs = Date.now()): void {
-  const text = validateText(input.text);
-  const schedules = (input.schedules ?? []).map((s) => normalizeSchedule(s, nowMs));
+/** 部分更新；省略调度保留进度，显式提交调度则整体替换并重新起算。 */
+export function updateReminder(db: Database.Database, id: number, input: Partial<ReminderInput>, nowMs = Date.now()): void {
+  const text = input.text === undefined ? null : validateText(input.text);
+  const schedules = input.schedules?.map((s) => normalizeSchedule(s, nowMs));
   const now = new Date(nowMs).toISOString();
   db.transaction(() => {
     const exists = db.prepare("SELECT id FROM reminders WHERE id=?").get(id) as { id: number } | undefined;
     if (!exists) throw new Error("提醒不存在或已删除");
-    db.prepare("UPDATE reminders SET text=?,updated_at=?,enabled=? WHERE id=?").run(
+    db.prepare("UPDATE reminders SET text=COALESCE(?,text),updated_at=?,enabled=COALESCE(?,enabled) WHERE id=?").run(
       text,
       now,
-      input.enabled === false ? 0 : 1,
+      input.enabled === undefined ? null : input.enabled ? 1 : 0,
       id,
     );
-    db.prepare("DELETE FROM reminder_schedules WHERE reminder_id=?").run(id);
-    for (const s of schedules) insertSchedule(db, id, s);
+    if (schedules !== undefined) {
+      db.prepare("DELETE FROM reminder_schedules WHERE reminder_id=?").run(id);
+      for (const s of schedules) insertSchedule(db, id, s);
+    }
   }).immediate();
 }
 
@@ -481,6 +483,25 @@ export function listReminders(db: Database.Database): ReminderView[] {
     schedules: (scheduleStmt.all(row.id) as ScheduleRow[]).map(rowToSchedule),
     images: (imageStmt.all(row.id) as Array<Parameters<typeof rowToImage>[0]>).map(rowToImage),
   }));
+}
+
+/** Compact, bounded API listing without hydrating schedules or attachments. */
+export function listReminderPage(
+  db: Database.Database,
+  options: { limit: number; offset: number; q: string; enabled?: boolean },
+): { items: Omit<ReminderView, "schedules" | "images">[]; total: number; limit: number; offset: number } {
+  const where = "WHERE instr(lower(text), lower(?)) > 0 AND (? IS NULL OR enabled=?)";
+  const enabled = options.enabled === undefined ? null : Number(options.enabled);
+  const args = [options.q, enabled, enabled];
+  return db.transaction(() => {
+    const { total } = db.prepare(`SELECT COUNT(*) AS total FROM reminders ${where}`).get(...args) as { total: number };
+    const rows = db.prepare(`SELECT id,text,enabled,created_at,updated_at FROM reminders ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
+      .all(...args, options.limit, options.offset) as Array<{ id: number; text: string; enabled: number; created_at: string; updated_at: string }>;
+    return {
+      items: rows.map((r) => ({ id: r.id, text: r.text, enabled: r.enabled === 1, createdAt: r.created_at, updatedAt: r.updated_at })),
+      total, limit: options.limit, offset: options.offset,
+    };
+  })();
 }
 
 // —— 调度器视角 ——
