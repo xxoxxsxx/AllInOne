@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { updateEvent } from "@/lib/ledger/events";
+import { createVoid, updateEvent } from "@/lib/ledger/events";
+import { getCurrentShanghaiDateTimeLocal } from "@/lib/ledger/time";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -67,6 +68,30 @@ export async function updateEventAction(formData: FormData) {
   revalidatePath("/events");
   revalidatePath(`/events/${id}`);
   redirectToEvent(id, { message });
+}
+
+export async function voidShipmentAction(formData: FormData) {
+  const id = getString(formData, "id");
+  try {
+    await createVoid({
+      cdk: getString(formData, "cdk"),
+      occurredAt: getCurrentShanghaiDateTimeLocal(),
+      note: getString(formData, "note"),
+      shipment: {
+        id,
+        version: getString(formData, "version"),
+        occurredAt: getString(formData, "occurredAt"),
+      },
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "作废失败，请重试。" };
+  }
+  revalidatePath("/");
+  revalidatePath("/ledger");
+  revalidatePath("/events");
+  revalidatePath("/events/new");
+  revalidatePath(`/events/${id}`);
+  return { success: true };
 }
 
 export async function saveRefundAction(formData: FormData) {

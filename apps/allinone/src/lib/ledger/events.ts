@@ -98,6 +98,7 @@ type ReplaceInput = BaseEventInput & {
 
 type VoidInput = BaseEventInput & {
   cdk: string;
+  shipment?: { id: string; version: string; occurredAt: string };
 };
 
 type PriceSnapshot = {
@@ -1223,6 +1224,29 @@ export async function createVoid(input: VoidInput) {
 
       if (!state.exists_in_history) {
         throw new Error("该 CDK 不存在历史记录，不能作废。");
+      }
+
+      if (input.shipment) {
+        const source = await query<EventRecord>("select * from events where id = $1", [input.shipment.id]);
+        const shipment = source.rows[0];
+        if (!shipment || !["issue_self", "issue_reseller"].includes(shipment.event_type)) {
+          throw new Error("原出货记录不存在或不是出货记录。");
+        }
+        if (shipment.cdk !== cdk || shipment.occurred_at !== input.shipment.occurredAt
+          || (shipment.updated_at ?? shipment.created_at) !== input.shipment.version) {
+          throw new Error("原出货记录已变更，请刷新页面后重试。");
+        }
+        const latest = await query<{ id: string }>(`
+          select id from events
+          where (cdk = $1 or related_cdk = $1) and event_type <> 'refund'
+          order by occurred_at desc, created_at desc, id desc limit 1
+        `, [cdk]);
+        if (!state.is_active || latest.rows[0]?.id !== shipment.id) {
+          throw new Error("该出货 CDK 已作废、换新或存在后续记录，请刷新页面核实。");
+        }
+        if (payload.occurredAt < shipment.occurred_at) {
+          throw new Error("出货时间晚于当前时间，暂不能直接作废。");
+        }
       }
 
       await query(

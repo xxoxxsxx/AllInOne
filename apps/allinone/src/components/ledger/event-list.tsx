@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { VoidShipmentButton } from "@/components/ledger/void-shipment-button";
 
 import { eventTypeLabels, type EventType } from "@/lib/ledger/schema";
 import { formatShanghaiDateTime } from "@/lib/ledger/time";
@@ -144,6 +145,10 @@ export function EventList({
                   ) : null}
                 </div>
 
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                {item.event_type === "issue_self" || item.event_type === "issue_reseller" ? (
+                  <VoidShipmentButton event={item} />
+                ) : null}
                 <Link
                   href={`/events/${item.id}`}
                   className={
@@ -154,6 +159,7 @@ export function EventList({
                 >
                   查看详情
                 </Link>
+                </div>
               </div>
             </article>
           );

@@ -6,6 +6,7 @@ import { updateEventAction } from "@/app/(ledger)/events/[id]/actions";
 import { EventConfirmForm } from "@/components/ledger/event-confirm-form";
 import { EventEditFields } from "@/components/ledger/event-edit-fields";
 import { RefundForm } from "@/components/ledger/refund-form";
+import { VoidShipmentButton } from "@/components/ledger/void-shipment-button";
 import { getRefundSource, listRefunds } from "@/lib/ledger/refunds";
 import { toEventEditValues, withCurrentOption } from "@/lib/ledger/event-form";
 import {
@@ -97,12 +98,15 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
               ) : null}
             </div>
 
+            <div className="flex flex-wrap items-center gap-3">
+            {hasPriceSnapshot ? <VoidShipmentButton event={event} /> : null}
             <Link
               href="/events"
               className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
             >
               返回明细页
             </Link>
+            </div>
           </div>
 
         </section>
