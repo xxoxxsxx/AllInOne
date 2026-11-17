@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { dataDir } from "@/lib/data-dir";
-import { parseRFC3339, rfc3339Nano, quotaAt } from "./tz";
+import { addDays, startOfDay, dateKey, parseRFC3339, rfc3339Nano, quotaAt, type StockTimezone } from "./tz";
 import {
   addDec,
   cmpDec,
@@ -683,6 +683,73 @@ export function listNotifications(db: Database.Database, symbol: string): Notifi
     }
   }
   return out;
+}
+
+// —— 今日提醒总览（概览页）：按配置时区自然日聚合当天触价记录，含未推送的命中 ——
+export type AlertSummaryLevel = { Side: string; Target: string; Note: string };
+
+export type AlertSummaryStock = {
+  Symbol: string;
+  Notifications: number;
+  Buy: AlertSummaryLevel[];
+  Sell: AlertSummaryLevel[];
+  Review: AlertSummaryLevel[];
+  FirstAt: string;
+  LastAt: string;
+  LastPrice: string;
+  Delivered: number;
+  Unnotified: number;
+  Failed: number;
+  Pending: number;
+};
+
+export function todayAlertSummary(db: Database.Database, at: Date, tz: StockTimezone): AlertSummaryStock[] {
+  const day = dateKey(at, tz);
+  const start = startOfDay(at, tz);
+  const end = addDays(start, 1, tz);
+  const rows = db.prepare(`SELECT symbol,price,levels,status,created_at FROM notifications
+    WHERE julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?)
+    ORDER BY julianday(created_at),id`).all(start.toISOString(), end.toISOString()) as
+    Array<{ symbol: string; price: string; levels: string; status: string; created_at: string }>;
+  // 档位备注按 uid 关联：档位后来被删除时备注留空，不阻塞总览。
+  const notes = new Map<string, string>();
+  for (const l of db.prepare(`SELECT uid,note FROM levels WHERE uid!=''`).all() as Array<{ uid: string; note: string }>) {
+    notes.set(l.uid, l.note);
+  }
+  const bySymbol = new Map<string, AlertSummaryStock>();
+  for (const r of rows) {
+    const created = parseRFC3339(r.created_at);
+    if (!created || dateKey(created, tz) !== day) continue;
+    let stock = bySymbol.get(r.symbol);
+    if (!stock) {
+      stock = { Symbol: r.symbol, Notifications: 0, Buy: [], Sell: [], Review: [], FirstAt: r.created_at, LastAt: r.created_at, LastPrice: "", Delivered: 0, Unnotified: 0, Failed: 0, Pending: 0 };
+      bySymbol.set(r.symbol, stock);
+    }
+    stock.LastAt = r.created_at;
+    if (r.price !== "") stock.LastPrice = r.price;
+    stock.Notifications++;
+    if (r.status.startsWith("命中但未通知")) stock.Unnotified++;
+    else if (r.status === "成功" || r.status === "部分成功") stock.Delivered++;
+    else if (r.status === "发送中") stock.Pending++;
+    else stock.Failed++;
+    let snapshots: Array<{ uid?: string; side?: string; target?: string }> = [];
+    try {
+      const parsed = JSON.parse(r.levels);
+      snapshots = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      snapshots = [];
+    }
+    for (const snap of snapshots) {
+      if (!snap) continue;
+      if (snap.side !== "buy" && snap.side !== "sell" && snap.side !== "review") continue;
+      if (typeof snap.target !== "string") continue;
+      const bucket = snap.side === "buy" ? stock.Buy : snap.side === "sell" ? stock.Sell : stock.Review;
+      if (!bucket.some((l) => l.Target === snap.target)) {
+        bucket.push({ Side: snap.side, Target: snap.target, Note: snap.uid ? (notes.get(snap.uid) ?? "") : "" });
+      }
+    }
+  }
+  return [...bySymbol.values()].sort((a, b) => (a.Symbol < b.Symbol ? -1 : a.Symbol > b.Symbol ? 1 : 0));
 }
 
 // —— 通知记录 ——

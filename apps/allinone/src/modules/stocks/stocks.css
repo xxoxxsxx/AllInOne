@@ -389,6 +389,14 @@ nav a[aria-current="page"] { background: #ffffff22; color: #fff; box-shadow: ins
 .price-chip.is-paused { color: #667776; background: #ffffff77; }
 @media (max-width: 640px) { .watch-prices { grid-template-columns: 1fr; } }
 
+.today-alerts { margin-bottom: 20px; }
+.today-alert-list { display: grid; gap: 14px; }
+.today-alert-item { padding-top: 16px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.today-alert-item h3 { font-size: 20px; margin-bottom: 10px; }
+.today-alert-item h3 small { color: var(--muted); font-size: 12px; font-weight: 500; }
+.today-alert-levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px; margin-bottom: 12px; }
+.today-alert-levels p { margin: 8px 0 0; }
+.today-alert-item > p { margin-bottom: 6px; }
 .readiness { margin-bottom: 22px; }
 .readiness h2 { margin-bottom: 12px; }
 .readiness ul { padding-left: 20px; line-height: 1.8; font-size: 14px; }

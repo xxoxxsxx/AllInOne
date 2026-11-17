@@ -10,11 +10,12 @@ import {
   schedules,
   setReturns,
   targetGap,
+  todayAlertSummary,
 } from "@/modules/stocks/store";
 import { activeWindow, levelUsage, timezoneValue, windowUsageAll } from "@/modules/stocks/windows";
 import { nextFireForSchedule, nextWindowOccurrence } from "@/modules/stocks/next-fire";
 import { quoteReadiness, readiness } from "@/modules/stocks/readiness";
-import { displayClock } from "@/modules/stocks/tz";
+import { dateKey, displayClock } from "@/modules/stocks/tz";
 import type { Level } from "@/modules/stocks/store";
 import { flashText, money, statusText } from "./display";
 import { stockReferenceAction } from "./actions";
@@ -71,6 +72,7 @@ export default async function StocksHomePage({
   const db = getDB();
   const tz = timezoneValue(db);
   const nowD = new Date();
+  const todayAlerts = todayAlertSummary(db, nowD, tz);
   const stocks = listStocks(db);
   for (const s of stocks) {
     const { levels, window } = levelUsage(db, s.ID, s.Symbol, nowD, tz);
@@ -172,6 +174,30 @@ export default async function StocksHomePage({
           </p>
         ) : (
           <RunNowButton />
+        )}
+      </section>
+
+      <section className="card today-alerts" aria-labelledby="today-alerts-title">
+        <h2 id="today-alerts-title">今日提醒 · {todayAlerts.length} 只股票 · {todayAlerts.reduce((n, s) => n + s.Notifications, 0)} 次触发</h2>
+        <p className="muted small">{dateKey(nowD, tz)} · 按 {tz} 的自然日统计。包含命中但未推送的记录；推送成功表示至少一个渠道发送成功。</p>
+        {todayAlerts.length === 0 ? <p className="empty-state">今天暂无触价提醒记录。</p> : (
+          <div className="today-alert-list">
+            {todayAlerts.map((s) => (
+              <article className="today-alert-item" key={s.Symbol}>
+                <h3>{s.Symbol} <small>触发 {s.Notifications} 次</small></h3>
+                <div className="today-alert-levels">
+                  {[...s.Buy, ...s.Sell, ...s.Review].map((l) => (
+                    <div className={`price-group level-${l.Side}`} key={`${l.Side}-${l.Target}`}>
+                      <strong>{l.Side === "buy" ? "↓ 买入 / 加仓" : l.Side === "sell" ? "↑ 卖出 / 减仓" : "↓ 重新评估"} {l.Side === "sell" ? "≥" : "≤"} {money(l.Target)} USD</strong>
+                      {l.Note ? <p className="small">当前备注：{l.Note}</p> : null}
+                    </div>
+                  ))}
+                </div>
+                <p className="small">推送成功 {s.Delivered} 次 · 未通知 {s.Unnotified} 次 · 发送中 {s.Pending} 次 · 失败或结果不确定 {s.Failed} 次</p>
+                <p className="muted small">最后触发：{displayClock(new Date(s.LastAt), tz)} · 当时查询价 {money(s.LastPrice)} USD</p>
+              </article>
+            ))}
+          </div>
         )}
       </section>
 
