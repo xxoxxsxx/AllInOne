@@ -19,6 +19,21 @@
     "integration": "path"
   },
   {
+    "id": "funding",
+    "name": "券商入金",
+    "description": "资金路径、银行待入金、来源核实与分币种目标进度",
+    "category": "finance",
+    "tags": ["入金", "券商", "银行", "记账"],
+    "icon": "chart",
+    "kind": "service",
+    "entry": "/funding",
+    "openMode": "same-tab",
+    "order": 21,
+    "visible": true,
+    "lifecycle": "active",
+    "integration": "path"
+  },
+  {
     "id": "tickersentry",
     "name": "股票提醒",
     "description": "股票档位触价监控与多渠道通知",
