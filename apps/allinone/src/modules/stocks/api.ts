@@ -67,6 +67,22 @@ export function listStockConfigs(db: Database.Database) {
   })();
 }
 
+/** Create the stock and its levels atomically; never overwrite an existing symbol. */
+export function createStockConfig(db: Database.Database, input: unknown) {
+  const body = object(input);
+  keys(body, ["symbol", "note", "enabled", "reference_buy", "levels"]);
+  const symbol = symbolOf(text(body.symbol, "symbol"));
+  return db.transaction(() => {
+    if (db.prepare("SELECT id FROM stocks WHERE symbol=?").get(symbol)) {
+      throw new StocksAPIError(409, "Stock already exists");
+    }
+    db.prepare("INSERT INTO stocks(symbol) VALUES(?)").run(symbol);
+    const { symbol: _symbol, ...config } = body;
+    void _symbol;
+    return patchStockConfig(db, symbol, { ...config, revision: readConfig(db, symbol).revision });
+  }).immediate();
+}
+
 /** Explicit merge: omitted fields/levels are preserved. review triggers at <= target. */
 export function patchStockConfig(db: Database.Database, symbol: string, input: unknown) {
   const body = object(input);
