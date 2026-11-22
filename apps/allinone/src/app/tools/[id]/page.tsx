@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { OpenButton, STATUS_LABEL } from "@/components/tool-actions";
 import { ToolIcon } from "@/components/tool-icon";
 import { getStatuses } from "@/lib/health";
+import { isEmbeddedTool } from "@/lib/tool-entry";
 import { loadCatalog } from "@/lib/tools";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,18 @@ export default async function ToolDetailPage({ params }: ToolDetailProps) {
   const { tools, categories } = loadCatalog();
   const tool = tools.find((t) => t.id === id);
   if (!tool) notFound();
+
+  if (isEmbeddedTool(tool)) {
+    return (
+      <main className="portal-embed">
+        <header>
+          <h1>{tool.name}</h1>
+          <a href={tool.entry} target="_blank" rel="noopener noreferrer">独立打开 ↗</a>
+        </header>
+        <iframe src={tool.entry} title={tool.name} allow="web-share" />
+      </main>
+    );
+  }
 
   const categoryName = categories.find((c) => c.id === tool.category)?.name ?? tool.category;
   // 维护中的工具默认禁止打开（PRD §5.6）。

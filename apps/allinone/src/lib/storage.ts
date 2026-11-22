@@ -77,6 +77,7 @@ export function toggleFavorite(id: string): boolean {
     nowFavorite = true;
   }
   writeList("favorites", next, FAVORITES_LIMIT);
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("portal-preferences"));
   return nowFavorite;
 }
 
@@ -88,6 +89,7 @@ export function readRecent(): string[] {
 export function pushRecent(id: string): void {
   const current = readList("recent", RECENT_LIMIT);
   writeList("recent", [id, ...current.filter((x) => x !== id)], RECENT_LIMIT);
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("portal-preferences"));
 }
 
 export function readTheme(): "light" | "dark" | "system" {
@@ -127,4 +129,5 @@ export function clearAllPreferences(): void {
   } catch {
     memory.clear();
   }
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("portal-preferences"));
 }

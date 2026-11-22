@@ -4,9 +4,6 @@ import type { ReactNode } from "react";
 
 import { StocksBehaviors, StocksNav } from "./stocks-client";
 
-// 原版 TickerSentry static/app.css 逐字节复用（不改任何规则）；shell.css 先于它加载，
-// 只负责停用根布局的门户 chrome（根布局与 globals.css 不在本次可修改范围内），
-// 使本段的 header/main/footer 成为页面唯一外壳。
 import "./shell.css";
 import "@/modules/stocks/stocks.css";
 

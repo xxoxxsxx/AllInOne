@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Sidebar } from "@/components/sidebar";
+import { loadCatalog } from "@/lib/tools";
 import "./globals.css";
+import "./portal.css";
 
 export const metadata: Metadata = {
   title: "我的工具箱",
@@ -11,31 +13,17 @@ export const metadata: Metadata = {
 const themeScript = `try{var t=localStorage.getItem('allinone:v1:theme');document.documentElement.dataset.theme=(t==='light'||t==='dark')?t:'system';}catch(e){document.documentElement.dataset.theme='system';}`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const { tools, categories } = loadCatalog();
   return (
     <html lang="zh-CN" data-theme="system" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
-        <header className="site-header">
-          <div className="site-header-inner">
-            <Link href="/" className="site-brand">
-              <span className="site-brand-mark" aria-hidden="true">
-                ▦
-              </span>
-              我的工具箱
-            </Link>
-            <nav className="site-nav" aria-label="站点导航">
-              <Link href="/">工具箱</Link>
-              <Link href="/status">状态</Link>
-              <Link href="/preferences">偏好</Link>
-            </nav>
-          </div>
-        </header>
-        <div className="site-main">{children}</div>
-        <footer className="site-footer">
-          <span>AllInOne · 个人工具聚合</span>
-        </footer>
+        <div className="portal-shell">
+          <Sidebar tools={tools} categories={categories} />
+          <div className="portal-content">{children}</div>
+        </div>
       </body>
     </html>
   );

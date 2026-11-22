@@ -7,7 +7,7 @@ import { collectHomeModuleStats } from "@/lib/home-stats";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const { tools, categories, error } = loadCatalog();
+  const { tools, error } = loadCatalog();
   let documentSummary = null;
   let documentReminderError = false;
   if (tools.some((tool) => tool.id === "documents")) {
@@ -33,5 +33,5 @@ export default async function HomePage() {
     reminders: tools.some((tool) => tool.id === "reminders"),
     stocks: tools.some((tool) => tool.id === "tickersentry"),
   });
-  return <HomeView tools={tools} categories={categories} loadError={error} documentSummary={documentSummary} documentReminderError={documentReminderError} filmSummary={filmSummary} stats={moduleStats} />;
+  return <HomeView loadError={error} documentSummary={documentSummary} documentReminderError={documentReminderError} filmSummary={filmSummary} stats={moduleStats} />;
 }

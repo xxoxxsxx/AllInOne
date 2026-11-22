@@ -6,8 +6,8 @@
   },
   {
     "id": "finance",
-    "name": "金融",
-    "description": "行情监控与提醒"
+    "name": "金融与投资",
+    "description": "券商入金、行情监控与提醒"
   },
   {
     "id": "media",
@@ -21,7 +21,7 @@
   },
   {
     "id": "life",
-    "name": "生活",
-    "description": "旅行与生活记录"
+    "name": "生活管理",
+    "description": "旅行、胶卷、提醒与证件"
   }
 ]
