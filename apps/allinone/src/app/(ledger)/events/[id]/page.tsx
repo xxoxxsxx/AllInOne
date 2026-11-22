@@ -85,7 +85,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
               <p className="text-sm uppercase tracking-[0.28em] text-accent">
                 Event Detail
               </p>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight">
+              <h1 className="ui-title mt-3 font-semibold tracking-tight">
                 {eventTypeLabels[event.event_type]}
               </h1>
               <p className="mt-4 text-base leading-8 text-muted">

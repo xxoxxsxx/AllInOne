@@ -22,10 +22,10 @@ export default async function ChannelsPage() {
     <main className="channels-page">
       <Link href="/" className="channels-back">← 工具箱</Link>
 
-      <header className="channels-hero">
-        <p className="channels-kicker">GLOBAL PUSH CHANNELS</p>
+      <header className="channels-hero ui-heading ui-heading-stack">
+        <p className="channels-kicker ui-kicker">GLOBAL PUSH CHANNELS</p>
         <h1 className="channels-title">全局推送渠道</h1>
-        <p className="channels-sub">
+        <p className="channels-sub ui-subtitle">
           证件夹到期提醒与提醒事项共用这份 Bark / 飞书 / Telegram 配置，改一处全局生效。
           保存后可用各渠道的「测试」按钮核对送达。
         </p>

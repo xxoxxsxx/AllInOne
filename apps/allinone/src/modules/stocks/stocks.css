@@ -1,14 +1,14 @@
 .ts-shell {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  color: #193038;
-  background: #f4f6f4;
+  font-family: var(--ui-font);
+  color: var(--ui-text);
+  background: var(--ui-bg);
   font-synthesis: none;
-  --ink: #193038;
-  --muted: #64767a;
-  --line: #e1e8e5;
-  --surface: #fff;
-  --accent: #087d71;
-  --accent-dark: #08665e;
+  --ink: var(--ui-text);
+  --muted: var(--ui-muted);
+  --line: var(--ui-border);
+  --surface: var(--ui-surface);
+  --accent: var(--ui-accent);
+  --accent-dark: var(--ui-accent);
   --gold: #d6b783;
 }
 
@@ -31,7 +31,7 @@
 :where(.ts-shell) nav a:hover { background: #ffffff17; color: #fff; text-decoration: none; }
 :where(.ts-shell) nav form { margin: 0; }
 :where(.ts-shell) .site-main { width: min(1200px, calc(100% - 48px)); flex: 1; margin: 0 auto; padding: 36px 0 72px; }
-:where(.ts-shell) .site-footer { width: min(1200px, calc(100% - 48px)); margin: 0 auto; padding: 22px 0 30px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; color: #7a8989; font-size: 12px; }
+:where(.ts-shell) .site-footer { width: min(1200px, calc(100% - 48px)); margin: 0 auto; padding: 22px 0 30px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; color: var(--ui-muted); font-size: 12px; }
 
 :where(.ts-shell) h1, :where(.ts-shell) h2, :where(.ts-shell) h3, :where(.ts-shell) p { margin-top: 0; }
 :where(.ts-shell) h1 { font-size: clamp(29px, 3.2vw, 42px); line-height: 1.2; letter-spacing: -.045em; }
@@ -54,68 +54,65 @@
 :where(.ts-shell) .panel-head { display: flex; align-items: start; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
 :where(.ts-shell) .panel-head h2 { margin: 0 0 4px; }
 :where(.ts-shell) .panel-head p { margin: 0; color: var(--muted); font-size: 13px; }
-:where(.ts-shell) .section-label { display: block; margin: 32px 0 15px; color: #526a70; font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+:where(.ts-shell) .section-label { display: block; margin: 32px 0 15px; color: var(--ui-muted); font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
 
-:where(.ts-shell) .overview-hero { position: relative; overflow: hidden; display: flex; align-items: end; justify-content: space-between; gap: 24px; min-height: 194px; margin-bottom: 20px; padding: 30px 34px; border-radius: 18px; background: radial-gradient(circle at 86% 20%, #2b7c76 0, #1c5656 29%, transparent 55%), linear-gradient(115deg, #142d33, #1d4448); color: #fff; }
-:where(.ts-shell) .overview-hero::after { content: ""; position: absolute; right: 36px; bottom: -90px; width: 280px; height: 280px; border: 1px solid #ffffff24; border-radius: 50%; box-shadow: 0 0 0 50px #ffffff07, 0 0 0 100px #ffffff05; pointer-events: none; }
-:where(.ts-shell) .overview-hero .eyebrow { color: #98e1d1; }
+:where(.ts-shell) .overview-hero { display: flex; gap: 16px; }
 :where(.ts-shell) .overview-hero h1 { margin-bottom: 8px; }
 :where(.ts-shell) .overview-hero p { max-width: 520px; margin-bottom: 0; color: #c5d8d7; font-size: 14px; }
-:where(.ts-shell) .hero-meta { position: relative; z-index: 1; min-width: 180px; padding: 15px 20px; border: 1px solid #ffffff29; border-radius: 13px; background: #ffffff12; backdrop-filter: blur(6px); }
+:where(.ts-shell) .hero-meta { position: relative; font-size: 13px; }
 :where(.ts-shell) .hero-meta span { display: block; color: #bcd6d3; font-size: 11px; }
-:where(.ts-shell) .hero-meta strong { display: block; margin-top: 5px; color: #fff; font-size: 23px; line-height: 1.2; }
 :where(.ts-shell) .query-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 24px; margin-bottom: 20px; padding: 18px 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 :where(.ts-shell) .query-bar h2 { margin: 0 0 4px; font-size: 17px; }
 :where(.ts-shell) .query-bar p { margin: 0; color: var(--muted); font-size: 13px; }
 :where(.ts-shell) .query-bar .query-status { max-width: 280px; }
 :where(.ts-shell) .query-bar #run { min-height: 44px; padding: 10px 20px; font-size: 14px; white-space: nowrap; }
-:where(.ts-shell) .query-bar #run-message { grid-column: 1 / -1; color: #a04837; overflow-wrap: anywhere; }
+:where(.ts-shell) .query-bar #run-message { grid-column: 1 / -1; color: var(--ui-danger); overflow-wrap: anywhere; }
 :where(.ts-shell) .query-bar #run-message:empty { display: none; }
 
 :where(.ts-shell) .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #19a77f; box-shadow: 0 0 0 4px #19a77f1c; }
-:where(.ts-shell) .form-footnote { margin: 22px 0 0; padding-top: 20px; border-top: 1px solid var(--line); color: #859295; font-size: 12px; }
+:where(.ts-shell) .form-footnote { margin: 22px 0 0; padding-top: 20px; border-top: 1px solid var(--line); color: var(--ui-muted); font-size: 12px; }
 :where(.ts-shell) .error-card { max-width: 640px; margin: 48px auto; padding: clamp(24px, 5vw, 48px); }
-:where(.ts-shell) .error-code { display: inline-block; margin-bottom: 24px; padding: 8px 14px; border-radius: 9px; background: #fff0e8; color: #a25435; font-size: 20px; font-weight: 800; }
+:where(.ts-shell) .error-code { display: inline-block; margin-bottom: 24px; padding: 8px 14px; border-radius: 9px; background: light-dark(#fff0e8, #3e2d22); color: var(--ui-warning); font-size: 20px; font-weight: 800; }
 :where(.ts-shell) .error-card h1 { font-size: clamp(26px, 4vw, 34px); }
 :where(.ts-shell) .error-message { margin: 20px 0 12px; color: var(--ink); overflow-wrap: anywhere; }
 :where(.ts-shell) .error-card > .muted { font-size: 13px; }
 :where(.ts-shell) .error-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 20px; margin-top: 28px; font-size: 14px; font-weight: 700; }
-:where(.ts-shell) .error-primary { padding: 12px 18px; border-radius: 9px; background: var(--accent); color: #fff; }
-:where(.ts-shell) .error-primary:hover { background: var(--accent-dark); text-decoration: none; }
-:where(.ts-shell) .label-hint { float: right; color: #7e8f91; font-size: 12px; font-weight: 500; }
+:where(.ts-shell) .error-primary { padding: 12px 18px; border-radius: 9px; background: var(--ui-action); color: var(--ui-on-action); }
+:where(.ts-shell) .error-primary:hover { background: color-mix(in srgb, var(--ui-action) 86%, var(--ui-text)); text-decoration: none; }
+:where(.ts-shell) .label-hint { float: right; color: var(--ui-muted); font-size: 12px; font-weight: 500; }
 
-:where(.ts-shell) label { display: block; margin: 0 0 18px; color: #344c51; font-size: 13px; font-weight: 700; }
-:where(.ts-shell) input:not([type="checkbox"]):not([type="radio"]), :where(.ts-shell) select { display: block; width: 100%; min-height: 42px; margin-top: 8px; padding: 9px 12px; border: 1px solid #d4dfdc; border-radius: 9px; background: #fff; color: var(--ink); font-size: 14px; font-weight: 500; transition: border-color .15s, box-shadow .15s; }
-:where(.ts-shell) input:not([type="checkbox"]):not([type="radio"]):hover, :where(.ts-shell) select:hover { border-color: #aebfba; }
+:where(.ts-shell) label { display: block; margin: 0 0 18px; color: var(--ui-text); font-size: 13px; font-weight: 700; }
+:where(.ts-shell) input:not([type="checkbox"]):not([type="radio"]), :where(.ts-shell) select { display: block; width: 100%; min-height: 42px; margin-top: 8px; padding: 9px 12px; border: 1px solid var(--ui-border); border-radius: 9px; background: var(--ui-surface); color: var(--ink); font-size: 14px; font-weight: 500; transition: border-color .15s, box-shadow .15s; }
+:where(.ts-shell) input:not([type="checkbox"]):not([type="radio"]):hover, :where(.ts-shell) select:hover { border-color: var(--ui-border); }
 :where(.ts-shell) input:not([type="checkbox"]):not([type="radio"]):focus, :where(.ts-shell) select:focus { border-color: #159785; outline: 0; box-shadow: 0 0 0 3px #15978522; }
-:where(.ts-shell) input::placeholder { color: #9daaa9; }
+:where(.ts-shell) input::placeholder { color: var(--ui-muted); }
 :where(.ts-shell) .check { display: inline-flex; align-items: center; gap: 9px; }
 :where(.ts-shell) .check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 :where(.ts-shell) .row { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
 :where(.ts-shell) .row label { min-width: 130px; flex: 1; margin-bottom: 0; }
 :where(.ts-shell) .row button { margin-bottom: 0; }
-:where(.ts-shell) button { min-height: 40px; padding: 9px 15px; border: 1px solid #d6e3df; border-radius: 9px; background: #f7faf8; color: #28695e; font-size: 13px; font-weight: 750; transition: background .15s, border-color .15s, transform .15s; }
-:where(.ts-shell) button:hover { border-color: #b7d0c7; background: #ecf5f0; }
+:where(.ts-shell) button { min-height: 40px; padding: 9px 15px; border: 1px solid var(--ui-border); border-radius: 9px; background: var(--ui-subtle); color: #28695e; font-size: 13px; font-weight: 750; transition: background .15s, border-color .15s, transform .15s; }
+:where(.ts-shell) button:hover { border-color: #b7d0c7; background: var(--ui-selection); }
 :where(.ts-shell) button:active { transform: translateY(1px); }
 :where(.ts-shell) button:disabled { cursor: not-allowed; opacity: .5; }
-:where(.ts-shell) button.primary, :where(.ts-shell) #run { border-color: var(--accent); background: var(--accent); color: #fff; box-shadow: 0 6px 16px #087d7126; }
+:where(.ts-shell) button.primary, :where(.ts-shell) #run { border-color: var(--accent); background: var(--ui-action); color: var(--ui-on-action); box-shadow: 0 6px 16px #087d7126; }
 :where(.ts-shell) button.primary:hover, :where(.ts-shell) #run:hover { border-color: var(--accent-dark); background: var(--accent-dark); }
 :where(.ts-shell) button.wide { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-top: 22px; padding: 13px 17px; font-size: 14px; }
 :where(.ts-shell) button.wide span { font-size: 20px; line-height: 1; }
 :where(.ts-shell) .danger { padding-top: 20px; border-top: 1px solid #f1e2e0; }
-:where(.ts-shell) .danger button { border-color: #eecbc6; background: #fff5f3; color: #ad5049; }
-:where(.ts-shell) .danger button:hover { background: #ffebe8; }
+:where(.ts-shell) .danger button { border-color: #eecbc6; background: light-dark(#fff3f0, #3b2527); color: var(--ui-danger); }
+:where(.ts-shell) .danger button:hover { background: light-dark(#fff3f0, #3b2527); }
 :where(.ts-shell) .link { border: 0; background: transparent; }
 
 :where(.ts-shell) .scroll { overflow-x: auto; }
 :where(.ts-shell) table { width: 100%; border-collapse: collapse; text-align: left; }
-:where(.ts-shell) th { padding: 12px 10px; border-bottom: 1px solid #d9e4e1; color: #778b8c; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
-:where(.ts-shell) td { padding: 15px 10px; border-bottom: 1px solid #e9efec; color: #314b50; font-size: 13px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+:where(.ts-shell) th { padding: 12px 10px; border-bottom: 1px solid var(--ui-border); color: var(--ui-muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+:where(.ts-shell) td { padding: 15px 10px; border-bottom: 1px solid var(--ui-subtle); color: #314b50; font-size: 13px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
 :where(.ts-shell) tbody tr:last-child td { border-bottom: 0; }
-:where(.ts-shell) tbody tr:hover { background: #f8fbf9; }
+:where(.ts-shell) tbody tr:hover { background: var(--ui-subtle); }
 :where(.ts-shell) td a { font-weight: 750; }
 :where(.ts-shell) .watch-list { display: grid; gap: 12px; margin-top: 20px; }
-:where(.ts-shell) .watch-item { min-width: 0; padding: 17px; border: 1px solid #e1eae5; border-radius: 12px; background: #fbfdfb; }
+:where(.ts-shell) .watch-item { min-width: 0; padding: 17px; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-subtle); }
 :where(.ts-shell) .watch-item-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
 :where(.ts-shell) .stock-symbol { font-size: 19px; font-weight: 800; }
 :where(.ts-shell) .watch-item-head p { margin: 3px 0 0; }
@@ -125,11 +122,11 @@
 :where(.ts-shell) .watch-item-meta strong { display: block; margin: 4px 0; font-size: 16px; line-height: 1.3; overflow-wrap: anywhere; }
 :where(.ts-shell) .watch-item-meta strong small { display: inline; font-size: 11px; }
 :where(.ts-shell) .watch-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-:where(.ts-shell) .watch-actions a { display: inline-flex; align-items: center; min-height: 34px; padding: 7px 11px; border: 1px solid #d6e3df; border-radius: 8px; background: #fff; color: var(--accent-dark); font-size: 12px; font-weight: 750; }
-:where(.ts-shell) .watch-actions a:hover { background: #edf6f1; text-decoration: none; }
-:where(.ts-shell) .watch-actions .primary-link { border-color: var(--accent); background: var(--accent); color: #fff; }
+:where(.ts-shell) .watch-actions a { display: inline-flex; align-items: center; min-height: 34px; padding: 7px 11px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--accent-dark); font-size: 12px; font-weight: 750; }
+:where(.ts-shell) .watch-actions a:hover { background: var(--ui-selection); text-decoration: none; }
+:where(.ts-shell) .watch-actions .primary-link { border-color: var(--accent); background: var(--ui-action); color: var(--ui-on-action); }
 :where(.ts-shell) .watch-actions .primary-link:hover { background: var(--accent-dark); }
-:where(.ts-shell) .watch-actions a:last-child { color: #a7544b; }
+:where(.ts-shell) .watch-actions a:last-child { color: var(--ui-danger); }
 :where(.ts-shell) .stock-add { margin-top: 20px; padding-top: 17px; border-top: 1px solid var(--line); }
 :where(.ts-shell) .stock-add summary { width: fit-content; color: var(--accent-dark); font-size: 13px; font-weight: 750; cursor: pointer; }
 :where(.ts-shell) .stock-add form { margin-top: 18px; }
@@ -138,13 +135,13 @@
 :where(.ts-shell) ul { padding-left: 19px; }
 :where(.ts-shell) li { margin: 9px 0; line-height: 1.6; }
 :where(.ts-shell) .card > ul { padding-left: 0; list-style: none; }
-:where(.ts-shell) .card > ul li { padding: 12px 0; border-bottom: 1px solid #edf1ef; }
+:where(.ts-shell) .card > ul li { padding: 12px 0; border-bottom: 1px solid var(--ui-subtle); }
 :where(.ts-shell) .card > ul li:last-child { border-bottom: 0; }
-:where(.ts-shell) code { padding: 2px 5px; border-radius: 4px; background: #edf2f0; color: #286d65; font-size: .92em; }
-:where(.ts-shell) .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid #d7e8e0; border-radius: 999px; background: #eff7f2; color: #1f7666; font-size: 11px; font-weight: 800; white-space: nowrap; }
-:where(.ts-shell) .status-pill.is-off { border-color: #e0e6e3; background: #f3f5f4; color: #687b7d; }
-:where(.ts-shell) .info-strip { padding: 13px 16px; border: 1px solid #dbe9e5; border-radius: 10px; background: #f1f8f4; color: #426b66; font-size: 13px; line-height: 1.6; }
-:where(.ts-shell) .empty-state { padding: 28px; border: 1px dashed #cad9d4; border-radius: 12px; background: #fbfdfb; color: var(--muted); text-align: center; }
+:where(.ts-shell) code { padding: 2px 5px; border-radius: 4px; background: var(--ui-subtle); color: #286d65; font-size: .92em; }
+:where(.ts-shell) .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid #d7e8e0; border-radius: 999px; background: var(--ui-selection); color: var(--ui-accent); font-size: 11px; font-weight: 800; white-space: nowrap; }
+:where(.ts-shell) .status-pill.is-off { border-color: var(--ui-border); background: var(--ui-subtle); color: var(--ui-muted); }
+:where(.ts-shell) .info-strip { padding: 13px 16px; border: 1px solid #dbe9e5; border-radius: 10px; background: var(--ui-selection); color: var(--ui-accent); font-size: 13px; line-height: 1.6; }
+:where(.ts-shell) .empty-state { padding: 28px; border: 1px dashed var(--ui-border); border-radius: 12px; background: var(--ui-subtle); color: var(--muted); text-align: center; }
 
 @container stock-workspace (max-width: 900px) {
   :where(.ts-shell) .grid { grid-template-columns: 1fr; }
@@ -207,12 +204,12 @@
 :where(.ts-shell) .settings-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 :where(.ts-shell) .settings-actions button { min-width: 108px; }
 :where(.ts-shell) .settings-secondary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
-:where(.ts-shell) .settings-secondary button, :where(.ts-shell) .settings-clear button { background: #fff; }
-:where(.ts-shell) .settings-secondary form:last-child button, :where(.ts-shell) .settings-clear button { border-color: #eadad7; color: #a34d47; }
-:where(.ts-shell) .settings-secondary form:last-child button:hover, :where(.ts-shell) .settings-clear button:hover { background: #fff3f0; }
+:where(.ts-shell) .settings-secondary button, :where(.ts-shell) .settings-clear button { background: var(--ui-surface); }
+:where(.ts-shell) .settings-secondary form:last-child button, :where(.ts-shell) .settings-clear button { border-color: #eadad7; color: var(--ui-danger); }
+:where(.ts-shell) .settings-secondary form:last-child button:hover, :where(.ts-shell) .settings-clear button:hover { background: light-dark(#fff3f0, #3b2527); }
 :where(.ts-shell) .settings-clear { margin-top: 10px !important; }
 :where(.ts-shell) .settings-footnote { margin: 10px 0 0; color: var(--muted); font-size: 12px; }
-:where(.ts-shell) .proxy-result { margin: 18px 0 0; padding: 12px 14px; border-left: 3px solid var(--accent); background: #f4f8f7; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+:where(.ts-shell) .proxy-result { margin: 18px 0 0; padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--ui-subtle); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 :where(.ts-shell) .proxy-result strong { font-size: 17px; font-variant-numeric: tabular-nums; }
 :where(.ts-shell) .proxy-result span { color: var(--muted); font-size: 12px; }
 :where(.ts-shell) .settings-restore { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--line); }
@@ -236,7 +233,7 @@
 :where(.ts-shell) .page-notice { margin-bottom: 20px; }
 :where(.ts-shell) .schedule-controls { margin-bottom: 20px; }
 :where(.ts-shell) .schedule-items { display: grid; gap: 12px; }
-:where(.ts-shell) .schedule-item { padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #fbfdfb; }
+:where(.ts-shell) .schedule-item { padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--ui-subtle); }
 :where(.ts-shell) .schedule-item-head { display: flex; align-items: center; gap: 12px; }
 :where(.ts-shell) .schedule-item-head strong { font-size: 20px; }
 :where(.ts-shell) .schedule-item > p { margin: 8px 0 15px; overflow-wrap: anywhere; }
@@ -245,14 +242,14 @@
 :where(.ts-shell) .schedule-edit { display: flex; align-items: end; flex: 1 1 230px; gap: 8px; }
 :where(.ts-shell) .schedule-edit label { flex: 1; max-width: 180px; margin: 0; }
 :where(.ts-shell) .schedule-edit input { margin-top: 5px; }
-:where(.ts-shell) .schedule-actions .delete-button { color: #a7544b; border-color: #f0dedb; background: #fff; }
-:where(.ts-shell) .back-link { display: inline-block; margin-bottom: 22px; color: #66807f; font-size: 12px; font-weight: 700; }
+:where(.ts-shell) .schedule-actions .delete-button { color: var(--ui-danger); border-color: #f0dedb; background: var(--ui-surface); }
+:where(.ts-shell) .back-link { display: inline-block; margin-bottom: 22px; color: var(--ui-muted); font-size: 12px; font-weight: 700; }
 :where(.ts-shell) .stock-actions { display: flex; flex-wrap: wrap; gap: 9px; margin: -3px 0 20px; }
-:where(.ts-shell) .stock-actions a { min-height: 36px; padding: 8px 13px; border: 1px solid #d6e3df; border-radius: 9px; background: #fff; color: var(--accent-dark); font-size: 12px; font-weight: 750; }
-:where(.ts-shell) .stock-actions a:hover { background: #edf6f1; text-decoration: none; }
-:where(.ts-shell) .stock-actions .primary-link { border-color: var(--accent); background: var(--accent); color: #fff; }
+:where(.ts-shell) .stock-actions a { min-height: 36px; padding: 8px 13px; border: 1px solid var(--ui-border); border-radius: 9px; background: var(--ui-surface); color: var(--accent-dark); font-size: 12px; font-weight: 750; }
+:where(.ts-shell) .stock-actions a:hover { background: var(--ui-selection); text-decoration: none; }
+:where(.ts-shell) .stock-actions .primary-link { border-color: var(--accent); background: var(--ui-action); color: var(--ui-on-action); }
 :where(.ts-shell) .stock-actions .primary-link:hover { background: var(--accent-dark); }
-:where(.ts-shell) .stock-actions a:last-child { color: #a7544b; }
+:where(.ts-shell) .stock-actions a:last-child { color: var(--ui-danger); }
 :where(.ts-shell) #stock-settings, :where(.ts-shell) #add-level, :where(.ts-shell) #delete-stock { scroll-margin-top: 20px; }
 :where(.ts-shell) .stock-summary { display: flex; gap: 48px; align-items: center; margin-bottom: 20px; }
 :where(.ts-shell) .stock-summary > div { min-width: 0; }
@@ -263,7 +260,7 @@
 :where(.ts-shell) .summary-quote .muted, :where(.ts-shell) .summary-status .muted { display: block; font-size: 12px; }
 :where(.ts-shell) .day-move { display: block; margin: 4px 0; color: var(--muted); font-size: 14px; font-weight: 700; }
 :where(.ts-shell) .day-move.up { color: #167c61; }
-:where(.ts-shell) .day-move.down { color: #b43e45; }
+:where(.ts-shell) .day-move.down { color: var(--ui-danger); }
 :where(.ts-shell) .summary-status { min-width: 200px; padding-left: 38px; border-left: 1px solid var(--line); }
 :where(.ts-shell) .stock-settings, :where(.ts-shell) .levels-section { margin-bottom: 20px; }
 :where(.ts-shell) .stock-form { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr) auto auto; gap: 14px; align-items: end; }
@@ -273,20 +270,20 @@
 :where(.ts-shell) .rule-help { margin: -8px 0 24px; color: var(--muted); font-size: 12px; }
 :where(.ts-shell) .rule-help summary, :where(.ts-shell) .level-edit summary { width: fit-content; color: var(--accent-dark); font-weight: 750; cursor: pointer; }
 :where(.ts-shell) .rule-help p { margin: 8px 0 0; }
-:where(.ts-shell) .level-card { margin: 15px 0; padding: 18px; border: 1px solid #e2ebe6; border-radius: 12px; background: #fbfdfb; }
+:where(.ts-shell) .level-card { margin: 15px 0; padding: 18px; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-subtle); }
 :where(.ts-shell) .level-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 :where(.ts-shell) .level-heading strong { font-size: 14px; }
 :where(.ts-shell) .level-note { margin: -3px 0 12px; color: var(--muted); font-size: 12px; }
 :where(.ts-shell) .level-quota { margin: 8px 0 14px; color: #354f4c; font-size: 13px; }
 :where(.ts-shell) .level-quota strong { font-size: 15px; }
 :where(.ts-shell) .level-edit { font-size: 12px; }
-:where(.ts-shell) .level-edit summary { padding: 10px 14px; border: 1px solid var(--accent-dark); border-radius: 8px; background: #e8f5f1; font-size: 14px; }
+:where(.ts-shell) .level-edit summary { padding: 10px 14px; border: 1px solid var(--accent-dark); border-radius: 8px; background: var(--ui-selection); font-size: 14px; }
 :where(.ts-shell) .level-edit[open] { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: white; }
 :where(.ts-shell) .edit-actions { display: flex; align-items: center; gap: 16px; }
 :where(.ts-shell) .price-chip[href] { text-decoration: none; }
 :where(.ts-shell) .price-chip[href]:hover { box-shadow: 0 0 0 2px currentColor; }
 :where(.ts-shell) .price-chip .price-edit { color: inherit; font-weight: 750; }
-:where(.ts-shell) .chip-toggle { padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 700; color: inherit; background: #ffffffd9; border: 1px solid currentColor; border-radius: 999px; cursor: pointer; }
+:where(.ts-shell) .chip-toggle { padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 700; color: inherit; background: var(--ui-surface); border: 1px solid currentColor; border-radius: 999px; cursor: pointer; }
 :where(.ts-shell) .chip-toggle:hover { box-shadow: 0 0 0 1.5px currentColor; }
 :where(.ts-shell) .chip-toggle.is-paused { color: #166557; font-weight: 750; }
 :where(.ts-shell) .chip-toggle:disabled { opacity: 0.6; cursor: default; }
@@ -296,15 +293,15 @@
 :where(.ts-shell) .level-fields { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(190px, 1.5fr) minmax(140px, 1fr) auto; gap: 12px; align-items: end; }
 :where(.ts-shell) .level-fields label { margin: 0; }
 :where(.ts-shell) .level-fields button { margin-bottom: 1px; }
-:where(.ts-shell) .level-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #e8efeb; }
+:where(.ts-shell) .level-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--ui-subtle); }
 :where(.ts-shell) .level-actions form { margin: 0; }
-:where(.ts-shell) .add-level { margin: 0 0 25px; padding: 20px; border: 1px solid #d9e8e2; border-radius: 12px; background: #f8fbf9; }
+:where(.ts-shell) .add-level { margin: 0 0 25px; padding: 20px; border: 1px solid #d9e8e2; border-radius: 12px; background: var(--ui-subtle); }
 :where(.ts-shell) .add-level h3 { margin-bottom: 15px; }
 :where(.ts-shell) .level-list-title { margin: 0 0 12px; }
 :where(.ts-shell) .history-grid { margin-bottom: 20px; }
 :where(.ts-shell) .history-grid .card { max-height: 480px; overflow: auto; }
 :where(.ts-shell) .record-list { padding: 0; margin: 0; list-style: none; }
-:where(.ts-shell) .record-list li { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; padding: 13px 0; margin: 0; border-bottom: 1px solid #edf1ef; font-size: 12px; }
+:where(.ts-shell) .record-list li { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; padding: 13px 0; margin: 0; border-bottom: 1px solid var(--ui-subtle); font-size: 12px; }
 :where(.ts-shell) .record-list li:last-child { border-bottom: 0; }
 :where(.ts-shell) .record-list li a { font-weight: 750; }
 :where(.ts-shell) .record-list li strong { grid-column: 1 / -1; font-size: 17px; }
@@ -324,7 +321,6 @@
 @container stock-workspace (max-width: 640px) {
   :where(.ts-shell) .overview-hero { min-height: 0; }
   :where(.ts-shell) .hero-meta { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: none; margin-top: 16px; padding: 10px 12px; }
-  :where(.ts-shell) .hero-meta strong { margin: 0; font-size: 19px; }
   :where(.ts-shell) .hero-meta span:last-child { margin-left: auto; }
   :where(.ts-shell) .schedule-item { padding: 15px; }
   :where(.ts-shell) .schedule-edit { flex-basis: 100%; }
@@ -343,9 +339,9 @@
 }
 
 /* Use labels and comparison symbols as well as color to distinguish directions. */
-:where(.ts-shell) .level-buy, :where(.ts-shell) .buy-option { --side-color: #1d579e; --side-bg: #eef5ff; --side-border: #b5cdea; }
-:where(.ts-shell) .level-sell, :where(.ts-shell) .sell-option { --side-color: #a14c14; --side-bg: #fff4e9; --side-border: #edc6a2; }
-:where(.ts-shell) .level-review, :where(.ts-shell) .review-option { --side-color: #6d4296; --side-bg: #f6f0fc; --side-border: #d4bee8; }
+:where(.ts-shell) .level-buy, :where(.ts-shell) .buy-option { --side-color: light-dark(#1d579e, #a6cbff); --side-bg: light-dark(#eef5ff, #22334d); --side-border: light-dark(#b5cdea, #4c688c); }
+:where(.ts-shell) .level-sell, :where(.ts-shell) .sell-option { --side-color: light-dark(#a14c14, #ffc091); --side-bg: light-dark(#fff0e8, #3e2d22); --side-border: light-dark(#edc6a2, #80573b); }
+:where(.ts-shell) .level-review, :where(.ts-shell) .review-option { --side-color: light-dark(#6d4296, #d9b4f4); --side-bg: light-dark(#f6f0fc, #382b46); --side-border: light-dark(#d4bee8, #735989); }
 :where(.ts-shell) .level-card.level-buy, :where(.ts-shell) .level-card.level-sell, :where(.ts-shell) .level-card.level-review { border-left: 5px solid var(--side-color); background: var(--side-bg); }
 :where(.ts-shell) .side-badge { display: inline-block; color: var(--side-color); font-size: 16px; font-weight: 800; }
 :where(.ts-shell) .target-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; color: var(--side-color); }
@@ -354,8 +350,8 @@
 :where(.ts-shell) .target-price small { font-size: 13px; font-weight: 700; }
 :where(.ts-shell) .target-rule { margin: 8px 0 18px; color: var(--side-color); font-size: 12px; }
 :where(.ts-shell) .side-picker { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; min-width: 0; margin: 0 0 4px; padding: 0; border: 0; }
-:where(.ts-shell) .side-picker legend { margin-bottom: 8px; color: #344c51; font-size: 13px; font-weight: 700; }
-:where(.ts-shell) .side-picker .side-option { display: flex; align-items: center; gap: 9px; padding: 13px; border: 2px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; }
+:where(.ts-shell) .side-picker legend { margin-bottom: 8px; color: var(--ui-text); font-size: 13px; font-weight: 700; }
+:where(.ts-shell) .side-picker .side-option { display: flex; align-items: center; gap: 9px; padding: 13px; border: 2px solid var(--line); border-radius: 10px; background: var(--ui-surface); cursor: pointer; }
 :where(.ts-shell) .side-option input[type="radio"] { width: 17px; height: 17px; flex-shrink: 0; margin: 0; accent-color: var(--side-color); }
 :where(.ts-shell) .side-option strong, :where(.ts-shell) .side-option small { display: block; color: var(--side-color); }
 :where(.ts-shell) .side-option strong { font-size: 15px; }
@@ -379,12 +375,12 @@
 :where(.ts-shell) .price-group h3 b { font-size: 20px; }
 :where(.ts-shell) .price-group h3 small { margin-left: 4px; font-size: 11px; font-weight: 500; }
 :where(.ts-shell) .price-chips { display: flex; flex-wrap: wrap; gap: 7px; }
-:where(.ts-shell) .price-chip { display: inline-flex; flex-direction: column; gap: 3px; max-width: 100%; padding: 6px 9px; border-radius: 6px; background: #ffffffcc; overflow-wrap: anywhere; }
+:where(.ts-shell) .price-chip { display: inline-flex; flex-direction: column; gap: 3px; max-width: 100%; padding: 6px 9px; border-radius: 6px; background: var(--ui-surface); overflow-wrap: anywhere; }
 :where(.ts-shell) .price-chip .chip-link { display: inline-flex; flex-direction: column; gap: 3px; color: inherit; text-decoration: none; overflow-wrap: anywhere; border-radius: 6px; }
 :where(.ts-shell) .price-chip .chip-link:hover { box-shadow: 0 0 0 2px currentColor; }
 :where(.ts-shell) .price-chip strong { font-size: 17px; }
 :where(.ts-shell) .price-chip small, :where(.ts-shell) .price-empty { font-size: 12px; }
-:where(.ts-shell) .price-chip.is-paused { color: #667776; background: #ffffff77; }
+:where(.ts-shell) .price-chip.is-paused { color: var(--ui-muted); background: var(--ui-surface); }
 @container stock-workspace (max-width: 640px) { :where(.ts-shell) .watch-prices { grid-template-columns: 1fr; } }
 
 :where(.ts-shell) .today-alerts { margin-bottom: 20px; }
@@ -402,7 +398,7 @@
 :where(.ts-shell) .target-gap { font-size: 12px; line-height: 1.6; }
 :where(.ts-shell) .price-chip .target-gap { max-width: 240px; font-weight: 500; }
 :where(.ts-shell) .price-chip .price-quota { font-weight: 750; }
-:where(.ts-shell) .price-chip .price-quota.is-exhausted { color: #a63e43; }
+:where(.ts-shell) .price-chip .price-quota.is-exhausted { color: var(--ui-danger); }
 :where(.ts-shell) .price-chip-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 2px; }
 :where(.ts-shell) .price-chip-actions form { margin: 0; }
 :where(.ts-shell) .default-limit-form { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 18px 0 8px; }
@@ -425,7 +421,7 @@
 :where(.ts-shell) .watch-toolbar label:first-child { flex: 1; }
 :where(.ts-shell) .watch-toolbar > span { padding-bottom: 12px; color: var(--muted); font-size: 13px; }
 :where(.ts-shell) .watch-columns, :where(.ts-shell) .home-layout .watch-item { display: grid; grid-template-columns: minmax(180px, .9fr) minmax(180px, 1fr) minmax(200px, 1.1fr) minmax(180px, 1fr); gap: 16px; }
-:where(.ts-shell) .watch-columns { position: sticky; top: 0; z-index: 2; padding: 14px 18px; background: #eaf0f0; border-radius: 8px; font-weight: 700; font-size: 13px; }
+:where(.ts-shell) .watch-columns { position: sticky; top: 0; z-index: 2; padding: 14px 18px; background: var(--ui-subtle); border-radius: 8px; font-weight: 700; font-size: 13px; }
 :where(.ts-shell) .home-layout .watch-list { margin-top: 12px; }
 :where(.ts-shell) .home-layout .watch-item { padding: 18px; align-items: start; }
 :where(.ts-shell) .home-layout .watch-item[hidden], :where(.ts-shell) [hidden] { display: none; }
@@ -439,7 +435,7 @@
 :where(.ts-shell) .reference-form select { padding: 8px; }
 :where(.ts-shell) .reference-form button { padding: 8px 12px; }
 :where(.ts-shell) .expected-profit { font-weight: 750; color: #283f43; }
-:where(.ts-shell) #stock-dialog { width: min(560px, calc(100% - 28px)); max-height: calc(100dvh - 40px); box-sizing: border-box; padding: 28px; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 80px #102d3340; }
+:where(.ts-shell) #stock-dialog { background: var(--surface); color: var(--ink); width: min(560px, calc(100% - 28px)); max-height: calc(100dvh - 40px); box-sizing: border-box; padding: 28px; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 80px #102d3340; }
 :where(.ts-shell) #stock-dialog::backdrop { background: #102d3380; }
 :where(.ts-shell) #stock-dialog .panel-head { display: flex; gap: 16px; justify-content: space-between; align-items: start; }
 :where(.ts-shell) #stock-dialog .panel-head button { flex-shrink: 0; }
@@ -480,7 +476,7 @@
 
 /* Keep session prices legible alongside the latest quote at every width. */
 :where(.ts-shell) .session-prices { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; grid-column: 1 / -1; }
-:where(.ts-shell) .session-price { min-width: 0; flex: 1 1 120px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #f4f8f6; }
+:where(.ts-shell) .session-price { min-width: 0; flex: 1 1 120px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--ui-subtle); }
 :where(.ts-shell) .session-prices .session-price > span { display: block; color: var(--muted); font-size: 13px; font-weight: 650; line-height: 1.5; }
 :where(.ts-shell) .session-prices .session-price small { display: inline; font-size: 11px; font-weight: 500; }
 :where(.ts-shell) .session-prices .session-price b { display: block; margin-top: 4px; color: var(--ink); font-size: 24px; font-weight: 750; line-height: 1.25; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

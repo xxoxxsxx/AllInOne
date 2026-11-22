@@ -22,8 +22,10 @@ export function HomeView({ loadError, documentSummary, documentReminderError, fi
 
   return (
     <main className="portal-overview">
-      <h1 className="page-title">工作台概览</h1>
-      <p className="page-sub">从菜单选择工具，直接在工作台使用。</p>
+      <header className="ui-heading ui-heading-stack">
+        <h1>工作台概览</h1>
+        <p className="ui-subtitle">从菜单选择工具，直接在工作台使用。</p>
+      </header>
       {loadError && <p className="error-banner" role="alert">工具配置加载失败：{loadError}</p>}
       {documentReminderError && <p className="error-banner" role="status">暂时无法读取证件到期信息，请打开证件夹检查。</p>}
       {overview.length > 0 && (

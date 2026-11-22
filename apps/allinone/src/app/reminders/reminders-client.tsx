@@ -590,13 +590,13 @@ export function RemindersClient({ initialReminders }: { initialReminders: Remind
 
   return (
     <div className="rem-root">
-      <header className="rem-hero">
+      <header className="rem-hero ui-heading">
         <div>
-          <p className="rem-kicker">REMINDERS</p>
+          <p className="rem-kicker ui-kicker">REMINDERS</p>
           <h1 className="rem-title">提醒事项</h1>
-          <p className="rem-sub">文字与图片提醒：一条提醒可叠加多个时间计划 —— 单次、间隔重复与 cron 定时，经 Bark / 飞书 / Telegram 推送。</p>
+          <p className="rem-sub ui-subtitle">文字与图片提醒：支持单次、间隔重复和 cron 定时，可通过 Bark、飞书或 Telegram 推送。</p>
         </div>
-        <div className="rem-hero-side">
+        <div className="rem-hero-side ui-actions">
           <span className="rem-stat">{totalPending} 条待触发</span>
           <button type="button" className="rem-button rem-button-primary" onClick={openCreate} disabled={busy}>
             + 新建提醒

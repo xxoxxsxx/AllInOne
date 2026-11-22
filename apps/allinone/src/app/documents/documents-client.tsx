@@ -1072,11 +1072,11 @@ export function DocumentsClient(props: {
 
   return (
     <div className="docs-root">
-      <header className="docs-hero">
-        <p className="docs-kicker">Document Vault</p>
+      <header className="docs-hero ui-heading ui-heading-stack">
+        <p className="docs-kicker ui-kicker">Document Vault</p>
         <h1 className="docs-title">证件夹</h1>
-        <p className="docs-sub">集中管理证件与签证的有效期、扫描件和标签，到期前站内提醒。</p>
-        <div className="docs-actions">
+        <p className="docs-sub ui-subtitle">集中管理证件与签证的有效期、扫描件和标签，到期前站内提醒。</p>
+        <div className="docs-actions ui-actions">
           <button type="button" className="docs-btn docs-btn-primary" onClick={openNew}>＋ 新增证件</button>
           <button type="button" className="docs-btn" onClick={() => setManageOpen(true)}>管理分类 / 持有人</button>
           <a className="docs-btn" href="/documents/settings">到期提醒设置</a>

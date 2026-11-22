@@ -45,12 +45,11 @@ export default async function LedgerDashboard() {
         </a>
       </div>
       <section className="mx-auto mt-4 w-full max-w-6xl rounded-[28px] border border-border bg-surface p-8 shadow-[0_24px_80px_rgba(15,23,42,0.08)] sm:p-12">
-        <p className="text-sm uppercase tracking-[0.28em] text-accent">
-          CDK Ledger App
-        </p>
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-          内网 CDK 台账
-        </h1>
+        <header className="ui-heading ui-heading-stack">
+          <p className="ui-kicker">CDK Ledger</p>
+          <h1>内网 CDK 台账</h1>
+          <p className="ui-subtitle">管理发货、代发、作废与换新记录。</p>
+        </header>
 
         <div className="mt-10 grid gap-4 lg:grid-cols-3">
           {quickLinks.map((item) => (

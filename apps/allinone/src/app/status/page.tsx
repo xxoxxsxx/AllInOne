@@ -26,8 +26,10 @@ export default async function StatusPage() {
 
   return (
     <div>
-      <h1 className="page-title">工具状态</h1>
-      <p className="page-sub">状态来自服务端定期检查，“可访问”仅表示检查目标通过，不代表业务功能或通知链路正常。</p>
+      <header className="ui-heading ui-heading-stack">
+        <h1>工具状态</h1>
+        <p className="ui-subtitle">状态来自服务端定期检查，“可访问”仅表示检查目标通过，不代表业务功能或通知链路正常。</p>
+      </header>
       <div className="status-list">
         {tools.map((tool) => {
           const status = byId.get(tool.id);

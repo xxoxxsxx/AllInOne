@@ -17,6 +17,6 @@
 .travel-batch-preview ol { max-height: 180px; overflow-y: auto; list-style: decimal; padding-left: 28px; margin-top: 8px; }
 .travel-batch-preview li { padding: 3px 0; overflow-wrap: anywhere; }
 .travel-batch-dialog footer { justify-content: flex-end; flex-wrap: wrap; }
-.travel-batch-dialog .travel-batch-confirm { background: var(--accent); border-color: var(--accent); color: white; }
+.travel-batch-dialog .travel-batch-confirm { background: var(--ui-action); border-color: var(--ui-action); color: var(--ui-on-action); }
 .travel-batch-dialog button:disabled { opacity: .55; cursor: not-allowed; }
 @media (max-width: 480px) { .travel-batch-dialog { padding: 16px; } }

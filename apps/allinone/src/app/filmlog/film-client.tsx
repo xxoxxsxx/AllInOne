@@ -77,11 +77,11 @@ export function FilmClient({ rolls, today, options }: { rolls: FilmRoll[]; today
     return [...counts].sort((a,b) => b[1] - a[1]).slice(0,5).map(([name,count]) => `${name} ${count} 卷`).join(" · ") || "暂无记录";
   };
   return <>
-    <header className="fl-hero">
+    <header className="fl-hero ui-heading">
       <div className="fl-hero-text">
-        <p className="fl-kicker">FILM LOG · 每一卷都值得被记录</p>
+        <p className="fl-kicker ui-kicker">FILM LOG</p>
         <h1>胶卷日志</h1>
-        <p className="fl-sub">从买下第一卷，到冲洗出最后一张，给每卷胶卷留一本小小的档案。</p>
+        <p className="fl-sub ui-subtitle">记录胶卷的库存、拍摄、冲洗和费用。</p>
       </div>
       <button className="fl-btn fl-primary" onClick={() => { setError(""); setEditing("new"); }}>＋ 记录一卷</button>
     </header>

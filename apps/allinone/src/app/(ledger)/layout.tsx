@@ -9,11 +9,11 @@ export default function LedgerLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <>
+    <div className="ui-ledger">
       {children}
       <Suspense fallback={null}>
         <ToastHost />
       </Suspense>
-    </>
+    </div>
   );
 }

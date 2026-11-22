@@ -86,7 +86,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
               <p className="text-sm uppercase tracking-[0.28em] text-accent">
                 Phase 6 Ready
               </p>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight">
+              <h1 className="ui-title mt-3 font-semibold tracking-tight">
                 事件明细
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-8 text-muted">

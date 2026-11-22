@@ -38,14 +38,18 @@ export default function PreferencesPage() {
       return;
     }
     clearAllPreferences();
+    setTheme("system");
+    document.documentElement.dataset.theme = "system";
     setCleared(true);
     setConfirming(false);
   };
 
   return (
     <div>
-      <h1 className="page-title">偏好</h1>
-      <p className="page-sub">偏好仅保存在当前设备浏览器中，不影响工具业务数据。</p>
+      <header className="ui-heading ui-heading-stack">
+        <h1>偏好</h1>
+        <p className="ui-subtitle">偏好仅保存在当前设备浏览器中，不影响工具业务数据。</p>
+      </header>
 
       <div className="pref-card">
         <h2>主题</h2>
@@ -62,7 +66,7 @@ export default function PreferencesPage() {
             </button>
           ))}
         </div>
-        <p className="pref-hint">主题仅约束门户本身；各工具内部界面沿用其自有样式。</p>
+        <p className="pref-hint">主题适用于工具箱和内置模块；地图、图片预览与导出内容保持原样。</p>
       </div>
 
       <div className="pref-card">
@@ -72,7 +76,7 @@ export default function PreferencesPage() {
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <button type="button" className="danger-button" onClick={handleClear}>
-            {confirming ? "再点一次确认清除" : "清除收藏与最近记录"}
+            {confirming ? "再点一次确认清除" : "清除本机偏好"}
           </button>
           {cleared ? <span className="status-item-detail">已清除。</span> : null}
         </div>

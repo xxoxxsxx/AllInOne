@@ -1,0 +1,25 @@
+:root {
+  color-scheme: light dark;
+  --ui-font: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --ui-bg: light-dark(#f4f6f8, #101619);
+  --ui-surface: light-dark(#ffffff, #192226);
+  --ui-subtle: light-dark(#edf1f3, #222f34);
+  --ui-border: light-dark(#dbe2e5, #35454c);
+  --ui-text: light-dark(#18292f, #edf3f4);
+  --ui-muted: light-dark(#53676e, #aabcc2);
+  --ui-accent: light-dark(#096b62, #69dbcb);
+  --ui-action: light-dark(#087267, #69dbcb);
+  --ui-on-action: light-dark(#fff, #102b28);
+  --ui-selection: light-dark(#e0f2ee, #193d38);
+  --ui-success: light-dark(#147249, #83dfad);
+  --ui-warning: light-dark(#925408, #f2c575);
+  --ui-danger: light-dark(#ad342e, #ffa29a);
+  --ui-on-danger: light-dark(#fff, #3e1612);
+  --ui-radius: 12px;
+  --ui-control-radius: 8px;
+  --ui-control-height: 40px;
+  --ui-title-size: clamp(1.5rem, 1.2rem + 0.8vw, 2rem);
+}
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }

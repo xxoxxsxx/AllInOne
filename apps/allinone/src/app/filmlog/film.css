@@ -1,40 +1,25 @@
-/* 胶卷日志 · 胶片手账风
-   设计语言：暖纸底色 + 暗房深色块 + 胶片齿孔条 + 琥珀强调色。
-   支持深色模式（prefers-color-scheme）。 */
-
 .fl-page{
-  --paper:#f6f1e7; --card:#fffdf8; --ink:#2b2620; --ink-2:#8a7f6e;
-  --line:#e6dcc8; --accent:#c77b2e; --accent-ink:#8a5620;
-  --dark:#1d1a16; --dark-2:#141210;
-  max-width:1200px;margin:0 auto;padding:40px 24px 96px;
+  --paper:var(--ui-bg); --card:var(--ui-surface); --ink:var(--ui-text); --ink-2:var(--ui-muted);
+  --line:var(--ui-border); --accent:var(--ui-accent); --accent-ink:var(--ui-accent);
+  max-width:1320px;margin:0 auto;padding:0 0 48px;
   background:var(--paper);color:var(--ink);
-  min-height:100vh;font-family:inherit;
+  font-family:inherit;
 }
-@media(prefers-color-scheme:dark){
-  .fl-page{--paper:#191612;--card:#211d17;--ink:#ece4d4;--ink-2:#a2967f;
-    --line:#3a3327;--accent:#d98c3a;--accent-ink:#d9a35e;--dark:#241f19;--dark-2:#141210;}
-}
+
 
 /* —— 顶栏 —— */
 .fl-back{display:inline-block;margin-bottom:20px;font-size:13px;color:var(--ink-2);text-decoration:none}
 .fl-back:hover{color:var(--ink)}
-.fl-hero{position:relative;overflow:hidden;border-radius:18px;background:linear-gradient(135deg,var(--dark) 0%,var(--dark-2) 100%);
-  color:#f2ead8;padding:34px 34px 50px;display:flex;align-items:end;justify-content:space-between;gap:24px;margin:26px 0 26px}
-.fl-kicker{font-size:10px;letter-spacing:.22em;color:var(--accent);font-weight:700;margin:0 0 12px}
-.fl-hero h1{font-family:Georgia,"Songti SC",serif;font-size:40px;margin:0 0 10px;letter-spacing:.02em}
-.fl-sub{font-size:13px;color:#b3a892;margin:0}
-.fl-hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:16px;
-  background:radial-gradient(circle at 9px 8px,#f2ead8 2.6px,transparent 3.4px) #0e0c0a;
-  background-size:22px 16px;background-position:6px 0}
+.fl-hero-text{min-width:0}
 
 /* —— 按钮 —— */
 .fl-btn{cursor:pointer;border-radius:9px;padding:9px 16px;font:inherit;font-size:13px;border:1px solid transparent}
-.fl-primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.fl-primary{background:var(--accent);border-color:var(--accent);color:var(--ui-on-action);font-weight:600}
 .fl-primary:hover{filter:brightness(1.08)}
 .fl-ghost{background:transparent;color:var(--ink-2);border-color:var(--line)}
 .fl-ghost:hover{color:var(--ink);border-color:var(--ink-2)}
-.fl-danger{background:transparent;color:#a5423d;border-color:#e3c2bb}
-.fl-danger:hover{background:#fbeae7}
+.fl-danger{background:transparent;color:var(--ui-danger);border-color:var(--ui-border)}
+.fl-danger:hover{background:light-dark(#fbe3dd, #3b2527)}
 .fl-btn:disabled{opacity:.5;cursor:wait}
 
 /* —— 统计 —— */
@@ -48,15 +33,9 @@
 .fl-insights{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 20px;margin-top:14px;font-size:13px;color:var(--ink-2)}
 .fl-insights summary{cursor:pointer;color:var(--ink)}
 .fl-insights p{margin:8px 0 0}
-.fl-alert{padding:13px 18px;border-radius:11px;background:#f7e8cd;color:#82572c;font-size:13px;margin-top:14px}
-.fl-alert-error{background:#fbe3dd;color:#93392f}
-@media(prefers-color-scheme:dark){
-  .fl-insights{color:var(--ink-2)}
-  .fl-alert{background:#3a2f1c;color:#d9b276}
-  .fl-alert-error{background:#402622;color:#e0968b}
-  .fl-danger{color:#e0968b;border-color:#5c3a33}
-  .fl-danger:hover{background:#33231f}
-}
+.fl-alert{padding:13px 18px;border-radius:11px;background:light-dark(#fff1d6, #3c2e1d);color:var(--ui-warning);font-size:13px;margin-top:14px}
+.fl-alert-error{background:light-dark(#fbe3dd, #3b2527);color:var(--ui-danger)}
+
 
 /* —— 编辑器 —— */
 .fl-editor{margin-top:30px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px}
@@ -97,23 +76,15 @@
 .fl-brand{font-size:10px;letter-spacing:.14em;color:var(--accent-ink);margin:0 0 6px;font-weight:700}
 .fl-meta{font-size:12px;color:var(--ink-2);line-height:1.6;margin:8px 0 0}
 .fl-status{white-space:nowrap;font-size:11px;padding:4px 10px;border-radius:20px;font-weight:600}
-.fl-status-stock{background:#efe9dc;color:#7c7361}
-.fl-status-shooting{background:#f7e8cd;color:#9c6a1e}
-.fl-status-shot{background:#fbe3d0;color:#a4551f}
-.fl-status-developing{background:#dcf0ea;color:#2e6e63}
-.fl-status-developed{background:#e2efe4;color:#3c6657}
+.fl-status-stock{background:var(--ui-subtle);color:var(--ui-muted)}
+.fl-status-shooting{background:light-dark(#fff1d6, #3c2e1d);color:var(--ui-warning)}
+.fl-status-shot{background:light-dark(#fff1d6, #3c2e1d);color:var(--ui-warning)}
+.fl-status-developing{background:var(--ui-selection);color:var(--ui-accent)}
+.fl-status-developed{background:var(--ui-selection);color:var(--ui-success)}
 .fl-expiry{align-self:flex-start;margin-top:10px;white-space:nowrap;font-size:11px;padding:4px 10px;border-radius:20px}
-.fl-expiry-soon{background:#fff1d6;color:#936220}
-.fl-expiry-expired{background:#fde3df;color:#a5423d}
-@media(prefers-color-scheme:dark){
-  .fl-status-stock{background:#2e2a22;color:#b3a892}
-  .fl-status-shooting{background:#3a2f1c;color:#d9b276}
-  .fl-status-shot{background:#3d2a1e;color:#e2a06b}
-  .fl-status-developing{background:#1e332e;color:#7cc2b0}
-  .fl-status-developed{background:#22322a;color:#8fc7a2}
-  .fl-expiry-soon{background:#3a2f1c;color:#d9b276}
-  .fl-expiry-expired{background:#402622;color:#e0968b}
-}
+.fl-expiry-soon{background:light-dark(#fff1d6, #3c2e1d);color:var(--ui-warning)}
+.fl-expiry-expired{background:light-dark(#fbe3dd, #3b2527);color:var(--ui-danger)}
+
 
 /* 生命周期进度：5 段胶囊条 */
 .fl-flow{display:flex;gap:5px;list-style:none;margin:16px 0 0;padding:0}
@@ -147,9 +118,6 @@
   /* 561-900px 时 fieldset 若仍排 3 列，日期输入只剩约 84px 宽，值显示不全 */
   .fl-fieldset{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){
-  .fl-page{padding:26px 16px 70px}
-  .fl-hero{flex-direction:column;align-items:stretch;padding:26px 22px 40px}
-  .fl-hero h1{font-size:31px}
   .fl-stats{grid-template-columns:repeat(2,1fr)}
   .fl-stats div{padding:14px 16px}
   .fl-stats div+div{border-left:0}

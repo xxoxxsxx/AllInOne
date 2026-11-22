@@ -145,13 +145,13 @@ export default async function StocksHomePage({
       ) : null}
       <Flash text={flashText(sp.flash ?? "")} />
 
-      <section className="overview-hero">
+      <section className="overview-hero ui-heading">
         <div>
-          <span className="eyebrow">YOUR WATCHLIST</span>
+          <span className="eyebrow ui-kicker">YOUR WATCHLIST</span>
           <h1>监控概览</h1>
-          <p>把关注的美股和目标价格放在一处。所有报价都保留查询时间、行情时间与来源。</p>
+          <p className="ui-subtitle">把关注的美股和目标价格放在一处。所有报价都保留查询时间、行情时间与来源。</p>
         </div>
-        <div className="hero-meta">
+        <div className="hero-meta ui-actions">
           <span>关注标的 · {stocks.length} 只 · USD</span>
           <button className="primary add-stock-button" type="button" data-add-stock="true">
             ＋ 添加股票

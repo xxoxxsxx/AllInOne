@@ -30,10 +30,10 @@ export default async function TravelHomePage({ searchParams }: PageProps) {
     <main className="travel-page">
       <div className="travel-container">
         <Link href="/" className="travel-back">← 工具箱</Link>
-        <header className="travel-hero">
-          <p className="travel-kicker">Travel Planner</p>
+        <header className="travel-hero ui-heading ui-heading-stack">
+          <p className="travel-kicker ui-kicker">Travel Planner</p>
           <h1 className="travel-title">旅行攻略</h1>
-          <p className="travel-sub">按天安排地点顺序，在地图上标注，收集照片与各平台攻略链接。</p>
+          <p className="travel-sub ui-subtitle">按天安排地点顺序，在地图上标注，收集照片与各平台攻略链接。</p>
         </header>
 
         {error ? <p className="travel-note travel-note-error">{error}</p> : null}

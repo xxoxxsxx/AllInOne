@@ -24,7 +24,7 @@ export default async function ConfigPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-accent">
                 Control center / 04
               </p>
-              <h1 className="mt-3 font-serif text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
+              <h1 className="ui-title mt-3 font-semibold tracking-tight">
                 基础配置
               </h1>
               <p className="mt-4 max-w-3xl text-sm leading-7 text-muted sm:text-base">

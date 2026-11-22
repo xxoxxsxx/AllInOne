@@ -66,11 +66,11 @@ export default async function SettingsPage({
 
   return (
     <div className="settings-page">
-      <div className="page-head">
+      <div className="page-head ui-heading">
         <div>
-          <span className="eyebrow">PREFERENCES</span>
+          <span className="eyebrow ui-kicker">PREFERENCES</span>
           <h1>服务设置</h1>
-          <p>管理行情来源、股票自动推送、网络代理和配置备份。渠道凭据在全局推送渠道页统一配置。</p>
+          <p className="ui-subtitle">管理行情来源、股票自动推送、网络代理和配置备份。渠道凭据在全局推送渠道页统一配置。</p>
         </div>
       </div>
       <Flash text={sp.error ?? notices[sp.result ?? ""] ?? ""} />

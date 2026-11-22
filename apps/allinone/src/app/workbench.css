@@ -1,0 +1,98 @@
+.portal-content .ui-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 24px;
+  min-height: 0;
+  margin: 0 0 24px;
+  padding: 0 0 18px;
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ui-text);
+  overflow: visible;
+}
+
+.portal-content .ui-heading::before,
+.portal-content .ui-heading::after { content: none; }
+
+.portal-content .ui-heading-stack { display: block; }
+.portal-content .ui-heading .hero-meta span { color: var(--ui-muted); }
+.portal-content .ui-ledger .ui-title {
+  color: var(--ui-text);
+  font: 700 var(--ui-title-size)/1.16 var(--ui-font);
+}
+
+.portal-content .ui-heading :is(.ui-title, h1) {
+  margin: 0;
+  color: var(--ui-text);
+  font: 700 var(--ui-title-size)/1.16 var(--ui-font);
+  letter-spacing: -0.025em;
+}
+
+.portal-content .ui-heading .ui-subtitle {
+  margin: 5px 0 0;
+  color: var(--ui-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.portal-content .ui-heading .ui-kicker {
+  margin: 0 0 5px;
+  color: var(--ui-accent);
+  font: 650 11px/1.3 var(--ui-font);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.portal-content .ui-heading .ui-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.portal-content .ui-heading-stack .ui-actions { margin-top: 16px; }
+
+.portal-content :is(.funding .fund-actions button, .docs-btn, .rem-button, .fl-btn, .reminder-button, .travel-page .btn, .ts-shell button.primary, .ui-button) {
+  min-height: var(--ui-control-height);
+  border-radius: var(--ui-control-radius);
+}
+
+.portal-content :is(.funding button.primary, .funding button.active, .docs-btn-primary, .rem-button-primary, .fl-primary, .travel-page .btn-primary, .ts-shell button.primary, .ts-shell #run, .reminder-settings .reminder-button-primary, .ui-button-primary, .bg-accent.text-white) {
+  border-color: var(--ui-action);
+  background: var(--ui-action);
+  color: var(--ui-on-action);
+}
+
+.portal-content :is(.funding button.primary, .docs-btn-primary, .rem-button-primary, .fl-primary, .travel-page .btn-primary, .ts-shell button.primary, .ts-shell #run, .reminder-settings .reminder-button-primary, .ui-button-primary, .bg-accent.text-white):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ui-action) 86%, var(--ui-text));
+  color: var(--ui-on-action);
+}
+
+.portal-content :is(.fund-card, .fund-dialog, .docs-card, .rem-card, .rem-editor, .trip-card, .fl-roll, .fl-editor, .reminder-panel, .ts-shell .card, .pref-card, .detail-card) {
+  border-radius: var(--ui-radius);
+}
+
+.portal-content :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"]), select, textarea) {
+  border-radius: var(--ui-control-radius);
+}
+
+.portal-content :is(a, button, summary, input, select, textarea):focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+
+.portal-content :is(.funding, .ts-shell, .ui-ledger) :is(th, td) { line-height: 1.45; }
+.portal-content .ui-ledger :is(.bg-white, .bg-white\/60, .bg-white\/70, .bg-white\/85) { background: var(--ui-surface); }
+.portal-content .ui-ledger .hover\:text-white:hover { color: var(--ui-on-action); }
+
+@media (max-width: 640px) {
+  .portal-content .ui-heading { gap: 12px; margin-bottom: 18px; padding-bottom: 14px; }
+  .portal-content .ui-heading .ui-actions { width: 100%; }
+  .portal-content :is(.ui-button, .funding .fund-actions button, .docs-btn, .rem-button, .fl-btn, .travel-page .btn) { min-height: 44px; }
+}

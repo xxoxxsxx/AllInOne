@@ -119,8 +119,8 @@ body:has(.travel-page) > .site-main {
   font-size: 14px;
 }
 .btn-primary {
-  background: var(--accent);
-  color: #fff;
+  background: var(--ui-action);
+  color: var(--ui-on-action);
 }
 .btn-primary:hover {
   opacity: 0.9;
@@ -131,8 +131,8 @@ body:has(.travel-page) > .site-main {
   background: transparent;
 }
 .btn-secondary:hover {
-  background: var(--accent);
-  color: #fff;
+  background: var(--ui-action);
+  color: var(--ui-on-action);
 }
 .btn-ghost {
   border-color: var(--border);
@@ -150,7 +150,7 @@ body:has(.travel-page) > .site-main {
 }
 .btn-danger:hover {
   background: var(--danger);
-  color: #fff;
+  color: var(--ui-on-danger);
 }
 .icon-btn {
   width: 32px;
@@ -243,7 +243,7 @@ textarea.input {
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 .trip-card-delete-btn:hover {
-  color: #fff;
+  color: var(--ui-on-danger);
   background: var(--danger);
   border-color: var(--danger);
 }

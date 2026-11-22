@@ -3,7 +3,6 @@
   flex-direction: column;
   min-width: 0;
   min-height: calc(100dvh - var(--portal-bar-height));
-  color-scheme: light;
   font-size: 16px;
   line-height: normal;
 }
@@ -60,7 +59,7 @@
 .ts-shell #results td[data-label="状态"] { white-space: normal; min-width: 180px; }
 .ts-shell .result-status { display: inline-block; font-weight: 600; }
 .ts-shell .result-status[data-state="querying"],
-.ts-shell .result-status[data-state="waiting"] { color: #087e80; }
-.ts-shell .result-status[data-state="skipped"] { color: #6f7679; }
+.ts-shell .result-status[data-state="waiting"] { color: var(--ui-accent); }
+.ts-shell .result-status[data-state="skipped"] { color: var(--ui-muted); }
 .ts-shell .result-status[data-state="error"],
-.ts-shell .result-status[data-state="failed"] { color: #a23832; }
+.ts-shell .result-status[data-state="failed"] { color: var(--ui-danger); }

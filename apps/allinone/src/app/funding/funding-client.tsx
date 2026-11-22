@@ -552,14 +552,14 @@ export default function FundingClient() {
 
   return (
     <>
-      <div className="fund-head">
+      <div className="fund-head ui-heading">
         <div>
           <h1>券商入金</h1>
-          <p className="fund-muted">
+          <p className="fund-muted ui-subtitle">
             券商入金和内地汇款分开记，每笔都有独立序号。
           </p>
         </div>
-        <div className="fund-actions">
+        <div className="fund-actions ui-actions">
           <button onClick={() => open("batch")}>登记银行资金</button>
           <button className="primary" onClick={() => open("transfer")}>
             ＋ 登记入金 / 转账

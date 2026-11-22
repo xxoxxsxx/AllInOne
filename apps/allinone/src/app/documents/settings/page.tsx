@@ -54,10 +54,10 @@ export default async function ReminderSettingsPage() {
         返回证件夹
       </Link>
 
-      <header className="docs-hero">
-        <p className="docs-kicker">Document Vault · Reminder</p>
+      <header className="docs-hero ui-heading ui-heading-stack">
+        <p className="docs-kicker ui-kicker">Document Vault · Reminder</p>
         <h1 className="docs-title">到期提醒设置</h1>
-        <p className="docs-sub">
+        <p className="docs-sub ui-subtitle">
           每天把 30 天内到期的证件合并成一条推送（Bark / 飞书 / Telegram），每天最多一次。
           当前状态见下方设置面板（保存后即时更新）。
         </p>

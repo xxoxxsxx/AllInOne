@@ -37,16 +37,16 @@ export default async function RunPage({ params, searchParams }: {
   return (
     <div>
       {sp.reused === "1" ? <p className="info-strip" role="status">已有查询任务正在执行，已打开当前任务；没有重复查询或额外消耗额度。</p> : null}
-      <div className="page-head">
+      <div className="page-head ui-heading">
         <div>
           <Link className="back-link" href="/stocks">
             ← 返回监控概览
           </Link>
-          <span className="eyebrow">QUERY DETAIL</span>
+          <span className="eyebrow ui-kicker">QUERY DETAIL</span>
           <h1>
             {run.kind === "manual" ? "手动查询" : "自动查询"} #{run.id}
           </h1>
-          <p>查看每只股票的报价时间、来源、结果和提醒状态。</p>
+          <p className="ui-subtitle">查看每只股票的报价时间、来源、结果和提醒状态。</p>
         </div>
         <span className="status-pill" id="status">
           {waiting ? "等待额度" : statusText(run.status)}

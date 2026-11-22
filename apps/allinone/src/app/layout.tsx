@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/sidebar";
 import { loadCatalog } from "@/lib/tools";
 import "./globals.css";
 import "./portal.css";
+import "./workbench.css";
 
 export const metadata: Metadata = {
   title: "我的工具箱",

@@ -43,11 +43,11 @@ export default async function SchedulePage({
     <div>
       <Flash text={sp.error ?? flashText(sp.flash ?? "")} />
 
-      <div className="page-head">
+      <div className="page-head ui-heading">
         <div>
-          <span className="eyebrow">SCHEDULE</span>
+          <span className="eyebrow ui-kicker">SCHEDULE</span>
           <h1>自动查询</h1>
-          <p>设置时间段按间隔查询，也可以保留固定时间点。离线错过的查询不会补跑。</p>
+          <p className="ui-subtitle">设置时间段按间隔查询，也可以保留固定时间点。离线错过的查询不会补跑。</p>
         </div>
       </div>
 

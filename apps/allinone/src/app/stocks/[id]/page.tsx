@@ -119,14 +119,14 @@ export default async function StockPage({
         </button>
       </div>
 
-      <div className="page-head">
+      <div className="page-head ui-heading">
         <div>
           <Link className="back-link" href="/stocks">
             ← 返回监控概览
           </Link>
-          <span className="eyebrow">STOCK DETAIL</span>
+          <span className="eyebrow ui-kicker">STOCK DETAIL</span>
           <h1>{stock.Symbol}</h1>
-          <p>{stock.Note ? stock.Note : "管理价格档位、查询记录与提醒状态。"}</p>
+          <p className="ui-subtitle">{stock.Note ? stock.Note : "管理价格档位、查询记录与提醒状态。"}</p>
         </div>
         <span className={`status-pill${stock.Enabled ? "" : " is-off"}`}>{stock.Enabled ? "监控中" : "已暂停"}</span>
       </div>

@@ -22,10 +22,10 @@ export default function TravelSettingsPage() {
     <main className="travel-page">
       <div className="travel-container">
         <Link href="/travel" className="travel-back">← 返回行程</Link>
-        <header className="travel-hero">
-          <p className="travel-kicker">Travel Settings</p>
+        <header className="travel-hero ui-heading ui-heading-stack">
+          <p className="travel-kicker ui-kicker">Travel Settings</p>
           <h1 className="travel-title">地点搜索设置</h1>
-          <p className="travel-sub">配置高德 Web 服务 Key 后，行程页可搜索景点并直接加入行程。</p>
+          <p className="travel-sub ui-subtitle">配置高德 Web 服务 Key 后，行程页可搜索景点并直接加入行程。</p>
         </header>
         <section className="travel-settings-card">
           <h2>高德 Web 服务 Key</h2>

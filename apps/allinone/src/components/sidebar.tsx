@@ -53,6 +53,7 @@ export function Sidebar({ tools, categories }: { tools: ToolConfig[]; categories
   const uncategorized = filtered.filter((tool) => !knownCategories.has(tool.category));
   const activeTool = tools.find((tool) => {
     const entry = tool.entry.replace(/\/+$/, "");
+    if (tool.id === "cdk-ledger" && /^\/(events|config)(?:\/|$)/.test(pathname)) return true;
     return pathname === "/tools/" + tool.id || (entry && (pathname === entry || pathname.startsWith(entry + "/")));
   });
 

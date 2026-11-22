@@ -2,9 +2,9 @@
   display: grid;
   gap: 26px;
   min-width: 0;
-  --reminder-accent: light-dark(#0b746c, #5bd7c8);
-  --reminder-on-accent: light-dark(#fff, #08352f);
-  --reminder-soft: light-dark(#e6f4f1, #173f3b);
+  --reminder-accent: var(--ui-action);
+  --reminder-on-accent: var(--ui-on-action);
+  --reminder-soft: var(--ui-selection);
   --reminder-shadow: 0 7px 24px light-dark(rgb(16 40 42 / 5%), rgb(0 0 0 / 15%));
 }
 
@@ -18,8 +18,6 @@
   box-shadow: var(--reminder-shadow);
 }
 
-[data-theme="light"] .reminder-settings { color-scheme: light; }
-[data-theme="dark"] .reminder-settings { color-scheme: dark; }
 
 .reminder-panel { padding: 24px; }
 .reminder-panel-heading,
