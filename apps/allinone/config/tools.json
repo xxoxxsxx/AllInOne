@@ -57,7 +57,7 @@
   },
   {
     "id": "framelab",
-    "name": "Frame Lab 相机拼图",
+    "name": "相机边框",
     "description": "在浏览器里给照片加上相机边框并导出",
     "category": "media",
     "tags": [
@@ -67,7 +67,9 @@
     ],
     "aliases": [
       "GrBorder",
-      "Frame Lab"
+      "Frame Lab",
+      "相机拼图",
+      "Frame Lab 相机拼图"
     ],
     "icon": "image",
     "kind": "static",
