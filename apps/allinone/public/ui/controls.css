@@ -130,8 +130,4 @@
     align-items: start;
   }
   .ui-tool .qr-workspace .read-grid { display: grid; grid-template-columns: minmax(0, 1fr); }
-  .ui-tool[data-embedded] .ui-kit > main:has(.preview-section) {
-    grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
-    gap: clamp(24px, 4vw, 72px);
-  }
 }

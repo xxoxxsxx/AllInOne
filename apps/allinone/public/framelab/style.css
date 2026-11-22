@@ -25,3 +25,22 @@ main>*{min-width:0}.panel,.preview-section{width:100%;min-width:0}.canvas-wrap{m
   input[type=range]{height:28px;margin:3px 0}
   select,.text-input{font-size:16px;min-height:44px}
 }
+
+.ui-tool[data-embedded] .ui-kit > main:has(.preview-section) {
+  max-width: 980px;
+}
+.preview-section #preview {
+  width: auto;
+  max-height: clamp(140px, calc(100dvh - 150px), 520px);
+  margin-inline: auto;
+}
+@media (min-width: 621px) {
+  .preview-section { align-self: start; }
+  .ui-tool[data-embedded] .ui-kit > main:has(.preview-section) {
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+    gap: clamp(24px, 4vw, 48px);
+  }
+}
+@media (min-width: 800px) {
+  .ui-tool[data-embedded] .preview-section { position: sticky; top: 20px; }
+}
