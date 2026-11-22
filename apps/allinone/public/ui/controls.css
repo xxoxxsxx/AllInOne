@@ -1,0 +1,119 @@
+.ui-kit {
+  --control-bg: var(--ui-surface);
+  --control-fg: var(--ui-text);
+  --control-border: var(--ui-border);
+  --control-hover: var(--ui-subtle);
+}
+
+.ui-kit :is(
+  .ui-button, .funding button, .fund-button, .docs-btn, .docs-mini-btn,
+  .docs-icon-btn, .docs-view-btn, .rem-button, .reminder-button, .fl-btn,
+  .travel-page .btn, .travel-page .icon-btn, .travel-batch-dialog button, .travel-export-panel button,
+  .travel-search-buttons button, .travel-search-result-actions button, .travel-settings-actions button,
+  .ts-shell button:not(.nav-toggle), .ts-shell a.primary, .ts-shell .error-primary,
+  .ui-ledger .bg-accent.text-white, .ui-ledger .hover\:bg-accent,
+  .category-chip, .danger-button, .ui-tool .btn, .ui-tool .tab,
+  .ui-tool .download, .ui-tool .primary, .ui-tool .secondary,
+  .ui-tool .text-button, .ui-tool .add-watermark, .ui-tool .ratio-button
+) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--control-height, var(--ui-control-height));
+  height: auto;
+  padding: var(--control-padding, 6px 14px);
+  border: 1px solid var(--control-border);
+  border-radius: var(--ui-control-radius);
+  background: var(--control-bg);
+  color: var(--control-fg);
+  font: 600 var(--ui-label-size)/1.35 var(--ui-font);
+  letter-spacing: normal;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: none;
+  cursor: pointer;
+
+  &:hover:not(:disabled, [aria-disabled="true"]) {
+    background: var(--control-hover);
+    color: var(--control-fg);
+    border-color: var(--control-border);
+    filter: none;
+    text-decoration: none;
+  }
+}
+
+.ui-kit :is(
+  .ui-primary, .funding button.primary, .docs-btn-primary, .rem-button-primary,
+  .reminder-button-primary, .fl-primary, .travel-page .btn-primary,
+  .travel-batch-dialog .travel-batch-confirm, .travel-search-buttons .travel-search-global,
+  .travel-settings-actions button:not(.travel-settings-danger),
+  .ts-shell .primary, .ts-shell .error-primary, .ts-shell .query-bar button,
+  .ui-ledger .bg-accent.text-white, .ui-tool .primary, .ui-tool .download:not(.ui-secondary)
+) {
+  --control-bg: var(--ui-action);
+  --control-fg: var(--ui-on-action);
+  --control-border: var(--ui-action);
+  --control-hover: color-mix(in srgb, var(--ui-action) 86%, var(--ui-text));
+}
+
+.ui-kit :is(
+  .ui-danger, .danger-button, .docs-btn-danger, .docs-mini-danger, .rem-button-danger,
+  .reminder-button-danger, .fl-danger, .travel-page .btn-danger, .trip-delete-btn,
+  .travel-settings-danger, .ts-shell .delete-button, .ts-shell .danger button
+) {
+  --control-bg: var(--ui-surface);
+  --control-fg: var(--ui-danger);
+  --control-border: color-mix(in srgb, var(--ui-danger) 40%, var(--ui-border));
+  --control-hover: color-mix(in srgb, var(--ui-danger) 10%, var(--ui-surface));
+}
+
+.ui-kit :is(
+  .fund-tabs .active, .docs-view-btn.is-active, .category-chip[aria-pressed="true"],
+  .ui-tool .tab.active, .ui-tool .ratio-button.active
+) {
+  --control-bg: var(--ui-selection);
+  --control-fg: var(--ui-accent);
+  --control-border: var(--ui-accent);
+  --control-hover: var(--ui-selection);
+}
+
+.ui-kit :is(.funding td button, .docs-mini-btn, .docs-icon-btn, .docs-view-btn,
+  .rem-row-remove, .travel-page .btn-sm, .travel-page .icon-btn, .ui-tool .text-button,
+  .ui-tool .ratio-button, .ui-tool .add-watermark) {
+  --control-height: var(--ui-compact-height);
+  --control-padding: 4px 10px;
+}
+
+.ui-kit :is(.docs-icon-btn, .travel-page .icon-btn) { --control-padding: 4px; }
+.ui-kit :is(button, .ui-button):is(:disabled, [aria-disabled="true"]) { opacity: .5; cursor: not-allowed; }
+
+.ui-kit :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"]), select, textarea) {
+  min-height: var(--ui-control-height);
+  border-radius: var(--ui-control-radius);
+  border-color: var(--ui-border);
+  background-color: var(--ui-surface);
+  color: var(--ui-text);
+  font-family: var(--ui-font);
+  font-size: var(--ui-label-size);
+}
+
+.ui-kit :is(a, button, summary, input, select, textarea):focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .ui-kit { --ui-control-height: 44px; --ui-compact-height: 40px; }
+  .ui-kit :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"]), select, textarea) { font-size: 16px; }
+}
+
+.ui-tool :is(h1, h2) { font-family: var(--ui-font); font-weight: 650; letter-spacing: normal; }
+.ui-tool h1 { font-size: var(--ui-title-size); }
+.ui-tool h2 { font-size: var(--ui-section-size); }
+.ui-tool :is(.sub, .intro, .footnote, .hint, .select-note) { font-size: var(--ui-caption-size); }
+.ui-tool .hint:not(.err) { color: var(--ui-muted); }
+.ui-tool .ui-kit { font: var(--ui-body-size)/1.6 var(--ui-font); }
+.ui-tool[data-embedded] .ui-tool-intro { display: none; }
+.ui-tool[data-embedded] .ui-kit > main { margin-block-start: 0; padding-block-start: 20px; }
+.ui-tool[data-embedded] .wrap .tabs { margin-top: 0; }

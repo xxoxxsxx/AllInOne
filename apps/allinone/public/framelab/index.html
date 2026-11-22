@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="ui-tool">
 <head><base href="/framelab/">
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Frame Lab · 相机拼图</title>
@@ -7,16 +7,17 @@
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <meta name="theme-color" content="#12364d">
-<link rel="stylesheet" href="/ui/theme.css"><link rel="stylesheet" href="style.css"><script src="/ui/theme.js"></script>
+<link rel="stylesheet" href="/ui/theme.css"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="/ui/controls.css"><script src="/ui/theme.js"></script>
 <script src="assets/moon-images.js" defer></script><script src="assets/exifr.umd.js" defer></script><script src="exif-format.js" defer></script><script src="watermark-geometry.js" defer></script><script src="watermark-layers.js" defer></script><script src="app.js" defer></script>
 </head>
-<body>
-<header><a class="brand" href="./index.html"><img src="assets/logo.svg" width="34" height="34" alt="" class="brand-icon"> FRAME LAB <small>相机拼图工作室</small></a><a class="privacy toolbox-link" href="/" target="_top" style="text-decoration:none">◂ 返回工具箱</a><span class="privacy"><i></i> 照片仅在本机处理</span></header>
+<body class="ui-kit">
+<header class="ui-tool-intro"><a class="brand" href="./index.html"><img src="assets/logo.svg" width="34" height="34" alt="" class="brand-icon"> FRAME LAB</a><a class="privacy toolbox-link" href="/" target="_top">← 工具箱</a><span class="privacy"><i></i> 照片仅在本机处理</span></header>
 <main>
 <section class="editor">
-<div class="eyebrow">A LITTLE FRAME, A LITTLE STORY</div>
-<h1>把日常，<br>装进相机里。</h1>
-<p class="intro">一张照片，两种视角。保留相机的质感，<br>让屏幕里的画面，与你的照片相呼应。</p>
+<div class="ui-tool-intro">
+<h1>相机边框</h1>
+<p class="intro">给照片添加相机边框，可调整构图、添加水印并导出。</p>
+</div>
 <div class="panel">
 <div class="section-title"><span>01</span><h2>选择你的照片</h2><button id="sample" class="text-button">试用示例</button></div>
 <label class="upload" id="dropzone"><input id="file" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif"><span class="upload-icon">＋</span><strong>点击上传，或拖入照片</strong><span>支持 JPG、PNG、WebP 等浏览器可读格式</span></label>
@@ -65,7 +66,7 @@
 <fieldset class="free-position"><legend>自由定位</legend><p class="free-position-hint">位置选「自由位置」时，拖动滑块微调水印坐标。</p><div class="positions"><label>水平 <output id="watermark-x-value">50%</output><input id="watermark-x" type="range" min="0" max="100" step="0.1" value="50"></label><label>垂直 <output id="watermark-y-value">50%</output><input id="watermark-y" type="range" min="0" max="100" step="0.1" value="50"></label></div></fieldset>
 </div>
 <button id="download" class="download" disabled>下载拼图 ↗</button>
-<button id="open-result" class="download" disabled>分享 / 保存到相册</button>
+<button id="open-result" class="download ui-secondary" disabled>分享 / 保存到相册</button>
 <p class="footnote">高清导出不会增加原模板细节。手机可在成品预览中分享或长按保存。</p>
 </div>
 </section>

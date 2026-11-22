@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../../public/ui/theme.css";
+@import "../../public/ui/controls.css";
 
 :root {
   --bg: var(--ui-bg);
@@ -27,7 +28,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--ui-font);
-  font-size: 15px;
+  font-size: var(--ui-body-size);
   line-height: 1.6;
 }
 

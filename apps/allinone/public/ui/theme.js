@@ -1,5 +1,6 @@
 (() => {
   const key = "allinone:v1:theme";
+  if (window.self !== window.top) document.documentElement.dataset.embedded = "";
   const sync = () => {
     let theme;
     try {

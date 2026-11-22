@@ -23,7 +23,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <div className="portal-shell">
           <Sidebar tools={tools} categories={categories} />
-          <div className="portal-content">{children}</div>
+          <div className="portal-content ui-kit">{children}</div>
         </div>
       </body>
     </html>

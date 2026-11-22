@@ -18,6 +18,11 @@
   --ui-radius: 12px;
   --ui-control-radius: 8px;
   --ui-control-height: 40px;
+  --ui-compact-height: 32px;
+  --ui-label-size: 14px;
+  --ui-section-size: 18px;
+  --ui-body-size: 15px;
+  --ui-caption-size: 13px;
   --ui-title-size: clamp(1.5rem, 1.2rem + 0.8vw, 2rem);
 }
 

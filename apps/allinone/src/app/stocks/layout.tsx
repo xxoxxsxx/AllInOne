@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -12,11 +12,6 @@ export const metadata: Metadata = {
   icons: [{ rel: "icon", url: "/stocks-assets/favicon.svg", type: "image/svg+xml", sizes: "any" }],
 };
 
-// common.html <meta name="theme-color" content="#142d33">。
-export const viewport: Viewport = {
-  themeColor: "#142d33",
-};
-
 // common.html 骨架：site-header（品牌 + 主导航）/ site-main / site-footer。
 // 导航在原版三项之前加「工具箱」→ /（聚合站点公共导航，PRD §8/§5.5 的统一约定）。
 export default function StocksLayout({ children }: { children: ReactNode }) {
@@ -26,10 +21,7 @@ export default function StocksLayout({ children }: { children: ReactNode }) {
         <div className="header-inner">
           <Link className="brand" href="/stocks" aria-label="TickerSentry 首页">
             <span className="brand-mark" aria-hidden="true">T</span>
-            <span>
-              Ticker<span className="brand-accent">Sentry</span>
-              <small>美股价哨</small>
-            </span>
+            <span>股票提醒</span>
           </Link>
           <StocksNav />
         </div>

@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="/collage/"><title>留白 · 摄影拼图</title><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/ui/theme.css"><link rel="stylesheet" href="style.css"><script src="/ui/theme.js"></script></head>
-<body>
-<header class="topbar"><a href="/" class="back" target="_top">← 工具箱</a><a class="wordmark" href="/collage/">留白<span>COLLAGE STUDIO</span></a><span class="local-badge">浏览器本地处理</span></header>
+<html lang="zh-CN" class="ui-tool">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="/collage/"><title>留白 · 摄影拼图</title><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/ui/theme.css"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="/ui/controls.css"><script src="/ui/theme.js"></script></head>
+<body class="ui-kit">
+<header class="topbar ui-tool-intro"><a href="/" class="back" target="_top">← 工具箱</a><a class="wordmark" href="/collage/">留白</a><span class="local-badge">浏览器本地处理</span></header>
 <main>
-  <div class="intro"><p class="eyebrow">LESS FRAME. MORE STORY.</p><h1>把照片，排成一段故事。</h1><p>干净的构图，恰好的留白。选择模板，让每一张照片各得其所。</p></div>
+  <div class="intro ui-tool-intro"><h1>摄影拼图</h1><p>选择模板，调整多张照片的构图与留白，再导出高清拼图。</p></div>
   <div class="workspace">
     <aside class="controls">
       <section><div class="section-head"><h2><span>01</span> 照片</h2><span id="photo-count">0 张</span></div><label class="upload" for="files"><strong>＋ 添加照片</strong><span>支持多选 JPG / PNG / WebP</span></label><input id="files" type="file" accept="image/*" multiple hidden><div class="photo-actions"><button id="demo" class="text-button">试用示例照片</button><button id="clear" class="text-button">清空照片</button></div><div id="photos" class="photos" aria-label="照片库"></div><p class="hint">选中画布中的图片格，再点击缩略图放入。最多保留 24 张照片；大图会缩小以控制内存。</p></section>

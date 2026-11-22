@@ -21,9 +21,12 @@ export default async function ToolDetailPage({ params }: ToolDetailProps) {
   if (isEmbeddedTool(tool)) {
     return (
       <main className="portal-embed">
-        <header>
-          <h1>{tool.name}</h1>
-          <a href={tool.entry} target="_blank" rel="noopener noreferrer">独立打开 ↗</a>
+        <header className="ui-heading">
+          <div>
+            <h1>{tool.name}</h1>
+            <p className="ui-subtitle">{tool.description}</p>
+          </div>
+          <a className="ui-button" href={tool.entry} target="_blank" rel="noopener noreferrer">独立打开 ↗</a>
         </header>
         <iframe src={tool.entry} title={tool.name} allow="web-share" />
       </main>
