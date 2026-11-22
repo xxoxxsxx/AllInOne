@@ -1,44 +1,35 @@
 .ts-shell {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: calc(100dvh - var(--portal-bar-height));
+  color-scheme: light;
+  font-size: 16px;
+  line-height: normal;
 }
 
 /* globals.css 的 .back-link（门户详情页用）与原版同名：限定其多出的 min-height */
-:where(body:has(.ts-shell)) .back-link {
+:where(.ts-shell) .back-link {
   min-height: 0;
-}
-
-/* globals.css 的 :root color-scheme 会影响表单控件，原版恒为浅色 */
-:root:has(.ts-shell) {
-  color-scheme: light;
-}
-
-/* globals.css 对 body 的全局设定恢复为原版默认（app.css 只设定 :root 与 body 盒模型） */
-body:has(.ts-shell) {
-  background: #f4f6f4;
-  color: #193038;
-  font-family: inherit;
-  font-size: 16px;
-  line-height: normal;
-  padding: 0;
 }
 
 /* —— 恢复被 Tailwind preflight 清掉的 UA 默认（低特异性，app.css 可正常覆盖） —— */
 
-:where(body:has(.ts-shell)) p {
+:where(.ts-shell) p {
   margin-bottom: 1em;
 }
 
-:where(body:has(.ts-shell)) :is(h1, h2, h3, h4, h5, h6) {
+:where(.ts-shell) :is(h1, h2, h3, h4, h5, h6) {
   font-weight: bolder;
 }
 
-:where(body:has(.ts-shell)) :is(ul, ol) {
+:where(.ts-shell) :is(ul, ol) {
   list-style: revert;
   margin: 1em 0;
 }
 
 /* preflight 会把文件选择按钮改成透明无边框样式，恢复 UA 原生外观（设置页恢复备份用） */
-:where(body:has(.ts-shell)) ::file-selector-button {
+:where(.ts-shell) ::file-selector-button {
   appearance: revert;
   border: revert;
   background-color: revert;
@@ -48,8 +39,8 @@ body:has(.ts-shell) {
 }
 
 /* —— AllInOne 修正：查询结果表数字/代码不换行（原版 5 位数价格会折行）—— */
-#results th,
-#results td {
+:where(.ts-shell) #results th,
+:where(.ts-shell) #results td {
   white-space: nowrap;
 }
 
