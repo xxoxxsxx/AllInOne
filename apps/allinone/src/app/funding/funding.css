@@ -69,6 +69,47 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.fund-snapshot {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.fund-snapshot a {
+  color: inherit;
+  text-decoration: none;
+}
+.fund-snapshot a:hover {
+  border-color: var(--accent);
+}
+.fund-snapshot h2 { margin-bottom: 4px; }
+.fund-ledger {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+.fund-ledger li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.fund-ledger li > strong { color: var(--accent); }
+.fund-ledger small {
+  display: block;
+  color: var(--text-2);
+}
+.fund-ledger-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 600px) {
+  .fund-snapshot h2 { font-size: 15px; }
+  .fund-snapshot p { font-size: 12px; }
+  .fund-ledger li { gap: 8px; font-size: 13px; }
+}
 .fund-stats {
   display: flex;
   gap: 24px;

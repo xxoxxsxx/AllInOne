@@ -50,6 +50,10 @@ const batch = {
 };
 const transfer = {
   kind: { enum: ["bank", "broker", "exchange", "withdrawal"] },
+  crossBorder: {
+    type: "boolean",
+    description: "Explicitly marks a Mainland China to Hong Kong bank remittance. Do not mark domestic bank legs.",
+  },
   fromAccountId: nullable,
   toAccountId: nullable,
   currency: string,
@@ -95,6 +99,12 @@ const schemas = {
       pathNote: string,
       resultBatchId: nullable,
       correctionOf: nullable,
+      number: {
+        type: "integer",
+        minimum: 1,
+        readOnly: true,
+        description: "Permanent serial assigned on confirmation, independently for broker deposits and marked remittances.",
+      },
     },
   },
   Goal: { type: "object", properties: { ...base, ...goal } },
@@ -196,7 +206,7 @@ for (const c of collections) {
       responses: response({ type: "array", items: schema }),
     },
     post: write(
-      "Create. Transfer status defaults to pending; confirmed records count immediately. Allocations must cover amount + additional feeAmount exactly. Same-currency receivedAmount may be lower than amount. Historical broker deposits may omit source and allocations. Exchange uses different currencies and creates a bank batch; withdrawals leave this ledger. Accounts cannot change kind after creation.",
+      "Create. Transfer status defaults to pending. Allocations must cover amount + feeAmount exactly unless entering history. Historical broker deposits may omit source and allocations. Historical crossBorder bank/exchange entries require both banks and confirmed status; they do not accept allocations or create bank batches. Normal exchange uses different currencies and creates a bank batch. Accounts cannot change kind after creation.",
       { type: "object", required: c.required, properties: c.properties },
     ),
   };
@@ -217,7 +227,7 @@ for (const c of collections) {
   };
 }
 for (const [collection, actions] of [
-  ["transfers", ["confirm", "void", "correct", "verify", "allocations"]],
+  ["transfers", ["confirm", "void", "correct", "verify", "allocations", "remittance"]],
   ["batches", ["verify", "void"]],
 ] as const) {
   for (const action of actions) {
@@ -240,6 +250,11 @@ for (const [collection, actions] of [
       };
       description =
         "Attach source once to an unsourced historical deposit, without counting the deposit again.";
+    }
+    if (action === "remittance") {
+      properties = { crossBorder: transfer.crossBorder, expectedUpdatedAt: expected };
+      description =
+        "Classify an existing bank transfer or exchange without affecting balances. Defaults to true. Set false to remove the label; void historical remittances instead.";
     }
     if (action === "verify") {
       properties = {

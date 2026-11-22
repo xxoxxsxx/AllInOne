@@ -241,16 +241,21 @@ export class FundingStore {
   }
   private createTransfer(
     input: Input,
-    correctionOf: string | null = null,
+    previous?: Transfer,
   ): Transfer {
     const kind = input.kind as Transfer["kind"];
     if (!["bank", "broker", "exchange", "withdrawal"].includes(kind))
       fail("invalid transfer kind");
     const historical = bool(input.historical);
+    const crossBorder = bool(input.crossBorder, previous?.crossBorder ?? false);
+    if (crossBorder && kind !== "bank" && kind !== "exchange")
+      fail("crossBorder requires a bank transfer or exchange");
     const from = input.fromAccountId ? this.account(input.fromAccountId) : null;
     const to = input.toAccountId ? this.account(input.toAccountId) : null;
-    if (historical && kind !== "broker")
-      fail("historical deposits must be broker transfers");
+    if (historical && kind !== "broker" && !crossBorder)
+      fail("historical entries must be broker deposits or cross-border remittances");
+    if (historical && crossBorder && (!from || input.status !== "confirmed"))
+      fail("historical remittances require a source bank and confirmed status");
     if ((!historical || from) && (!from || from.kind !== "bank"))
       fail("source must be a bank account");
     if (kind === "withdrawal" ? !!to : !to) fail("invalid destination account");
@@ -292,7 +297,7 @@ export class FundingStore {
       allocations.push({ batchId, amount: n });
     }
     if (
-      historical && !from
+      historical && (crossBorder || allocations.length === 0)
         ? allocations.length > 0
         : total !== BigInt(amount) + BigInt(feeAmount)
     )
@@ -308,6 +313,11 @@ export class FundingStore {
       {
         ...this.base(),
         kind,
+        ...(crossBorder ? { crossBorder } : {}),
+        ...((kind === "broker" && previous?.kind === "broker") ||
+        (crossBorder && previous?.crossBorder)
+          ? { number: previous?.number }
+          : {}),
         fromAccountId: from?.id ?? null,
         toAccountId: to?.id ?? null,
         currency: cur,
@@ -324,7 +334,7 @@ export class FundingStore {
         occurredAt: date(input.occurredAt),
         confirmedAt: null,
         resultBatchId: null,
-        correctionOf,
+        correctionOf: previous?.id ?? null,
       },
       "created",
     );
@@ -333,6 +343,14 @@ export class FundingStore {
           confirmedAt: input.confirmedAt ?? input.occurredAt,
         }) as Transfer)
       : transfer;
+  }
+  private nextNumber(broker: boolean): number {
+    const { last } = this.db.prepare(
+      `SELECT coalesce(max(json_extract(data, '$.number')), 0) AS last
+       FROM funding_entities WHERE collection = 'transfers'
+       AND (json_extract(data, '$.kind') = 'broker') = ?`,
+    ).get(broker ? 1 : 0) as { last: number };
+    return last + 1;
   }
   private voidTransfer(id: string, input: Input): Transfer {
     const t = this.get("transfers", id);
@@ -495,7 +513,7 @@ export class FundingStore {
         }
         if (action === "allocations") {
           const t = this.get("transfers", id);
-          if (!t.historical || t.status === "void" || t.allocations.length)
+          if (t.kind !== "broker" || !t.historical || t.status === "void" || t.allocations.length)
             fail(
               "only unsourced historical deposits can receive allocations",
               409,
@@ -530,8 +548,21 @@ export class FundingStore {
         }
         if (action === "void") return this.voidTransfer(id, input);
         if (action === "correct") {
-          this.voidTransfer(id, {});
-          return this.createTransfer(input, id);
+          const previous = this.voidTransfer(id, {});
+          return this.createTransfer(input, previous);
+        }
+        if (action === "remittance") {
+          const t = this.get("transfers", id);
+          if (t.status === "void" || (t.kind !== "bank" && t.kind !== "exchange"))
+            fail("only active bank transfers and exchanges can be classified", 409);
+          const crossBorder = bool(input.crossBorder, true);
+          if (!crossBorder && t.historical)
+            fail("void a historical remittance instead", 409);
+          if (crossBorder === Boolean(t.crossBorder)) return t;
+          t.crossBorder = crossBorder;
+          if (crossBorder && t.status === "confirmed")
+            t.number ??= this.nextNumber(false);
+          return this.save("transfers", t, "classified");
         }
         if (action === "confirm") {
           const t = this.get("transfers", id);
@@ -547,8 +578,10 @@ export class FundingStore {
           }
           t.status = "confirmed";
           t.confirmedAt = date(input.confirmedAt);
+          if (t.kind === "broker" || t.crossBorder)
+            t.number ??= this.nextNumber(t.kind === "broker");
           if (input.note !== undefined) t.note = text(input.note, "note");
-          if (t.toAccountId && t.kind !== "broker") {
+          if (t.toAccountId && t.kind !== "broker" && !t.historical) {
             const b = this.createBatch(
               {
                 accountId: t.toAccountId,

@@ -58,8 +58,14 @@ type Modal =
   | "confirm"
   | "void"
   | "correct"
+  | "remittance"
   | "allocate";
 type Form = Record<string, string>;
+
+function transferNumber(t: Transfer) {
+  if (!t.number) return "—";
+  return (t.kind === "broker" ? "入金 #" : "汇款 #") + String(t.number).padStart(2, "0");
+}
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API}${path}`, {
@@ -110,6 +116,10 @@ export default function FundingClient() {
   >([]);
   const [filter, setFilter] = useState("");
   const [idempotency, setIdempotency] = useState("");
+  const bankFlow = form.kind === "bank" || form.kind === "exchange";
+  const crossBorder = bankFlow && form.crossBorder === "true";
+  const historical = (form.kind === "broker" || crossBorder) && form.historical === "true";
+  const historicalRemittance = crossBorder && historical;
   const load = useCallback(async () => {
     const [a, b, t, g, s, c] = await Promise.all([
       api<Account[]>("/accounts"),
@@ -212,16 +222,17 @@ export default function FundingClient() {
             form.kind === "withdrawal" ? null : form.toAccountId || null,
           currency: form.currency,
           amount: minor(form.amount),
-          receivedCurrency: form.receivedCurrency,
+          receivedCurrency: form.kind === "exchange" ? form.receivedCurrency : form.currency,
           receivedAmount: minor(form.receivedAmount || form.amount),
-          feeAmount: minor(form.feeAmount || "0"),
-          allocations: allocations
+          feeAmount: historical ? "0" : minor(form.feeAmount || "0"),
+          allocations: (historicalRemittance ? [] : allocations)
             .filter((a) => a.batchId)
             .map((a) => ({ batchId: a.batchId, amount: minor(a.amount) })),
-          historical: form.historical === "true",
-          status: form.status,
+          crossBorder,
+          historical,
+          status: historicalRemittance ? "confirmed" : form.status,
           occurredAt: form.occurredAt,
-          confirmedAt: form.status === "confirmed" ? form.confirmedAt : null,
+          confirmedAt: historicalRemittance || form.status === "confirmed" ? form.confirmedAt : null,
           note: form.note || "",
         };
       }
@@ -271,6 +282,10 @@ export default function FundingClient() {
             .map((a) => ({ batchId: a.batchId, amount: minor(a.amount) })),
         };
       }
+      if (modal === "remittance") {
+        endpoint = `/transfers/${form.id}/remittance`;
+        payload = { crossBorder: form.crossBorder === "true" };
+      }
       if (form.expectedUpdatedAt)
         payload.expectedUpdatedAt = form.expectedUpdatedAt;
       await api(endpoint, {
@@ -294,6 +309,7 @@ export default function FundingClient() {
   function exportCsv() {
     const rows = [
       [
+        "序号",
         "日期",
         "类型",
         "转出",
@@ -306,6 +322,7 @@ export default function FundingClient() {
         "备注",
       ],
       ...transfers.map((t) => [
+        transferNumber(t),
         t.confirmedAt || t.occurredAt,
         statusText[t.kind],
         accountName(t.fromAccountId),
@@ -488,6 +505,50 @@ export default function FundingClient() {
   const pendingBatches = batches.filter(
     (b) => !b.voided && b.sourceStatus !== "verified",
   );
+  const confirmed = transfers.filter((t) => t.status === "confirmed");
+  const deposits = confirmed.filter((t) => t.kind === "broker");
+  const remittances = confirmed.filter((t) => t.crossBorder);
+  const deposited = new Map<string, bigint>();
+  for (const t of deposits)
+    deposited.set(t.receivedCurrency,
+      (deposited.get(t.receivedCurrency) ?? 0n) + BigInt(t.receivedAmount));
+  const ledger = (title: string, id: string, rows: Transfer[], remittance = false) => {
+    const day = (t: Transfer) => dateValue(remittance ? t.occurredAt : t.confirmedAt || t.occurredAt);
+    const sorted = [...rows].sort((left, right) => day(right).localeCompare(day(left)) || (right.number ?? 0) - (left.number ?? 0));
+    return (
+      <section className="fund-card" id={id}>
+        <div className="fund-head">
+          <h2>{title}明细 · {rows.length} 笔</h2>
+          <button onClick={() => open("transfer", remittance
+            ? { kind: "exchange", crossBorder: "true", historical: "true", currency: "CNY", receivedCurrency: "HKD" }
+            : { kind: "broker" })}>
+            {remittance ? "＋ 补录汇款" : "＋ 登记入金"}
+          </button>
+        </div>
+        {!rows.length ? (
+          <p className="fund-muted">{remittance
+            ? "暂无已确认的跨境汇款。可补录，或到「全部流水」标记已有汇款。"
+            : "暂无已到账的券商入金。"}</p>
+        ) : (
+          <ul className="fund-ledger">
+            {sorted.map((t) => (
+              <li key={t.id}>
+                <strong>{transferNumber(t)}</strong>
+                <div>
+                  {accountName(t.fromAccountId)} → {accountName(t.toAccountId)}
+                  <small>{day(t)}</small>
+                </div>
+                <div className="fund-ledger-amount">
+                  <strong>{display(remittance ? t.amount : t.receivedAmount)} {remittance ? t.currency : t.receivedCurrency}</strong>
+                  {remittance && <small>到账 {display(t.receivedAmount)} {t.receivedCurrency}</small>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    );
+  };
 
   return (
     <>
@@ -495,7 +556,7 @@ export default function FundingClient() {
         <div>
           <h1>券商入金</h1>
           <p className="fund-muted">
-            记录资金去向，核实每一笔来源。只统计券商实际到账，币种分别计算。
+            券商入金和内地汇款分开记，每笔都有独立序号。
           </p>
         </div>
         <div className="fund-actions">
@@ -508,7 +569,7 @@ export default function FundingClient() {
       <nav className="fund-tabs" aria-label="台账页面">
         {[
           ["overview", "总览"],
-          ["transfers", "入金与转账"],
+          ["transfers", "全部流水"],
           ["funds", "银行资金"],
           ["settings", "目标与账户"],
           ["changes", "修改记录"],
@@ -546,29 +607,21 @@ export default function FundingClient() {
         <>
           {tab === "overview" && (
             <>
-              <div className="fund-grid">
-                {summary?.currencies.map((s) => (
-                  <section className="fund-card" key={s.currency}>
-                    <h2>{s.currency} 累计入金</h2>
-                    <div className="fund-number">
-                      {display(s.brokerConfirmed)}
-                    </div>
-                    <div className="fund-stats">
-                      <div className="fund-muted">
-                        银行待入金<strong>{display(s.bankAvailable)}</strong>
-                      </div>
-                      <div className="fund-muted">
-                        处理中<strong>{display(s.inTransit)}</strong>
-                      </div>
-                    </div>
-                  </section>
-                ))}
+              <div className="fund-snapshot">
+                <a className="fund-card" href="#fund-deposits">
+                  <h2>券商实际入金</h2>
+                  <div className="fund-number">{deposits.length} 笔</div>
+                  <p className="fund-muted">{[...deposited].sort(([left], [right]) => left.localeCompare(right)).map(([currency, amount]) =>
+                    display(amount.toString()) + " " + currency).join(" · ") || "只计券商已到账"}</p>
+                </a>
+                <a className="fund-card" href="#fund-remittances">
+                  <h2>内地转账到香港</h2>
+                  <div className="fund-number">{remittances.length} 笔</div>
+                  <p className="fund-muted">已登记、已到账；不含香港银行间转账</p>
+                </a>
               </div>
-              {!summary?.currencies.length && (
-                <section className="fund-card fund-empty">
-                  还没有资金记录。先在「目标与账户」添加银行和券商，再登记银行资金或补录历史入金。
-                </section>
-              )}
+              {ledger("券商实际入金", "fund-deposits", deposits)}
+              {ledger("内地转账到香港", "fund-remittances", remittances, true)}
               <section className="fund-card">
                 <div className="fund-head">
                   <h2>目标进度</h2>
@@ -628,8 +681,17 @@ export default function FundingClient() {
                   </p>
                 )}
               </section>
-              <section className="fund-card">
-                <h2>来源核实待办 · {pendingBatches.length}</h2>
+              <details className="fund-card">
+                <summary>银行待入金与来源核实</summary>
+                <div className="fund-stats">
+                  {summary?.currencies.map((s) => (
+                    <div key={s.currency} className="fund-muted">
+                      {s.currency} 银行待入金<strong>{display(s.bankAvailable)}</strong>
+                      处理中 {display(s.inTransit)}
+                    </div>
+                  ))}
+                </div>
+                <h3>来源核实待办 · {pendingBatches.length}</h3>
                 {pendingBatches.map((b) => (
                   <div
                     className="fund-head"
@@ -668,7 +730,7 @@ export default function FundingClient() {
                       t.status !== "void" &&
                       ((t as Transfer & { pathStatus?: string }).pathStatus !==
                         "verified" ||
-                        (t.historical && !t.allocations.length)),
+                        (t.kind === "broker" && t.historical && !t.allocations.length)),
                   )
                   .map((t) => (
                     <div
@@ -695,13 +757,13 @@ export default function FundingClient() {
                       </button>
                     </div>
                   ))}
-              </section>
+              </details>
             </>
           )}
           {tab === "transfers" && (
             <section className="fund-card">
               <div className="fund-head">
-                <h2>入金与转账</h2>
+                <h2>全部流水</h2>
                 <div className="fund-actions">
                   <select
                     className="fund-filter"
@@ -742,7 +804,8 @@ export default function FundingClient() {
                       <tr key={t.id}>
                         <td>
                           {t.confirmedAt || t.occurredAt}
-                          <small>{statusText[t.kind]}</small>
+                          <small>{t.number && (t.kind === "broker" || t.crossBorder)
+                            ? transferNumber(t) : statusText[t.kind]}</small>
                         </td>
                         <td>
                           {accountName(t.fromAccountId)} →{" "}
@@ -817,7 +880,7 @@ export default function FundingClient() {
                               >
                                 核实路径
                               </button>
-                              {t.historical && (
+                              {t.kind === "broker" && t.historical && !t.allocations.length && (
                                 <button
                                   onClick={() =>
                                     open(
@@ -832,6 +895,14 @@ export default function FundingClient() {
                                   }
                                 >
                                   补充来源
+                                </button>
+                              )}
+                              {(t.kind === "bank" || t.kind === "exchange") && !t.historical && (
+                                <button onClick={() => open("remittance", {
+                                  id: t.id,
+                                  crossBorder: String(!t.crossBorder),
+                                })}>
+                                  {t.crossBorder ? "取消跨境标记" : "标记内地汇款"}
                                 </button>
                               )}
                               <button
@@ -852,6 +923,7 @@ export default function FundingClient() {
                                       occurredAt: t.occurredAt,
                                       confirmedAt: t.confirmedAt || today(),
                                       historical: String(t.historical),
+                                      crossBorder: String(!!t.crossBorder),
                                       note: t.note,
                                     },
                                     t,
@@ -1133,6 +1205,7 @@ export default function FundingClient() {
                   void: "作废记录",
                   correct: "更正流水",
                   allocate: "补充历史入金来源",
+                  remittance: form.crossBorder === "true" ? "标记为内地转账到香港" : "取消内地汇款标记",
                 }[modal]
               }
             </h2>
@@ -1186,7 +1259,8 @@ export default function FundingClient() {
                   <label>
                     到账状态
                     <select
-                      value={form.status}
+                      value={historicalRemittance ? "confirmed" : form.status}
+                      disabled={historicalRemittance}
                       onChange={(e) => field("status", e.target.value)}
                     >
                       <option value="confirmed">已到账</option>
@@ -1197,7 +1271,7 @@ export default function FundingClient() {
                     "fromAccountId",
                     "转出银行",
                     "bank",
-                    form.historical !== "true",
+                    form.kind !== "broker" || !historical,
                   )}
                   {form.kind !== "withdrawal" &&
                     accountSelect(
@@ -1208,17 +1282,27 @@ export default function FundingClient() {
                     )}
                   {input("currency", "转出币种", "text", true)}
                   {input("amount", "转出本金", "number", true)}
-                  {input("receivedCurrency", "收到币种", "text", true)}
+                  {form.kind === "exchange" && input("receivedCurrency", "收到币种", "text", true)}
                   {input(
                     "receivedAmount",
-                    "实际 / 预计收到金额（默认等于本金）",
+                    form.kind === "exchange" ? "到账金额" : "实际 / 预计收到金额（默认等于本金）",
                     "number",
+                    form.kind === "exchange",
                   )}
-                  {input("feeAmount", "另付手续费（转出币种）", "number")}
+                  {!historical && input("feeAmount", "另付手续费（转出币种）", "number")}
                   {input("occurredAt", "发起日期", "date", true)}
-                  {form.status === "confirmed" &&
+                  {(historicalRemittance || form.status === "confirmed") &&
                     input("confirmedAt", "到账日期", "date", true)}
-                  {form.kind === "broker" && (
+                  {bankFlow && (
+                    <label>
+                      汇款范围
+                      <select value={form.crossBorder || "false"} onChange={(e) => field("crossBorder", e.target.value)}>
+                        <option value="false">其他银行转账</option>
+                        <option value="true">内地转账到香港</option>
+                      </select>
+                    </label>
+                  )}
+                  {(form.kind === "broker" || crossBorder) && (
                     <label>
                       历史补录
                       <select
@@ -1226,11 +1310,11 @@ export default function FundingClient() {
                         onChange={(e) => field("historical", e.target.value)}
                       >
                         <option value="false">关联银行资金</option>
-                        <option value="true">历史入金，允许来源暂缺</option>
+                        <option value="true">{crossBorder ? "仅补录流水，不改变银行余额" : "历史入金，允许来源暂缺"}</option>
                       </select>
                     </label>
                   )}
-                  {allocationFields}
+                  {!historicalRemittance && (!historical || allocations.length > 0) && allocationFields}
                   {modal === "correct" && (
                     <p className="wide fund-muted">
                       更正将保留旧记录并生成替代流水；存在已使用的下游资金时需先处理下游。
@@ -1271,7 +1355,12 @@ export default function FundingClient() {
                   作废后将撤销该记录对金额和进度的影响，原记录仍保留。已经被后续转账使用的资金不能直接作废。
                 </p>
               )}
-              {modal !== "verify" && modal !== "allocate" && (
+              {modal === "remittance" && (
+                <p className="wide fund-muted">
+                  只更改统计归类，不改变银行余额。请确认这笔款由内地银行汇到香港银行。
+                </p>
+              )}
+              {modal !== "verify" && modal !== "allocate" && modal !== "remittance" && (
                 <label className="wide">
                   {modal === "void" ? "作废原因" : "备注"}
                   <textarea

@@ -28,6 +28,8 @@ export type Allocation = { batchId: string; amount: string };
 export type Transfer = {
   id: string;
   kind: "bank" | "broker" | "exchange" | "withdrawal";
+  crossBorder?: boolean;
+  number?: number;
   fromAccountId: string | null;
   toAccountId: string | null;
   currency: Currency;
