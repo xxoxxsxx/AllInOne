@@ -9,6 +9,7 @@ import {
   eventPageSizeOptions,
   getEventListTitle,
   getEventProfitSummary,
+  getDashboardStats,
   listEventDetailsPage,
   parseEventPage,
   parseEventFilters,
@@ -49,9 +50,10 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
   const page = parseEventPage(params);
   const pageSize = parseEventPageSize(params);
   const calculateProfit = shouldCalculateEventProfit(params);
-  const [result, profitSummary] = await Promise.all([
+  const [result, profitSummary, stats] = await Promise.all([
     listEventDetailsPage(filters, page, pageSize),
     calculateProfit ? getEventProfitSummary(filters) : Promise.resolve(null),
+    getDashboardStats(),
   ]);
   const exportQuery = toSearchString({
     dateFrom: filters.dateFrom,
@@ -67,6 +69,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
   const hasNextPage = result.page < result.totalPages;
   const canExport = result.total > 0 && result.total <= eventExportLimit;
   const offset = (result.page - 1) * result.pageSize;
+  const preview = result.items.find((item) => item.id === params.preview);
 
   function buildEventsHref(nextParams: PageSearchParams) {
     const query = toSearchString({
@@ -78,16 +81,16 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
   }
 
   return (
-    <main className="min-h-screen px-6 py-8 sm:py-12">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+    <main className="ledger-workspace">
+      <div className="flex min-w-0 flex-col gap-4">
         <section className="rounded-[28px] border border-border bg-surface p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)] sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-sm uppercase tracking-[0.28em] text-accent">
-                Phase 6 Ready
+                CDK 台账
               </p>
               <h1 className="ui-title mt-3 font-semibold tracking-tight">
-                事件明细
+                CDK 台账
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-8 text-muted">
                 支持按日期、事件类型、CDK、备注内容、套餐类型、售卖平台和下游对象筛选，并可按当前条件计算基础毛利。CSV 导出严格复用当前筛选条件。
@@ -102,10 +105,10 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
                 新增事件
               </Link>
               <Link
-                href="/ledger"
+                href="/config"
                 className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
               >
-                返回台账首页
+                基础配置
               </Link>
             </div>
           </div>
@@ -150,76 +153,93 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
               </span>
             )}
           </div>
-
-          {profitSummary ? (
-            <div className="mt-5">
-              <ProfitSummary summary={profitSummary} />
-            </div>
-          ) : null}
         </section>
 
-        <EventList
-          title={getEventListTitle(filters)}
-          items={result.items}
-          offset={offset}
-          emptyHint="当前筛选条件下没有匹配事件。"
-          headerActions={
-            result.total > 0 ? (
-              <>
-                <div className="flex items-center gap-2 rounded-2xl border border-border bg-white/85 p-1 text-sm">
-                  <span className="px-2 text-muted">每页</span>
-                  {eventPageSizeOptions.map((size) => (
+        <div className="ui-split ledger-results">
+          <EventList
+            title={getEventListTitle(filters)}
+            items={result.items}
+            offset={offset}
+            previewHref={(id) => buildEventsHref({ preview: id }) + "#event-preview"}
+            emptyHint="当前筛选条件下没有匹配事件。"
+            headerActions={
+              result.total > 0 ? (
+                <>
+                  <div className="flex items-center gap-2 rounded-2xl border border-border bg-white/85 p-1 text-sm">
+                    <span className="px-2 text-muted">每页</span>
+                    {eventPageSizeOptions.map((size) => (
+                      <Link
+                        key={size}
+                        href={buildEventsHref({
+                          page: "1",
+                          pageSize: String(size),
+                        })}
+                        className={
+                          size === pageSize
+                            ? "inline-flex h-9 items-center justify-center rounded-xl bg-accent px-3 font-medium text-white"
+                            : "inline-flex h-9 items-center justify-center rounded-xl px-3 text-muted transition hover:text-accent"
+                        }
+                      >
+                        {size}
+                      </Link>
+                    ))}
+                    <span className="pr-2 text-muted">条</span>
+                  </div>
+
+                  <span className="rounded-2xl border border-dashed border-border px-3 py-2 text-sm text-muted">
+                    第 {result.page} / {result.totalPages} 页
+                  </span>
+
+                  {hasPreviousPage ? (
                     <Link
-                      key={size}
-                      href={buildEventsHref({
-                        page: "1",
-                        pageSize: String(size),
-                      })}
-                      className={
-                        size === pageSize
-                          ? "inline-flex h-9 items-center justify-center rounded-xl bg-accent px-3 font-medium text-white"
-                          : "inline-flex h-9 items-center justify-center rounded-xl px-3 text-muted transition hover:text-accent"
-                      }
+                      href={buildEventsHref({ page: String(result.page - 1) })}
+                      className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
                     >
-                      {size}
+                      上一页
                     </Link>
-                  ))}
-                  <span className="pr-2 text-muted">条</span>
-                </div>
+                  ) : (
+                    <span className="inline-flex h-11 items-center justify-center rounded-2xl border border-dashed border-border px-4 text-sm text-muted">
+                      上一页
+                    </span>
+                  )}
 
-                <span className="rounded-2xl border border-dashed border-border px-3 py-2 text-sm text-muted">
-                  第 {result.page} / {result.totalPages} 页
-                </span>
-
-                {hasPreviousPage ? (
-                  <Link
-                    href={buildEventsHref({ page: String(result.page - 1) })}
-                    className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
-                  >
-                    上一页
-                  </Link>
-                ) : (
-                  <span className="inline-flex h-11 items-center justify-center rounded-2xl border border-dashed border-border px-4 text-sm text-muted">
-                    上一页
-                  </span>
-                )}
-
-                {hasNextPage ? (
-                  <Link
-                    href={buildEventsHref({ page: String(result.page + 1) })}
-                    className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
-                  >
-                    下一页
-                  </Link>
-                ) : (
-                  <span className="inline-flex h-11 items-center justify-center rounded-2xl border border-dashed border-border px-4 text-sm text-muted">
-                    下一页
-                  </span>
-                )}
-              </>
-            ) : null
-          }
-        />
+                  {hasNextPage ? (
+                    <Link
+                      href={buildEventsHref({ page: String(result.page + 1) })}
+                      className="inline-flex h-11 items-center justify-center rounded-2xl border border-border px-4 text-sm text-foreground transition hover:border-accent hover:text-accent"
+                    >
+                      下一页
+                    </Link>
+                  ) : (
+                    <span className="inline-flex h-11 items-center justify-center rounded-2xl border border-dashed border-border px-4 text-sm text-muted">
+                      下一页
+                    </span>
+                  )}
+                </>
+              ) : null
+            }
+          />
+          <aside className="ui-rail" aria-label="筛选结果摘要">
+            <section className="ui-panel">
+              <h2>筛选结果</h2>
+              <p>共 {result.total} 条事件</p>
+            </section>
+            {preview && <section className="ui-panel" id="event-preview">
+              <h2>事件详情</h2>
+              <p>{preview.package_name || preview.package_code || "未指定套餐"}</p>
+              <p>CDK：{preview.cdk || "—"}</p>
+              <p>关联 CDK：{preview.related_cdk || "—"}</p>
+              {preview.note && <p>{preview.note}</p>}
+              <Link className="ui-button" href={"/events/" + preview.id}>打开完整详情</Link>
+            </section>}
+            <section className="ui-panel">
+              <h2>台账概况</h2>
+              <p>当前有效 {stats.activeTotal} · 自营 {stats.issueSelfActive} · 代发 {stats.issueResellerActive}</p>
+              <p>累计作废 {stats.voidCount}</p>
+            </section>
+            {profitSummary && <ProfitSummary summary={profitSummary} />}
+          </aside>
+        </div>
       </div>
     </main>
   );

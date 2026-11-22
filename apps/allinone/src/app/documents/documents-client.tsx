@@ -1082,185 +1082,139 @@ export function DocumentsClient(props: {
           <a className="docs-btn" href="/documents/settings">到期提醒设置</a>
           <a className="docs-btn" href="/api/documents/backup" download>导出备份</a>
         </div>
-        <div className="docs-stats" role="group" aria-label="证件状态统计">
-          <button
-            type="button"
-            className={`docs-stat${statusFilter === "all" ? " is-active" : ""}`}
-            onClick={() => setStatusFilter("all")}
-          >
-            全部 <strong>{summary.total}</strong>
-          </button>
-          <button
-            type="button"
-            className={`docs-stat docs-stat-upcoming${statusFilter === "upcoming" ? " is-active" : ""}`}
-            onClick={() => setStatusFilter(statusFilter === "upcoming" ? "all" : "upcoming")}
-          >
-            尚未生效 <strong>{summary.upcoming}</strong>
-          </button>
-          <button
-            type="button"
-            className={`docs-stat docs-stat-warn${statusFilter === "expiring" ? " is-active" : ""}`}
-            onClick={() => setStatusFilter(statusFilter === "expiring" ? "all" : "expiring")}
-          >
-            即将到期 <strong>{summary.expiring}</strong>
-          </button>
-          <button
-            type="button"
-            className={`docs-stat docs-stat-danger${statusFilter === "expired" ? " is-active" : ""}`}
-            onClick={() => setStatusFilter(statusFilter === "expired" ? "all" : "expired")}
-          >
-            已过期 <strong>{summary.expired}</strong>
-          </button>
-        </div>
       </header>
 
-      <div className="docs-filters">
-        <input
-          className="docs-search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索名称、号码、标签、备注…"
-          aria-label="搜索证件"
-        />
-        <select value={holderFilter} onChange={(e) => setHolderFilter(Number(e.target.value))} aria-label="按持有人筛选">
-          <option value={0}>全部持有人</option>
-          {holders.map((h) => (
-            <option key={h.id} value={h.id}>{h.name}</option>
-          ))}
-        </select>
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(Number(e.target.value))} aria-label="按分类筛选">
-          <option value={0}>全部分类</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} aria-label="按标签筛选">
-          <option value="">全部标签</option>
-          {tags.map((t) => (
-            <option key={t.id} value={t.name}>{t.name}</option>
-          ))}
-        </select>
-        <select value={sort} onChange={(e) => { setOrderOverride(null); setSort(e.target.value as SortMode); }} aria-label="排序">
-          <option value="custom">自定义排序</option>
-          <option value="expiry">按到期时间</option>
-          <option value="created">按添加时间</option>
-        </select>
-        {sort === "custom" ? <span className="docs-hint docs-sort-hint">{canReorder ? "拖动卡片，或用箭头调整顺序；修改会自动保存。" : "筛选中无法调整顺序，清除筛选后即可排序。"}</span> : null}
-        <div className="docs-view-toggle" role="group" aria-label="视图切换">
-          <button
-            type="button"
-            className={`docs-view-btn${view === "card" ? " is-active" : ""}`}
-            aria-pressed={view === "card"}
-            title="卡片视图"
-            onClick={() => setView("card")}
-          >
-            ▦
-          </button>
-          <button
-            type="button"
-            className={`docs-view-btn${view === "list" ? " is-active" : ""}`}
-            aria-pressed={view === "list"}
-            title="列表视图"
-            onClick={() => setView("list")}
-          >
-            ☰
-          </button>
-        </div>
-      </div>
-      {orderError ? <p className="docs-error" role="alert">{orderError}</p> : null}
-      {reorderBusy ? <p className="docs-hint" role="status">正在保存顺序…</p> : null}
-
-      {visible.length === 0 ? (
-        <p className="docs-empty">
-          {documents.length === 0
-            ? "还没有证件。点击「新增证件」录入第一份吧。"
-            : "没有符合条件的证件，试试调整筛选条件。"}
-        </p>
-      ) : view === "list" ? (
-        <>
-        {!archiveOpen && archivedExpired.length > 0 ? (
-          <button type="button" className="docs-archive-bar" onClick={() => setArchiveOpen(true)} aria-expanded={false}>
-            已过期证件 {archivedExpired.length} 份已收起，点击展开
-          </button>
-        ) : null}
-        <div className="docs-list" role="list">
-          {(archiveOpen ? visible : visible.filter((d) => d.status !== "expired")).map((d, index) => (
-            <div
-              key={d.id}
-              role="listitem"
-              className={`docs-row docs-row-${d.status}${dragId === d.id ? " is-dragging" : ""}`}
-              draggable={canReorder && !reorderBusy}
-              onDragStart={(e) => { setDragId(d.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(d.id)); }}
-              onDragEnd={() => setDragId(null)}
-              onDragOver={(e) => { if (dragId !== null && dragId !== d.id) e.preventDefault(); }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (dragId !== null && dragId !== d.id) moveCard(dragId, d.id);
-                setDragId(null);
-              }}
+      <div className="ui-split docs-workspace">
+        <aside className="ui-rail docs-rail" aria-label="证件状态">
+          <section className="ui-panel">
+            <h2>证件状态</h2>
+              <div className="docs-stats" role="group" aria-label="证件状态统计">
+                <button
+                  type="button"
+                  className={`docs-stat${statusFilter === "all" ? " is-active" : ""}`}
+                  onClick={() => setStatusFilter("all")}
+                >
+                  全部 <strong>{summary.total}</strong>
+                </button>
+                <button
+                  type="button"
+                  className={`docs-stat docs-stat-upcoming${statusFilter === "upcoming" ? " is-active" : ""}`}
+                  onClick={() => setStatusFilter(statusFilter === "upcoming" ? "all" : "upcoming")}
+                >
+                  尚未生效 <strong>{summary.upcoming}</strong>
+                </button>
+                <button
+                  type="button"
+                  className={`docs-stat docs-stat-warn${statusFilter === "expiring" ? " is-active" : ""}`}
+                  onClick={() => setStatusFilter(statusFilter === "expiring" ? "all" : "expiring")}
+                >
+                  即将到期 <strong>{summary.expiring}</strong>
+                </button>
+                <button
+                  type="button"
+                  className={`docs-stat docs-stat-danger${statusFilter === "expired" ? " is-active" : ""}`}
+                  onClick={() => setStatusFilter(statusFilter === "expired" ? "all" : "expired")}
+                >
+                  已过期 <strong>{summary.expired}</strong>
+                </button>
+              </div>
+          </section>
+        </aside>
+        <div className="docs-results">
+        <div className="docs-filters">
+          <input
+            className="docs-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索名称、号码、标签、备注…"
+            aria-label="搜索证件"
+          />
+          <select value={holderFilter} onChange={(e) => setHolderFilter(Number(e.target.value))} aria-label="按持有人筛选">
+            <option value={0}>全部持有人</option>
+            {holders.map((h) => (
+              <option key={h.id} value={h.id}>{h.name}</option>
+            ))}
+          </select>
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(Number(e.target.value))} aria-label="按分类筛选">
+            <option value={0}>全部分类</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} aria-label="按标签筛选">
+            <option value="">全部标签</option>
+            {tags.map((t) => (
+              <option key={t.id} value={t.name}>{t.name}</option>
+            ))}
+          </select>
+          <select value={sort} onChange={(e) => { setOrderOverride(null); setSort(e.target.value as SortMode); }} aria-label="排序">
+            <option value="custom">自定义排序</option>
+            <option value="expiry">按到期时间</option>
+            <option value="created">按添加时间</option>
+          </select>
+          {sort === "custom" ? <span className="docs-hint docs-sort-hint">{canReorder ? "拖动卡片，或用箭头调整顺序；修改会自动保存。" : "筛选中无法调整顺序，清除筛选后即可排序。"}</span> : null}
+          <div className="docs-view-toggle" role="group" aria-label="视图切换">
+            <button
+              type="button"
+              className={`docs-view-btn${view === "card" ? " is-active" : ""}`}
+              aria-pressed={view === "card"}
+              title="卡片视图"
+              onClick={() => setView("card")}
             >
-              <span className="docs-row-strip" aria-hidden />
-              {canReorder ? (
-                <span className="docs-row-arrows">
-                  <button
-                    type="button"
-                    className="docs-mini-btn"
-                    aria-label={`将「${d.title}」前移`}
-                    disabled={reorderBusy || index === 0}
-                    onClick={() => nudgeCard(d.id, -1)}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    className="docs-mini-btn"
-                    aria-label={`将「${d.title}」后移`}
-                    disabled={reorderBusy || index === visible.length - 1}
-                    onClick={() => nudgeCard(d.id, 1)}
-                  >
-                    ↓
-                  </button>
-                </span>
-              ) : null}
-              <button type="button" className="docs-row-main" onClick={() => { setSelectedId(d.id); setLightboxIndex(null); }}>
-                <span className={`docs-status docs-status-${d.status}`}>{STATUS_LABELS[d.status]}</span>
-                <span className="docs-row-title">{d.title}</span>
-                <span className="docs-row-meta">{[d.holderName, d.categoryName].filter(Boolean).join(" · ") || "未分类"}</span>
-                <span className={`docs-row-expiry docs-row-expiry-${d.status}`}>
-                  {d.expiryDate ? `${d.expiryDate} · ${daysText(d)}` : "长期有效"}
-                </span>
-                {d.tags.length > 0 ? (
-                  <span className="docs-tags docs-row-tags">
-                    {d.tags.slice(0, 3).map((t) => (
-                      <span key={t.id} className="docs-tag">{t.name}</span>
-                    ))}
-                  </span>
-                ) : <span className="docs-row-tags" />}
-              </button>
-            </div>
-          ))}
+              ▦
+            </button>
+            <button
+              type="button"
+              className={`docs-view-btn${view === "list" ? " is-active" : ""}`}
+              aria-pressed={view === "list"}
+              title="列表视图"
+              onClick={() => setView("list")}
+            >
+              ☰
+            </button>
+          </div>
         </div>
-        </>
-      ) : (
-        <>
-        {!archiveOpen && archivedExpired.length > 0 ? (
-          <button type="button" className="docs-archive-bar" onClick={() => setArchiveOpen(true)} aria-expanded={false}>
-            已过期证件 {archivedExpired.length} 份已收起，点击展开
-          </button>
-        ) : null}
-        <div className="docs-grid">
-          {(archiveOpen ? visible : visible.filter((d) => d.status !== "expired")).map((d, index) => {
-            const cover = d.files.find((f) => f.isImage);
-            return (
-              <div key={d.id} className="docs-card-wrap">
+        {orderError ? <p className="docs-error" role="alert">{orderError}</p> : null}
+        {reorderBusy ? <p className="docs-hint" role="status">正在保存顺序…</p> : null}
+
+        {visible.length === 0 ? (
+          <p className="docs-empty">
+            {documents.length === 0
+              ? "还没有证件。点击「新增证件」录入第一份吧。"
+              : "没有符合条件的证件，试试调整筛选条件。"}
+          </p>
+        ) : view === "list" ? (
+          <>
+          {!archiveOpen && archivedExpired.length > 0 ? (
+            <button type="button" className="docs-archive-bar" onClick={() => setArchiveOpen(true)} aria-expanded={false}>
+              已过期证件 {archivedExpired.length} 份已收起，点击展开
+            </button>
+          ) : null}
+          <div className="docs-list" role="list">
+            {(archiveOpen ? visible : visible.filter((d) => d.status !== "expired")).map((d, index) => (
+              <div
+                key={d.id}
+                role="listitem"
+                className={`docs-row docs-row-${d.status}${dragId === d.id ? " is-dragging" : ""}`}
+                draggable={canReorder && !reorderBusy}
+                onDragStart={(e) => { setDragId(d.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(d.id)); }}
+                onDragEnd={() => setDragId(null)}
+                onDragOver={(e) => { if (dragId !== null && dragId !== d.id) e.preventDefault(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragId !== null && dragId !== d.id) moveCard(dragId, d.id);
+                  setDragId(null);
+                }}
+              >
+                <span className="docs-row-strip" aria-hidden />
                 {canReorder ? (
-                  <span className="docs-card-arrows">
+                  <span className="docs-row-arrows">
                     <button
                       type="button"
                       className="docs-mini-btn"
                       aria-label={`将「${d.title}」前移`}
                       disabled={reorderBusy || index === 0}
-                      onClick={(e) => { e.stopPropagation(); nudgeCard(d.id, -1); }}
+                      onClick={() => nudgeCard(d.id, -1)}
                     >
                       ↑
                     </button>
@@ -1269,83 +1223,139 @@ export function DocumentsClient(props: {
                       className="docs-mini-btn"
                       aria-label={`将「${d.title}」后移`}
                       disabled={reorderBusy || index === visible.length - 1}
-                      onClick={(e) => { e.stopPropagation(); nudgeCard(d.id, 1); }}
+                      onClick={() => nudgeCard(d.id, 1)}
                     >
                       ↓
                     </button>
                   </span>
                 ) : null}
-                <button
-                  type="button"
-                  className={`docs-card docs-card-${d.status}${dragId === d.id ? " is-dragging" : ""}`}
-                  draggable={canReorder && !reorderBusy}
-                  onDragStart={(e) => { setDragId(d.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(d.id)); }}
-                  onDragEnd={() => setDragId(null)}
-                  onDragOver={(e) => { if (dragId !== null && dragId !== d.id) e.preventDefault(); }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (dragId !== null && dragId !== d.id) moveCard(dragId, d.id);
-                    setDragId(null);
-                  }}
-                  onClick={() => { setSelectedId(d.id); setLightboxIndex(null); }}
-                >
-                  <span className="docs-card-strip" aria-hidden />
-                  <div className="docs-card-cover">
-                    {cover ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={fileUrl(cover.file)} alt="" loading="lazy" />
-                    ) : (
-                      <span className="docs-card-emoji" aria-hidden>{categoryEmoji(d.categoryName)}</span>
-                    )}
-                  </div>
-                  <div className="docs-card-body">
-                    <div className="docs-card-top">
-                      <div className="docs-card-heading">
-                        <h2 className="docs-card-title">{d.title}</h2>
-                        <span className={`docs-status docs-status-${d.status}`}>{STATUS_LABELS[d.status]}</span>
-                      </div>
-                      <DaysRing doc={d} />
-                    </div>
-                    <p className="docs-card-meta">
-                      {[d.holderName, d.categoryName].filter(Boolean).join(" · ") || "未分类"}
-                    </p>
-                    <p className={`docs-card-expiry docs-card-expiry-${d.status}`}>
-                      {d.expiryDate ? `${d.expiryDate} · ${daysText(d)}` : "长期有效"}
-                    </p>
-                    {d.tags.length > 0 ? (
-                      <div className="docs-tags">
-                        {d.tags.slice(0, 4).map((t) => (
-                          <span key={t.id} className="docs-tag">{t.name}</span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                <button type="button" className="docs-row-main" onClick={() => { setSelectedId(d.id); setLightboxIndex(null); }}>
+                  <span className={`docs-status docs-status-${d.status}`}>{STATUS_LABELS[d.status]}</span>
+                  <span className="docs-row-title">{d.title}</span>
+                  <span className="docs-row-meta">{[d.holderName, d.categoryName].filter(Boolean).join(" · ") || "未分类"}</span>
+                  <span className={`docs-row-expiry docs-row-expiry-${d.status}`}>
+                    {d.expiryDate ? `${d.expiryDate} · ${daysText(d)}` : "长期有效"}
+                  </span>
+                  {d.tags.length > 0 ? (
+                    <span className="docs-tags docs-row-tags">
+                      {d.tags.slice(0, 3).map((t) => (
+                        <span key={t.id} className="docs-tag">{t.name}</span>
+                      ))}
+                    </span>
+                  ) : <span className="docs-row-tags" />}
                 </button>
               </div>
-            );
-          })}
-        </div>
-        </>
-      )}
-
-      {/* 已过期证件折叠区：展开后完整列出（含附件数量）。 */}
-      {archiveOpen && statusFilter !== "expired" && archivedExpired.length > 0 ? (
-        <section className="docs-archive" aria-label="已过期证件">
-          <div className="docs-archive-head">
-            <h2>已过期（{archivedExpired.length}）</h2>
-            <button type="button" className="docs-mini-btn" onClick={() => setArchiveOpen(false)}>收起</button>
-          </div>
-          <div className="docs-archive-list">
-            {archivedExpired.map((d) => (
-              <button key={d.id} type="button" className="docs-archive-item" onClick={() => { setSelectedId(d.id); setLightboxIndex(null); }}>
-                <span className="docs-archive-title">{d.title}</span>
-                <span className="docs-archive-meta">{[d.holderName, d.categoryName].filter(Boolean).join(" · ") || "未分类"}</span>
-                <span className="docs-archive-expiry">{d.expiryDate ? `${d.expiryDate} · 已过期 ${d.daysLeft === null ? "" : -d.daysLeft} 天` : "长期有效"}</span>
-              </button>
             ))}
           </div>
-        </section>
-      ) : null}
+          </>
+        ) : (
+          <>
+          {!archiveOpen && archivedExpired.length > 0 ? (
+            <button type="button" className="docs-archive-bar" onClick={() => setArchiveOpen(true)} aria-expanded={false}>
+              已过期证件 {archivedExpired.length} 份已收起，点击展开
+            </button>
+          ) : null}
+          <div className="docs-grid">
+            {(archiveOpen ? visible : visible.filter((d) => d.status !== "expired")).map((d, index) => {
+              const cover = d.files.find((f) => f.isImage);
+              return (
+                <div key={d.id} className="docs-card-wrap">
+                  {canReorder ? (
+                    <span className="docs-card-arrows">
+                      <button
+                        type="button"
+                        className="docs-mini-btn"
+                        aria-label={`将「${d.title}」前移`}
+                        disabled={reorderBusy || index === 0}
+                        onClick={(e) => { e.stopPropagation(); nudgeCard(d.id, -1); }}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="docs-mini-btn"
+                        aria-label={`将「${d.title}」后移`}
+                        disabled={reorderBusy || index === visible.length - 1}
+                        onClick={(e) => { e.stopPropagation(); nudgeCard(d.id, 1); }}
+                      >
+                        ↓
+                      </button>
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={`docs-card docs-card-${d.status}${dragId === d.id ? " is-dragging" : ""}`}
+                    draggable={canReorder && !reorderBusy}
+                    onDragStart={(e) => { setDragId(d.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(d.id)); }}
+                    onDragEnd={() => setDragId(null)}
+                    onDragOver={(e) => { if (dragId !== null && dragId !== d.id) e.preventDefault(); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (dragId !== null && dragId !== d.id) moveCard(dragId, d.id);
+                      setDragId(null);
+                    }}
+                    onClick={() => { setSelectedId(d.id); setLightboxIndex(null); }}
+                  >
+                    <span className="docs-card-strip" aria-hidden />
+                    <div className="docs-card-cover">
+                      {cover ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={fileUrl(cover.file)} alt="" loading="lazy" />
+                      ) : (
+                        <span className="docs-card-emoji" aria-hidden>{categoryEmoji(d.categoryName)}</span>
+                      )}
+                    </div>
+                    <div className="docs-card-body">
+                      <div className="docs-card-top">
+                        <div className="docs-card-heading">
+                          <h2 className="docs-card-title">{d.title}</h2>
+                          <span className={`docs-status docs-status-${d.status}`}>{STATUS_LABELS[d.status]}</span>
+                        </div>
+                        <DaysRing doc={d} />
+                      </div>
+                      <p className="docs-card-meta">
+                        {[d.holderName, d.categoryName].filter(Boolean).join(" · ") || "未分类"}
+                      </p>
+                      <p className={`docs-card-expiry docs-card-expiry-${d.status}`}>
+                        {d.expiryDate ? `${d.expiryDate} · ${daysText(d)}` : "长期有效"}
+                      </p>
+                      {d.tags.length > 0 ? (
+                        <div className="docs-tags">
+                          {d.tags.slice(0, 4).map((t) => (
+                            <span key={t.id} className="docs-tag">{t.name}</span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          </>
+        )}
+
+        {/* 已过期证件折叠区：展开后完整列出（含附件数量）。 */}
+        {archiveOpen && statusFilter !== "expired" && archivedExpired.length > 0 ? (
+          <section className="docs-archive" aria-label="已过期证件">
+            <div className="docs-archive-head">
+              <h2>已过期（{archivedExpired.length}）</h2>
+              <button type="button" className="docs-mini-btn" onClick={() => setArchiveOpen(false)}>收起</button>
+            </div>
+            <div className="docs-archive-list">
+              {archivedExpired.map((d) => (
+                <button key={d.id} type="button" className="docs-archive-item" onClick={() => { setSelectedId(d.id); setLightboxIndex(null); }}>
+                  <span className="docs-archive-title">{d.title}</span>
+                  <span className="docs-archive-meta">{[d.holderName, d.categoryName].filter(Boolean).join(" · ") || "未分类"}</span>
+                  <span className="docs-archive-expiry">{d.expiryDate ? `${d.expiryDate} · 已过期 ${d.daysLeft === null ? "" : -d.daysLeft} 天` : "长期有效"}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        </div>
+      </div>
 
       {/* 主 overlay 互斥渲染：表单弹窗打开时不渲染抽屉，避免抽屉盖住弹窗。 */}
       {formOpen ? (

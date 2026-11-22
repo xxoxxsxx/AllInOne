@@ -505,6 +505,17 @@ export default function FundingClient() {
   const pendingBatches = batches.filter(
     (b) => !b.voided && b.sourceStatus !== "verified",
   );
+  const pendingPaths = transfers.filter((transfer) => transfer.status !== "void" && (transfer.pathStatus !== "verified"
+    || (transfer.kind === "broker" && transfer.historical && !transfer.allocations.length)));
+  useEffect(() => {
+    if (loading || window.location.hash !== "#fund-review") return;
+    const panel = document.querySelector<HTMLDetailsElement>("#fund-review");
+    if (panel) {
+      panel.open = true;
+      panel.scrollIntoView();
+    }
+  }, [loading, tab]);
+
   const confirmed = transfers.filter((t) => t.status === "confirmed");
   const deposits = confirmed.filter((t) => t.kind === "broker");
   const remittances = confirmed.filter((t) => t.crossBorder);
@@ -568,7 +579,7 @@ export default function FundingClient() {
       </div>
       <nav className="fund-tabs" aria-label="台账页面">
         {[
-          ["overview", "总览"],
+          ["overview", "入金与汇款"],
           ["transfers", "全部流水"],
           ["funds", "银行资金"],
           ["settings", "目标与账户"],
@@ -620,144 +631,145 @@ export default function FundingClient() {
                   <p className="fund-muted">已登记、已到账；不含香港银行间转账</p>
                 </a>
               </div>
-              {ledger("券商实际入金", "fund-deposits", deposits)}
-              {ledger("内地转账到香港", "fund-remittances", remittances, true)}
-              <section className="fund-card">
-                <div className="fund-head">
-                  <h2>目标进度</h2>
-                  <button onClick={() => open("goal")}>添加目标</button>
+              <div className="ui-split funding-workspace">
+                <div>
+                  {ledger("券商实际入金", "fund-deposits", deposits)}
+                  {ledger("内地转账到香港", "fund-remittances", remittances, true)}
                 </div>
-                <div className="fund-grid">
-                  {goals.map((g) => {
-                    const extra = g as Goal & {
-                      floorAmount?: string;
-                      startDate?: string | null;
-                      endDate?: string | null;
-                    };
-                    const total = BigInt(
-                      summary?.goals.find((p) => p.id === g.id)?.actualAmount ||
-                        "0",
-                    );
-                    const target = BigInt(g.amount);
-                    const percent =
-                      target > 0n ? Number((total * 10000n) / target) / 100 : 0;
-                    const floor = BigInt(extra.floorAmount || "0");
-                    return (
-                      <div key={g.id}>
-                        <h3>
-                          {g.name} · {g.currency}
-                        </h3>
-                        <div>
-                          {display(total.toString())} / {display(g.amount)}{" "}
-                          <strong>（{percent}%）</strong>
-                        </div>
-                        <progress
-                          max={100}
-                          value={Math.min(percent, 100)}
-                          aria-label={`${g.name}完成率`}
-                        />
-                        <p className="fund-muted">
-                          {g.accountId ? accountName(g.accountId) : "全部券商"}{" "}
-                          · {extra.startDate || "不限起始"} —{" "}
-                          {extra.endDate || "不限结束"}
-                          <br />
-                          底线 {display(floor.toString())} ·{" "}
-                          {total >= floor
-                            ? "已达底线"
-                            : `还差 ${display((floor - total).toString())}`}
-                          <br />
-                          距离目标还差{" "}
-                          {display(
-                            (target > total ? target - total : 0n).toString(),
-                          )}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-                {!goals.length && (
-                  <p className="fund-muted">
-                    尚未设置目标。可以分别设置 HKD / CNY 的目标与底线。
-                  </p>
-                )}
-              </section>
-              <details className="fund-card">
-                <summary>银行待入金与来源核实</summary>
-                <div className="fund-stats">
-                  {summary?.currencies.map((s) => (
-                    <div key={s.currency} className="fund-muted">
-                      {s.currency} 银行待入金<strong>{display(s.bankAvailable)}</strong>
-                      处理中 {display(s.inTransit)}
+                <aside className="ui-rail" aria-label="资金进度与待办">
+                  <section className="fund-card">
+                    <div className="fund-head">
+                      <h2>目标进度</h2>
+                      <button onClick={() => open("goal")}>添加目标</button>
                     </div>
-                  ))}
-                </div>
-                <h3>来源核实待办 · {pendingBatches.length}</h3>
-                {pendingBatches.map((b) => (
-                  <div
-                    className="fund-head"
-                    key={b.id}
-                    style={{ marginBottom: 12 }}
-                  >
-                    <div>
-                      <strong>{b.name}</strong> · {display(b.amount)}{" "}
-                      {b.currency}
-                      <div className="fund-muted">
-                        {accountName(b.accountId)} ·{" "}
-                        {b.sourceNote || "尚未补充来源说明"}
-                      </div>
+                    <div className="fund-grid">
+                      {goals.map((g) => {
+                        const extra = g as Goal & {
+                          floorAmount?: string;
+                          startDate?: string | null;
+                          endDate?: string | null;
+                        };
+                        const total = BigInt(
+                          summary?.goals.find((p) => p.id === g.id)?.actualAmount ||
+                            "0",
+                        );
+                        const target = BigInt(g.amount);
+                        const percent =
+                          target > 0n ? Number((total * 10000n) / target) / 100 : 0;
+                        const floor = BigInt(extra.floorAmount || "0");
+                        return (
+                          <div key={g.id}>
+                            <h3>
+                              {g.name} · {g.currency}
+                            </h3>
+                            <div>
+                              {display(total.toString())} / {display(g.amount)}{" "}
+                              <strong>（{percent}%）</strong>
+                            </div>
+                            <progress
+                              max={100}
+                              value={Math.min(percent, 100)}
+                              aria-label={`${g.name}完成率`}
+                            />
+                            <p className="fund-muted">
+                              {g.accountId ? accountName(g.accountId) : "全部券商"}{" "}
+                              · {extra.startDate || "不限起始"} —{" "}
+                              {extra.endDate || "不限结束"}
+                              <br />
+                              底线 {display(floor.toString())} ·{" "}
+                              {total >= floor
+                                ? "已达底线"
+                                : `还差 ${display((floor - total).toString())}`}
+                              <br />
+                              距离目标还差{" "}
+                              {display(
+                                (target > total ? target - total : 0n).toString(),
+                              )}
+                            </p>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <button
-                      onClick={() =>
-                        open("verify", {
-                          id: b.id,
-                          entity: "batches",
-                          sourceStatus: b.sourceStatus,
-                          sourceNote: b.sourceNote,
-                        })
-                      }
-                    >
-                      核实来源
-                    </button>
-                  </div>
-                ))}
-                {!pendingBatches.length && (
-                  <p className="fund-muted">暂无银行资金来源待办。</p>
-                )}
-                <h3>路径与历史入金待核实</h3>
-                {transfers
-                  .filter(
-                    (t) =>
-                      t.status !== "void" &&
-                      ((t as Transfer & { pathStatus?: string }).pathStatus !==
-                        "verified" ||
-                        (t.kind === "broker" && t.historical && !t.allocations.length)),
-                  )
-                  .map((t) => (
-                    <div
-                      className="fund-head"
-                      key={t.id}
-                      style={{ marginBottom: 12 }}
-                    >
-                      <div>
-                        {t.occurredAt} · {accountName(t.toAccountId)} ·{" "}
-                        {display(t.receivedAmount)} {t.receivedCurrency}
-                        <div className="fund-muted">
-                          {t.historical && !t.allocations.length
-                            ? "历史入金尚未关联来源"
-                            : "转账路径待核实"}
+                    {!goals.length && (
+                      <p className="fund-muted">
+                        尚未设置目标。可以分别设置 HKD / CNY 的目标与底线。
+                      </p>
+                    )}
+                  </section>
+                  {summary && <section className="fund-card">
+                    <h2>银行待入金</h2>
+                    <div className="fund-stats">
+                      {summary.currencies.map((s) => (
+                        <div key={s.currency} className="fund-muted">
+                          {s.currency} <strong>{display(s.bankAvailable)}</strong>
+                          处理中 {display(s.inTransit)}
                         </div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setTab("transfers");
-                          setFilter("");
-                        }}
+                      ))}
+                    </div>
+                  </section>}
+                  <details className="fund-card" id="fund-review">
+                    <summary>来源与路径 · {pendingBatches.length + pendingPaths.length} 项待核实</summary>
+                    <h3>来源核实待办 · {pendingBatches.length}</h3>
+                    {pendingBatches.map((b) => (
+                      <div
+                        className="fund-head"
+                        key={b.id}
+                        style={{ marginBottom: 12 }}
                       >
-                        查看流水
-                      </button>
-                    </div>
-                  ))}
-              </details>
+                        <div>
+                          <strong>{b.name}</strong> · {display(b.amount)}{" "}
+                          {b.currency}
+                          <div className="fund-muted">
+                            {accountName(b.accountId)} ·{" "}
+                            {b.sourceNote || "尚未补充来源说明"}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() =>
+                            open("verify", {
+                              id: b.id,
+                              entity: "batches",
+                              sourceStatus: b.sourceStatus,
+                              sourceNote: b.sourceNote,
+                            })
+                          }
+                        >
+                          核实来源
+                        </button>
+                      </div>
+                    ))}
+                    {!pendingBatches.length && (
+                      <p className="fund-muted">暂无银行资金来源待办。</p>
+                    )}
+                    <h3>路径与历史入金待核实</h3>
+                    {pendingPaths.map((t) => (
+                        <div
+                          className="fund-head"
+                          key={t.id}
+                          style={{ marginBottom: 12 }}
+                        >
+                          <div>
+                            {t.occurredAt} · {accountName(t.toAccountId)} ·{" "}
+                            {display(t.receivedAmount)} {t.receivedCurrency}
+                            <div className="fund-muted">
+                              {t.historical && !t.allocations.length
+                                ? "历史入金尚未关联来源"
+                                : "转账路径待核实"}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setTab("transfers");
+                              setFilter("");
+                            }}
+                          >
+                            查看流水
+                          </button>
+                        </div>
+                      ))}
+                  </details>
+                </aside>
+              </div>
             </>
           )}
           {tab === "transfers" && (

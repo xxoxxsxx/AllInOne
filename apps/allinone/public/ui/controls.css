@@ -4,6 +4,7 @@
   --control-border: var(--ui-border);
   --control-hover: var(--ui-subtle);
 }
+.ui-tool .qr-workspace:has(#gen-preview:not([hidden])) #gen-placeholder { display: none; }
 
 .ui-kit :is(
   .ui-button, .funding button, .fund-button, .docs-btn, .docs-mini-btn,
@@ -117,3 +118,20 @@
 .ui-tool[data-embedded] .ui-tool-intro { display: none; }
 .ui-tool[data-embedded] .ui-kit > main { margin-block-start: 0; padding-block-start: 20px; }
 .ui-tool[data-embedded] .wrap .tabs { margin-top: 0; }
+.ui-tool[data-embedded] .ui-kit > main { width: 100%; max-width: none; padding-inline: clamp(12px, 2.5vw, 34px); }
+.ui-tool .ui-kit > main > *, .ui-tool .workspace > * { min-width: 0; }
+.ui-tool #gen-preview { margin-top: 0; }
+.ui-tool .qr-workspace > * { min-width: 0; }
+@media (min-width: 800px) {
+  .ui-tool .qr-workspace:not([hidden]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, .9fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .ui-tool .qr-workspace .read-grid { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .ui-tool[data-embedded] .ui-kit > main:has(.preview-section) {
+    grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+    gap: clamp(24px, 4vw, 72px);
+  }
+}

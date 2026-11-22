@@ -168,7 +168,7 @@ export function ChannelCenterForm({ initialChannels, initialConfig }: { initialC
         </div>
       </div>
 
-      <fieldset className="reminder-channel">
+      <fieldset id="channel-bark" className="reminder-channel">
         <legend className="reminder-sr-only">Bark 推送配置</legend>
         <div className="reminder-channel-header">
           <div className="reminder-channel-title">
@@ -197,7 +197,7 @@ export function ChannelCenterForm({ initialChannels, initialConfig }: { initialC
         {channelNoticeTarget === "Bark" && channelMessage ? <p className={`reminder-feedback reminder-local-feedback is-${channelMessage.tone}`} role="status">{channelMessage.text}</p> : null}
       </fieldset>
 
-      <fieldset className="reminder-channel">
+      <fieldset id="channel-feishu" className="reminder-channel">
         <legend className="reminder-sr-only">飞书推送配置</legend>
         <div className="reminder-channel-header">
           <div className="reminder-channel-title">
@@ -223,7 +223,7 @@ export function ChannelCenterForm({ initialChannels, initialConfig }: { initialC
         {channelNoticeTarget === "飞书" && channelMessage ? <p className={`reminder-feedback reminder-local-feedback is-${channelMessage.tone}`} role="status">{channelMessage.text}</p> : null}
       </fieldset>
 
-      <fieldset className="reminder-channel">
+      <fieldset id="channel-telegram" className="reminder-channel">
         <legend className="reminder-sr-only">Telegram 推送配置</legend>
         <div className="reminder-channel-header">
           <div className="reminder-channel-title">

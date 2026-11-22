@@ -31,7 +31,19 @@ export default async function ChannelsPage() {
         </p>
       </header>
 
-      <ChannelCenterForm initialChannels={channels} initialConfig={config} />
+      <div className="ui-split channel-workspace">
+        <ChannelCenterForm initialChannels={channels} initialConfig={config} />
+        <nav className="ui-rail" aria-label="跳转到推送渠道">
+          <div className="ui-panel">
+            <h2>渠道导航</h2>
+            <ul className="ui-summary-list">
+              <li><a href="#channel-bark">Bark</a></li>
+              <li><a href="#channel-feishu">飞书</a></li>
+              <li><a href="#channel-telegram">Telegram</a></li>
+            </ul>
+          </div>
+        </nav>
+      </div>
 
       <p className="channels-note">
         提醒开关与推送时间等业务设置在各工具内配置：证件夹见「到期提醒设置」，提醒事项见对应提醒的编辑面板。

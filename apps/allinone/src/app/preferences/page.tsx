@@ -45,7 +45,7 @@ export default function PreferencesPage() {
   };
 
   return (
-    <div>
+    <div className="ui-settings">
       <header className="ui-heading ui-heading-stack">
         <h1>偏好</h1>
         <p className="ui-subtitle">偏好仅保存在当前设备浏览器中，不影响工具业务数据。</p>

@@ -1,6 +1,6 @@
 /* /channels 全局推送渠道页壳：表单样式沿用 reminder-panel.css，这里只补页面骨架。 */
 
-.channels-page{max-width:960px;margin:0 auto 48px}
+.channels-page{max-width:1300px;margin:0 0 48px}
 .channels-back{display:inline-block;margin-bottom:18px;font-size:13px;color:var(--ui-muted);text-decoration:none}
 .channels-back:hover{color:var(--ui-text)}
 .channels-note{margin:22px 0 0;font-size:11px;line-height:1.8;color:var(--ui-muted)}

@@ -538,10 +538,12 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
     }
   }, [allPhotos, lightboxPhotoId]);
 
+  const [mapExpanded, setMapExpanded] = useState(false);
+
   return (
     <main className="travel-page travel-detail">
       <div className="travel-container travel-detail-grid">
-        <section className="travel-map-pane" aria-label="行程地图">
+        <section id="trip-map" className={"travel-map-pane" + (mapExpanded ? " is-expanded" : "")} aria-label="行程地图">
           <div className="travel-map-head">
             <Link href="/travel" className="travel-back">← 行程列表</Link>
             <div className="travel-map-tools">
@@ -582,7 +584,8 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
             onLocate={(place) => {
               setPicking(null);
               setLocated({ place });
-              mapElRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+              setMapExpanded(true);
+              requestAnimationFrame(() => mapElRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
             }}
             onAdded={(place, savedId) => {
               setLocated({ place, savedId });
@@ -592,6 +595,12 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
         </section>
 
         <section className="travel-list-pane">
+          <div className="travel-mobile-map">
+            <Link className="btn btn-ghost btn-sm" href="/travel">← 行程列表</Link>
+            <button className="btn btn-secondary btn-sm" type="button" aria-controls="trip-map" aria-expanded={mapExpanded} onClick={() => setMapExpanded(!mapExpanded)}>
+              {mapExpanded ? "收起地图" : "展开地图"}
+            </button>
+          </div>
           <header className="trip-head">
             {editingHeader ? (
               <TripHeaderForm
@@ -809,7 +818,8 @@ export function TravelClient({ trip: initialTrip, searchConfigured }: { trip: Tr
             setEditor(null);
             setLocated(null);
             setPicking(placeId);
-            document.querySelector(".travel-map-pane")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            setMapExpanded(true);
+            requestAnimationFrame(() => document.getElementById("trip-map")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
           }}
           onMoveToDay={(placeId, dayId) => run(() => movePlaceAction(placeId, dayId))}
           onOpenPhoto={openPhoto}

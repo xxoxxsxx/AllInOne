@@ -27,6 +27,7 @@ type EventListProps = {
   headerActions?: ReactNode;
   items: EventListItem[];
   offset?: number;
+  previewHref?: (id: string) => string;
   title: string;
 };
 
@@ -45,6 +46,7 @@ export function EventList({
   headerActions,
   items,
   offset = 0,
+  previewHref,
   title,
 }: EventListProps) {
   return (
@@ -149,6 +151,7 @@ export function EventList({
                 {item.event_type === "issue_self" || item.event_type === "issue_reseller" ? (
                   <VoidShipmentButton event={item} />
                 ) : null}
+                {previewHref && <Link className="ui-button" href={previewHref(item.id)}>快速查看</Link>}
                 <Link
                   href={`/events/${item.id}`}
                   className={

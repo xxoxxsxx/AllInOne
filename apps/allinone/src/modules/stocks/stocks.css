@@ -20,7 +20,7 @@
 :where(.ts-shell) :focus-visible { outline: 3px solid #6ecfc2; outline-offset: 3px; }
 
 :where(.ts-shell) .site-header { background: var(--ui-surface); color: var(--ui-text); border-bottom: 1px solid var(--ui-border); }
-:where(.ts-shell) .header-inner { width: min(1200px, calc(100% - 48px)); min-height: 58px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+:where(.ts-shell) .header-inner { width: calc(100% - 48px); min-height: 58px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 :where(.ts-shell) .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--ui-text); font-size: var(--ui-body-size); font-weight: 650; line-height: 1.35; white-space: nowrap; }
 :where(.ts-shell) .brand:hover { text-decoration: none; }
 :where(.ts-shell) .brand-mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: var(--ui-control-radius); background: var(--ui-selection); color: var(--ui-accent); font-size: var(--ui-body-size); font-weight: 700; }
@@ -28,7 +28,7 @@
 :where(.ts-shell) nav a { display: inline-flex; align-items: center; min-height: var(--ui-compact-height); padding: 0 12px; border: 0; border-radius: var(--ui-control-radius); background: transparent; color: var(--ui-muted); font-size: var(--ui-label-size); font-weight: 600; }
 :where(.ts-shell) nav a:hover { background: var(--ui-subtle); color: var(--ui-text); text-decoration: none; }
 :where(.ts-shell) nav form { margin: 0; }
-:where(.ts-shell) .site-main { width: min(1200px, calc(100% - 48px)); flex: 1; margin: 0 auto; padding: 24px 0 48px; }
+:where(.ts-shell) .site-main { width: calc(100% - 48px); flex: 1; margin: 0 auto; padding: 24px 0 48px; }
 :where(.ts-shell) .site-footer { width: min(1200px, calc(100% - 48px)); margin: 0 auto; padding: 22px 0 30px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; color: var(--ui-muted); font-size: 12px; }
 
 :where(.ts-shell) h1, :where(.ts-shell) h2, :where(.ts-shell) h3, :where(.ts-shell) p { margin-top: 0; }
@@ -146,7 +146,7 @@
   :where(.ts-shell) input:not([type="checkbox"]):not([type="radio"]), :where(.ts-shell) select, :where(.ts-shell) textarea { font-size: 16px; }
   :where(.ts-shell) .page-head { display: block; }
   :where(.ts-shell) .page-head > .status-pill { margin-top: 12px; }
-  :where(.ts-shell) .header-inner, :where(.ts-shell) .site-main, :where(.ts-shell) .site-footer { width: min(100% - 28px, 1200px); }
+  :where(.ts-shell) .header-inner, :where(.ts-shell) .site-main, :where(.ts-shell) .site-footer { width: calc(100% - 28px); }
   :where(.ts-shell) .header-inner { min-height: 68px; flex-wrap: wrap; padding: 13px 0; }
   :where(.ts-shell) nav { width: 100%; gap: 2px; }
   :where(.ts-shell) nav a { min-height: 32px; padding: 0 10px; font-size: 12px; }
@@ -409,6 +409,17 @@
 /* Full-width watchlist, with the same reading order on narrow screens. */
 :where(.ts-shell) .home-layout { display: grid; gap: 24px; }
 :where(.ts-shell) .home-layout > .card { min-width: 0; margin: 0; }
+:where(.ts-shell) .stock-rail .card { margin: 0; padding: 16px; overflow-wrap: anywhere; }
+:where(.ts-shell) .stock-rail .today-alert-list { grid-template-columns: minmax(0, 1fr); }
+:where(.ts-shell) .stock-rail :is(.run-item, .run-row, .today-alert-levels) { flex-wrap: wrap; }
+:where(.ts-shell) .watch-toolbar { min-width: 0; }
+:where(.ts-shell) .watch-toolbar label { min-width: 0; }
+:where(.ts-shell) :is(.settings-page, .schedule-page) { max-width: 1100px; }
+:where(.ts-shell) .stock-status-link { display: inline-block; margin-bottom: 12px; font-size: var(--ui-caption-size); }
+@container stock-workspace (min-width: 1280px) {
+  :where(.ts-shell) .home-layout { grid-template-columns: minmax(0, 1fr) minmax(270px, 22%); }
+  :where(.ts-shell) .stock-status-link { display: none; }
+}
 :where(.ts-shell) .home-layout .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 :where(.ts-shell) .add-stock-button { min-height: 48px; padding: 12px 24px; font-size: 16px; font-weight: 750; flex-shrink: 0; }
 :where(.ts-shell) .stock-add-shortcut { display: flex; justify-content: flex-end; margin-bottom: 20px; }

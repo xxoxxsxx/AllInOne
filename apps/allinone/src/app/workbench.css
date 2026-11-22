@@ -67,6 +67,60 @@
 .portal-content .ui-ledger :is(.bg-white, .bg-white\/60, .bg-white\/70, .bg-white\/85) { background: var(--ui-surface); }
 .portal-content .ui-ledger .hover\:text-white:hover { color: var(--ui-on-action); }
 
+.ui-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.ui-split > *, .ui-rail { min-width: 0; }
+.ui-rail { display: grid; gap: 14px; }
+.ui-panel {
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface);
+  overflow-wrap: anywhere;
+}
+.ui-panel h2 { margin: 0 0 10px; font-size: var(--ui-section-size); font-weight: 650; }
+.ui-summary-list { display: grid; gap: 10px; }
+.ui-summary-list li { display: grid; gap: 2px; }
+.ui-summary-list li span { color: var(--ui-muted); font-size: var(--ui-caption-size); }
+.ui-summary-list a:hover { color: var(--ui-accent); }
+.ui-settings { max-width: 900px; }
+
+@container workspace (min-width: 1050px) {
+  .ui-split:has(> .ui-rail) { grid-template-columns: minmax(0, 1fr) minmax(250px, 22%); }
+  .docs-workspace .docs-rail { grid-area: 1 / 2; }
+  .docs-workspace .docs-results { grid-area: 1 / 1; }
+}
+
+.portal-content :is(.funding, .rem-root, .fl-page, .travel-container) { width: 100%; max-width: none; margin: 0; }
+.portal-content :is(.funding, .rem-root, .travel-page) { padding: 0; }
+.portal-content .travel-detail-grid { max-width: none; }
+.funding-workspace .ui-rail .fund-grid { grid-template-columns: minmax(0, 1fr); }
+.funding-workspace .ui-rail .fund-card { margin-bottom: 0; padding: 16px; }
+.docs-rail .docs-stats { display: flex; flex-wrap: wrap; margin: 0; }
+.portal-content .fl-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
+.portal-content .service-workspace .status-list { gap: 0; }
+.service-workspace .status-list .status-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(70px, .45fr) minmax(85px, .65fr);
+  align-items: center;
+  gap: 8px;
+  border-radius: 0;
+  box-shadow: none;
+}
+.service-workspace .status-item + .status-item { border-top: 0; }
+.service-workspace .status-item-detail { overflow-wrap: anywhere; }
+
+.travel-mobile-map { display: none; }
+@media (max-width: 959px) {
+  .travel-mobile-map { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .travel-detail-grid .travel-map-pane:not(.is-expanded) { display: none; }
+}
+
 @media (max-width: 640px) {
   .portal-content .ui-heading { gap: 12px; margin-bottom: 18px; padding-bottom: 14px; }
   .portal-content .ui-heading .ui-actions { width: 100%; }

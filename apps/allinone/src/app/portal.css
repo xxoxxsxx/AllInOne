@@ -122,6 +122,7 @@
 
 .portal-content {
   min-width: 0;
+  container: workspace / inline-size;
   padding: 24px clamp(12px, 2.5vw, 34px) 48px;
 }
 .portal-content:has(> .ts-shell) {
@@ -129,7 +130,7 @@
   padding: 0;
 }
 .portal-content:has(.portal-embed) { padding: 0; }
-.portal-overview { max-width: 860px; margin-inline: auto; }
+.portal-overview { min-width: 0; }
 .portal-overview li { border-bottom: 1px solid var(--border); }
 .portal-overview li a {
   display: grid;

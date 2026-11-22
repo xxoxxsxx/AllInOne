@@ -177,43 +177,9 @@ export default async function StocksHomePage({
         )}
       </section>
 
-      <section className="card today-alerts" aria-labelledby="today-alerts-title">
-        <h2 id="today-alerts-title">今日提醒 · {todayAlerts.length} 只股票 · {todayAlerts.reduce((n, s) => n + s.Notifications, 0)} 次触发</h2>
-        <p className="muted small">{dateKey(nowD, tz)} · 按 {tz} 的自然日统计。包含命中但未推送的记录；推送成功表示至少一个渠道发送成功。</p>
-        {todayAlerts.length === 0 ? <p className="empty-state">今天暂无触价提醒记录。</p> : (
-          <div className="today-alert-list">
-            {todayAlerts.map((s) => (
-              <article className="today-alert-item" key={s.Symbol}>
-                <h3>{s.Symbol} <small>触发 {s.Notifications} 次</small></h3>
-                <div className="today-alert-levels">
-                  {[...s.Buy, ...s.Sell, ...s.Review].map((l) => (
-                    <div className={`price-group level-${l.Side}`} key={`${l.Side}-${l.Target}`}>
-                      <strong>{l.Side === "buy" ? "↓ 买入 / 加仓" : l.Side === "sell" ? "↑ 卖出 / 减仓" : "↓ 重新评估"} {l.Side === "sell" ? "≥" : "≤"} {money(l.Target)} USD</strong>
-                      {l.Note ? <p className="small">当前备注：{l.Note}</p> : null}
-                    </div>
-                  ))}
-                </div>
-                <p className="small">推送成功 {s.Delivered} 次 · 未通知 {s.Unnotified} 次 · 发送中 {s.Pending} 次 · 失败或结果不确定 {s.Failed} 次</p>
-                <p className="muted small">最后触发：{displayClock(new Date(s.LastAt), tz)} · 当时查询价 {money(s.LastPrice)} USD</p>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <details className="card readiness">
-        <summary>提醒可用状态 · {keySet ? "展开检查行情与通知配置" : "尚未配置行情 Key"}</summary>
-        <ul>
-          {items.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-        <a href="/stocks/settings">检查行情与通知设置 →</a> · <a href="/stocks/schedule">管理查询时间 →</a>
-        <p className="muted small">手动和自动查询命中有效报价时都会尝试提醒；实际送达请在接收端确认。</p>
-      </details>
-
-      <div className="home-layout">
-        <section className="card">
+      <a className="stock-status-link" href="#stock-status">今日提醒 · {todayAlerts.length} 只股票 · 查看监控状态 ↓</a>
+      <div className="home-layout ui-split">
+        <section className="card stock-list-pane" id="monitoring-list">
           <div className="panel-head">
             <div>
               <span className="eyebrow">WATCHLIST</span>
@@ -392,34 +358,69 @@ export default async function StocksHomePage({
           <p className="muted small">预计收益按所选买入目标计算，不代表已经成交，不含手续费和税费。点击任一价格可修改提醒。</p>
         </section>
 
-        <section className="card">
-          <span className="eyebrow">QUERY HISTORY</span>
-          <h2>查询记录</h2>
-          <p className="muted">休市时可能返回最后可用价格；只有符合交易时段和有效性要求的报价才会触发提醒。</p>
-          <div className="info-strip">时间按 {tz} 显示。没有启用通知渠道时，命中档位会显示为“未通知”。</div>
-          <span className="section-label">下一次自动查询</span>
-          <p>
-            {next ? <strong>{displayClock(next, tz)}</strong> : "尚未启用查询时间"}
-            <br />
-            <Link href="/stocks/schedule">管理查询时间 →</Link>
-          </p>
-          <span className="section-label">最近任务</span>
-          {runs.length > 0 ? (
+        <aside id="stock-status" className="ui-rail stock-rail" aria-label="监控状态">
+          <section className="card today-alerts" aria-labelledby="today-alerts-title">
+            <h2 id="today-alerts-title">今日提醒 · {todayAlerts.length} 只股票 · {todayAlerts.reduce((n, s) => n + s.Notifications, 0)} 次触发</h2>
+            <p className="muted small">{dateKey(nowD, tz)} · 按 {tz} 的自然日统计。包含命中但未推送的记录；推送成功表示至少一个渠道发送成功。</p>
+            {todayAlerts.length === 0 ? <p className="muted small">今天暂无触价提醒记录。</p> : (
+              <div className="today-alert-list">
+                {todayAlerts.map((s) => (
+                  <article className="today-alert-item" key={s.Symbol}>
+                    <h3>{s.Symbol} <small>触发 {s.Notifications} 次</small></h3>
+                    <div className="today-alert-levels">
+                      {[...s.Buy, ...s.Sell, ...s.Review].map((l) => (
+                        <div className={`price-group level-${l.Side}`} key={`${l.Side}-${l.Target}`}>
+                          <strong>{l.Side === "buy" ? "↓ 买入 / 加仓" : l.Side === "sell" ? "↑ 卖出 / 减仓" : "↓ 重新评估"} {l.Side === "sell" ? "≥" : "≤"} {money(l.Target)} USD</strong>
+                          {l.Note ? <p className="small">当前备注：{l.Note}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="small">推送成功 {s.Delivered} 次 · 未通知 {s.Unnotified} 次 · 发送中 {s.Pending} 次 · 失败或结果不确定 {s.Failed} 次</p>
+                    <p className="muted small">最后触发：{displayClock(new Date(s.LastAt), tz)} · 当时查询价 {money(s.LastPrice)} USD</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <details className="card readiness">
+            <summary>提醒可用状态 · {keySet ? "展开检查行情与通知配置" : "尚未配置行情 Key"}</summary>
             <ul>
-              {runs.map((r) => (
-                <li key={r.id}>
-                  <Link href={`/stocks/runs/${r.id}`}>查询 #{r.id}</Link> · {statusText(r.status)} · {r.done}/{r.total}
-                  <br />
-                  <span className="muted small">
-                    {displayClock(new Date(r.started_at), tz)} {r.reason}
-                  </span>
-                </li>
+              {items.map((item) => (
+                <li key={item}>{item}</li>
               ))}
             </ul>
-          ) : (
-            <p className="muted">尚无查询记录。</p>
-          )}
-        </section>
+            <a href="/stocks/settings">检查行情与通知设置 →</a> · <a href="/stocks/schedule">管理查询时间 →</a>
+            <p className="muted small">手动和自动查询命中有效报价时都会尝试提醒；实际送达请在接收端确认。</p>
+          </details>
+          <section className="card stock-history">
+            <h2>查询记录</h2>
+            <p className="muted">休市时可能返回最后可用价格；只有符合交易时段和有效性要求的报价才会触发提醒。</p>
+            <div className="info-strip">时间按 {tz} 显示。没有启用通知渠道时，命中档位会显示为“未通知”。</div>
+            <span className="section-label">下一次自动查询</span>
+            <p>
+              {next ? <strong>{displayClock(next, tz)}</strong> : "尚未启用查询时间"}
+              <br />
+              <Link href="/stocks/schedule">管理查询时间 →</Link>
+            </p>
+            <span className="section-label">最近任务</span>
+            {runs.length > 0 ? (
+              <ul>
+                {runs.map((r) => (
+                  <li key={r.id}>
+                    <Link href={`/stocks/runs/${r.id}`}>查询 #{r.id}</Link> · {statusText(r.status)} · {r.done}/{r.total}
+                    <br />
+                    <span className="muted small">
+                      {displayClock(new Date(r.started_at), tz)} {r.reason}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">尚无查询记录。</p>
+            )}
+          </section>
+        </aside>
       </div>
 
       <StockDialog />

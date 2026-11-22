@@ -23,7 +23,8 @@
     </div>
 
     <!-- 生成 -->
-    <section class="card" id="panel-gen">
+    <section class="card qr-workspace" id="panel-gen">
+      <div>
       <label class="lbl" for="gen-input">文本内容</label>
       <textarea id="gen-input" rows="5" placeholder="输入任意文字、链接、WiFi 信息等（支持中文，UTF-8）"></textarea>
       <div class="row">
@@ -52,20 +53,26 @@
         <button class="btn" id="gen-download" disabled>下载 PNG</button>
       </div>
       <p class="hint" id="gen-hint">最多支持到 40 版（约 2953 字节，纠错级别越低容量越大）。</p>
-      <div class="preview" id="gen-preview" hidden>
-        <canvas id="qr-canvas"></canvas>
+      </div>
+      <div aria-label="生成结果">
+        <p class="hint" id="gen-placeholder">输入内容后，二维码会显示在这里。</p>
+        <div class="preview" id="gen-preview" hidden>
+          <canvas id="qr-canvas"></canvas>
+        </div>
       </div>
     </section>
 
     <!-- 识别 -->
-    <section class="card" id="panel-read" hidden>
+    <section class="card qr-workspace" id="panel-read" hidden>
+      <div>
       <div class="drop" id="read-drop" tabindex="0">
         <p class="drop-main">点击选择图片，或将图片拖到这里</p>
         <p class="drop-sub">也可以直接 Ctrl/Cmd + V 粘贴截图 · 支持 PNG / JPEG / WebP</p>
         <input type="file" id="read-file" accept="image/*" hidden>
       </div>
       <p class="hint" id="read-hint"></p>
-      <div class="read-grid">
+      </div>
+      <div class="read-grid" aria-label="识别结果">
         <div class="preview" id="read-preview" hidden><canvas id="read-canvas"></canvas></div>
         <div class="read-out" id="read-out" hidden>
           <label class="lbl">识别结果</label>

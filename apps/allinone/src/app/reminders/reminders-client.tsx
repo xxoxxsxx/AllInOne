@@ -321,7 +321,7 @@ function ReminderCardView({
   testFeedback: { ok: boolean; text: string } | null;
 }) {
   return (
-    <article className={`rem-card ${card.enabled ? "" : "is-paused"}`}>
+    <article id={"reminder-" + card.id} className={`rem-card ${card.enabled ? "" : "is-paused"}`}>
       <div className="rem-card-head">
         <span className={`rem-badge is-${card.status}`}>{STATUS_LABELS[card.status]}</span>
         <span className="rem-card-next">{card.nextAt ? `下次 ${fmtLocal(card.nextAt)}` : "无待触发"}</span>
@@ -586,7 +586,12 @@ export function RemindersClient({ initialReminders }: { initialReminders: Remind
   };
 
   const busy = pending || saving;
-  const totalPending = reminders.filter((r) => r.enabled && r.nextAt !== null).length;
+  const ordered = [...reminders].sort((left, right) => {
+    const time = (card: ReminderCard) => card.enabled && card.nextAt ? Date.parse(card.nextAt) : Number.POSITIVE_INFINITY;
+    return time(left) - time(right);
+  });
+  const upcoming = ordered.filter((card) => card.enabled && card.nextAt);
+  const totalPending = upcoming.length;
 
   return (
     <div className="rem-root">
@@ -701,24 +706,39 @@ export function RemindersClient({ initialReminders }: { initialReminders: Remind
         </section>
       )}
 
-      <section className="rem-list" aria-label="提醒列表">
-        {reminders.length === 0 ? (
-          <p className="rem-empty">还没有提醒。点击「新建提醒」创建第一条：支持单次、间隔重复与 cron 定时，可附图片。推送前请先在<a href="/channels">全局推送渠道</a>配置 Bark / 飞书 / Telegram。</p>
-        ) : (
-          reminders.map((card) => (
-            <ReminderCardView
-              key={card.id}
-              card={card}
-              busy={busy || busyId === card.id}
-              onEdit={() => openEdit(card)}
-              onToggle={() => toggle(card)}
-              onDelete={() => remove(card)}
-              onTest={() => test(card)}
-              testFeedback={testFeedback?.id === card.id ? { ok: testFeedback.ok, text: testFeedback.text } : null}
-            />
-          ))
-        )}
-      </section>
+      <div className="ui-split reminders-workspace">
+        <section className="rem-list" aria-label="提醒列表">
+          {reminders.length === 0 ? (
+            <p className="rem-empty">还没有提醒。点击「新建提醒」创建第一条：支持单次、间隔重复与 cron 定时，可附图片。推送前请先在<a href="/channels">全局推送渠道</a>配置 Bark / 飞书 / Telegram。</p>
+          ) : (
+            ordered.map((card) => (
+              <ReminderCardView
+                key={card.id}
+                card={card}
+                busy={busy || busyId === card.id}
+                onEdit={() => openEdit(card)}
+                onToggle={() => toggle(card)}
+                onDelete={() => remove(card)}
+                onTest={() => test(card)}
+                testFeedback={testFeedback?.id === card.id ? { ok: testFeedback.ok, text: testFeedback.text } : null}
+              />
+            ))
+          )}
+        </section>
+        {upcoming.length > 0 && <aside className="ui-rail" aria-label="即将触发">
+          <section className="ui-panel">
+            <h2>即将触发</h2>
+            <ul className="ui-summary-list">
+              {upcoming.slice(0, 5).map((card) => (
+                <li key={card.id}>
+                  <a href={"#reminder-" + card.id}>{card.text.split("\n")[0] || "图片提醒"}</a>
+                  <span>{fmtLocal(card.nextAt!)}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </aside>}
+      </div>
     </div>
   );
 }
